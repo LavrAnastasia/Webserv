@@ -44,6 +44,8 @@ build/
 Build/
 build-*/
 
+webserv
+
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
