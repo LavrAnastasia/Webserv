@@ -2,7 +2,9 @@ NAME := webserv
 
 CXX := c++
 CXXFLAGS := -std=c++23 -Wall -Wextra -Werror
-INCLUDES := -Isrc/http/include
+INCLUDES := \
+	-Isrc/http/include \
+	-Isrc/http/config
 DEPFLAGS := -MMD -MP
 
 SRC := \
