@@ -1,7 +1,9 @@
 NAME := webserv
 
 CXX := c++
-CXXFLAGS = -std=c++23 -Wall -Wextra -Werror -MMD -MP
+CXXFLAGS := -std=c++23 -Wall -Wextra -Werror
+INCLUDES := -Isrc/http/include
+DEPFLAGS := -MMD -MP
 
 SRC := \
 	app/main.cpp
@@ -16,11 +18,9 @@ all: $(NAME)
 $(NAME): $(OBJ)
 	$(CXX) $(CXXFLAGS) $(OBJ) -o $(NAME)
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-$(BUILD_DIR)/%.o: %.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(INCLUDES) $(DEPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 -include $(DEPS)
 
