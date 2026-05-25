@@ -9,16 +9,15 @@ ColumnLimit: 120
 
 BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterClass: true
-  AfterStruct: true
-  AfterUnion: true
-  AfterNamespace: true
-
+  AfterEnum: false
+  AfterUnion: false
+  AfterNamespace: false
+  AfterClass: false
+  AfterStruct: false
   AfterControlStatement: false
   AfterFunction: false
   BeforeElse: false
   BeforeCatch: false
-  AfterEnum: false
 
   IndentBraces: false
 
