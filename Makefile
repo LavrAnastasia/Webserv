@@ -4,7 +4,7 @@ CXX := c++
 CXXFLAGS := -std=c++23 -Wall -Wextra -Werror
 INCLUDES := \
 	-Isrc/http/include \
-	-Isrc/http/config
+	-Isrc/config/include
 DEPFLAGS := -MMD -MP
 
 SRC := \
