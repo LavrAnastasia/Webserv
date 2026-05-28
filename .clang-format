@@ -21,7 +21,7 @@ BraceWrapping:
 
   IndentBraces: false
 
-AccessModifierOffset: 0
+AccessModifierOffset: -4
 
 AllowShortFunctionsOnASingleLine: InlineOnly
 AllowShortIfStatementsOnASingleLine: false
