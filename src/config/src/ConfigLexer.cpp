@@ -5,31 +5,31 @@
 #include <optional>
 
 namespace Config::Syntax {
-constexpr char Comment = '#';
-constexpr char LeftBrace = '{';
-constexpr char RightBrace = '}';
-constexpr char Semicolon = ';';
-constexpr char Newline = '\n';
+    constexpr char Comment = '#';
+    constexpr char LeftBrace = '{';
+    constexpr char RightBrace = '}';
+    constexpr char Semicolon = ';';
+    constexpr char Newline = '\n';
 } // namespace Config::Syntax
 
 namespace {
-std::optional<TokenType> tokenTypeForSymbol(char c) {
-    if (c == Config::Syntax::LeftBrace) {
-        return TokenType::LeftBrace;
+    std::optional<TokenType> tokenTypeForSymbol(char c) {
+        if (c == Config::Syntax::LeftBrace) {
+            return TokenType::LeftBrace;
+        }
+        if (c == Config::Syntax::RightBrace) {
+            return TokenType::RightBrace;
+        }
+        if (c == Config::Syntax::Semicolon) {
+            return TokenType::Semicolon;
+        }
+        return std::nullopt;
     }
-    if (c == Config::Syntax::RightBrace) {
-        return TokenType::RightBrace;
-    }
-    if (c == Config::Syntax::Semicolon) {
-        return TokenType::Semicolon;
-    }
-    return std::nullopt;
-}
 
-bool isWordTerminator(unsigned char c) {
-    return std::isspace(c) || c == Config::Syntax::LeftBrace || c == Config::Syntax::RightBrace ||
-        c == Config::Syntax::Semicolon || c == Config::Syntax::Comment;
-}
+    bool isWordTerminator(unsigned char c) {
+        return std::isspace(c) || c == Config::Syntax::LeftBrace || c == Config::Syntax::RightBrace ||
+            c == Config::Syntax::Semicolon || c == Config::Syntax::Comment;
+    }
 } // namespace
 
 ConfigLexer::ConfigLexer(const std::string& source) : source_(source) {
@@ -66,7 +66,6 @@ std::vector<Token> ConfigLexer::run() {
             .value = std::string(start, it),
         });
     }
-
 
     return result;
 }
