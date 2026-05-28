@@ -38,6 +38,7 @@ BinPackArguments: false
 BinPackParameters: false
 AlignAfterOpenBracket: Align
 ContinuationIndentWidth: 4
+AlignOperands: DontAlign
 
 IndentCaseLabels: true
 IndentPPDirectives: AfterHash
