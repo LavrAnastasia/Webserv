@@ -13,7 +13,7 @@ constexpr char Newline = '\n';
 } // namespace Config::Syntax
 
 namespace {
-std::optional<TokenType> tokenTypeForCharacter(char c) {
+std::optional<TokenType> tokenTypeForSymbol(char c) {
     if (c == Config::Syntax::LeftBrace) {
         return TokenType::LeftBrace;
     }
@@ -24,6 +24,11 @@ std::optional<TokenType> tokenTypeForCharacter(char c) {
         return TokenType::Semicolon;
     }
     return std::nullopt;
+}
+
+bool isWordTerminator(unsigned char c) {
+    return std::isspace(c) || c == Config::Syntax::LeftBrace || c == Config::Syntax::RightBrace ||
+        c == Config::Syntax::Semicolon || c == Config::Syntax::Comment;
 }
 } // namespace
 
@@ -46,7 +51,7 @@ std::vector<Token> ConfigLexer::run() {
             continue;
         }
 
-        if (const auto tokenType = tokenTypeForCharacter(current)) {
+        if (const auto tokenType = tokenTypeForSymbol(current)) {
             result.push_back(Token{.type = *tokenType, .value = ""});
             ++it;
             continue;
@@ -54,10 +59,7 @@ std::vector<Token> ConfigLexer::run() {
 
         const auto start = it;
 
-        it = std::find_if(it, source_.end(), [](unsigned char c) {
-            return std::isspace(c) || c == Config::Syntax::LeftBrace || c == Config::Syntax::RightBrace ||
-                c == Config::Syntax::Semicolon || c == Config::Syntax::Comment;
-        });
+        it = std::find_if(it, source_.end(), isWordTerminator);
 
         result.push_back(Token{
             .type = TokenType::Word,
