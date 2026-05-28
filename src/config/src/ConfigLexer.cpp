@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 
 namespace Config::Syntax {
 constexpr char Comment = '#';
@@ -10,6 +11,21 @@ constexpr char RightBrace = '}';
 constexpr char Semicolon = ';';
 constexpr char Newline = '\n';
 } // namespace Config::Syntax
+
+namespace {
+std::optional<TokenType> tokenTypeForCharacter(char c) {
+    if (c == Config::Syntax::LeftBrace) {
+        return TokenType::LeftBrace;
+    }
+    if (c == Config::Syntax::RightBrace) {
+        return TokenType::RightBrace;
+    }
+    if (c == Config::Syntax::Semicolon) {
+        return TokenType::Semicolon;
+    }
+    return std::nullopt;
+}
+} // namespace
 
 ConfigLexer::ConfigLexer(const std::string& source) : source_(source) {
 }
@@ -30,20 +46,8 @@ std::vector<Token> ConfigLexer::run() {
             continue;
         }
 
-        if (current == Config::Syntax::LeftBrace) {
-            result.push_back(Token{.type = TokenType::LeftBrace, .value = ""});
-            ++it;
-            continue;
-        }
-
-        if (current == Config::Syntax::RightBrace) {
-            result.push_back(Token{.type = TokenType::RightBrace, .value = ""});
-            ++it;
-            continue;
-        }
-
-        if (current == Config::Syntax::Semicolon) {
-            result.push_back(Token{.type = TokenType::Semicolon, .value = ""});
+        if (const auto tokenType = tokenTypeForCharacter(current)) {
+            result.push_back(Token{.type = *tokenType, .value = ""});
             ++it;
             continue;
         }
