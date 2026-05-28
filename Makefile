@@ -7,8 +7,12 @@ INCLUDES := \
 	-Isrc/config/include
 DEPFLAGS := -MMD -MP
 
+CONFIG_SRC := \
+	src/config/src/ConfigLexer.cpp
+
 SRC := \
-	app/main.cpp
+	app/main.cpp \
+	${CONFIG_SRC}
 
 BUILD_DIR := build
 
