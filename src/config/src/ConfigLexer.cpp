@@ -8,48 +8,50 @@ ConfigLexer::ConfigLexer(const std::string& source) : source_(source) {
 
 std::vector<Token> ConfigLexer::run() {
     std::vector<Token> result{};
-    const std::size_t size = source_.size();
-    for (std::size_t i = 0; i < size; ++i) {
-        if (std::isspace(static_cast<unsigned char>(source_[i]))) {
+
+    for (auto it = source_.begin(); it != source_.end();) {
+        const char current = *it;
+
+        if (std::isspace(static_cast<unsigned char>(current))) {
+            ++it;
             continue;
         }
 
-        // skip comments
-        if (source_[i] == '#') {
-            auto pos = source_.find('\n', i);
-            if (pos == std::string::npos) {
-                break;
-            }
-            i = pos;
+        if (current == '#') {
+            it = std::find(it, source_.end(), '\n');
             continue;
         }
 
-        if (source_[i] == '{') {
+        if (current == '{') {
             result.push_back(Token{.type = TokenType::LeftBrace, .value = ""});
+            ++it;
             continue;
         }
 
-        if (source_[i] == '}') {
+        if (current == '}') {
             result.push_back(Token{.type = TokenType::RightBrace, .value = ""});
+            ++it;
             continue;
         }
 
-        if (source_[i] == ';') {
+        if (current == ';') {
             result.push_back(Token{.type = TokenType::Semicolon, .value = ""});
+            ++it;
             continue;
         }
 
-        const std::size_t start = i;
-        const auto end = source_.find_first_of(" \t\r\n{};#", i);
+        const auto start = it;
 
-        if (end == std::string::npos) {
-            result.push_back(Token{.type = TokenType::Word, .value = source_.substr(start)});
-            break;
-        }
+        it = std::find_if(it, source_.end(), [](unsigned char c) {
+            return std::isspace(c) || c == '{' || c == '}' || c == ';' || c == '#';
+        });
 
-        result.push_back(Token{.type = TokenType::Word, .value = source_.substr(start, end - start)});
-        i = end - 1;
+        result.push_back(Token{
+            .type = TokenType::Word,
+            .value = std::string(start, it),
+        });
     }
+
     return result;
 }
 
