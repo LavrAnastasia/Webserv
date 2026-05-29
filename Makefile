@@ -9,7 +9,9 @@ DEPFLAGS := -MMD -MP
 
 CONFIG_SRC := \
 	src/config/src/ConfigLoader.cpp \
-	src/config/src/ConfigLexer.cpp
+	src/config/src/ConfigLexer.cpp \
+	src/config/src/ConfigError.cpp \
+	src/config/src/ConfigReadError.cpp
 
 SRC := \
 	app/main.cpp \

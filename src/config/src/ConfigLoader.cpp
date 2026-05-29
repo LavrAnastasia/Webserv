@@ -3,7 +3,8 @@
 #include <cstdint>
 #include <fstream>
 #include <sstream>
-#include <stdexcept>
+
+#include "ConfigReadError.hpp"
 
 namespace {
     constexpr std::uintmax_t kMaxConfigFileSize = 1024 * 1024; // 1 MB
@@ -11,29 +12,29 @@ namespace {
 
 std::string ConfigLoader::read(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path)) {
-        throw std::runtime_error("config file does not exist: " + path.string());
+        throw ConfigReadError(ConfigReadError::Reason::FileDoesNotExist, path);
     }
 
     if (!std::filesystem::is_regular_file(path)) {
-        throw std::runtime_error("config path is not a regular file: " + path.string());
+        throw ConfigReadError(ConfigReadError::Reason::NotRegularFile, path);
     }
 
     const auto fileSize = std::filesystem::file_size(path);
 
     if (fileSize > kMaxConfigFileSize) {
-        throw std::runtime_error("config file is too large: " + path.string());
+        throw ConfigReadError(ConfigReadError::Reason::FileTooLarge, path);
     }
 
     std::ifstream file(path);
     if (!file.is_open()) {
-        throw std::runtime_error("failed to open config file: " + path.string());
+        throw ConfigReadError(ConfigReadError::Reason::OpenFailed, path);
     }
 
     std::stringstream buffer;
     buffer << file.rdbuf();
 
     if (file.bad()) {
-        throw std::runtime_error("failed to read config file: " + path.string());
+        throw ConfigReadError(ConfigReadError::Reason::ReadFailed, path);
     }
 
     return buffer.str();
