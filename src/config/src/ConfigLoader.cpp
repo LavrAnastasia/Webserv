@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "ConfigLexer.hpp"
 #include "ConfigReadError.hpp"
 
 namespace {
@@ -42,7 +43,8 @@ std::string ConfigLoader::read(const std::filesystem::path& path) {
 
 Config ConfigLoader::load(const std::string& path) {
     const std::string source = ConfigLoader::read(std::filesystem::path{path});
+    const std::vector<Token> tokens = ConfigLexer::tokenize(source);
 
-    (void)source;
+    (void)tokens;
     return Config{};
 }
