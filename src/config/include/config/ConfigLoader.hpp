@@ -1,11 +1,13 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 #include "config/Config.hpp"
 
 class ConfigLoader {
-    std::string read() const;
+private:
+    static std::string read(const std::filesystem::path& path);
 
     // tokenize
     // parse()
