@@ -1,11 +1,19 @@
 #include "config/ConfigLoader.hpp"
 
+#include <cstdlib>
+#include <exception>
 #include <iostream>
+
+namespace {
+    void printError(const std::string& message) {
+        std::cerr << "webserv: error: " << message << '\n';
+    }
+} // namespace
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        // TODO: Print Error Message
-        return 1;
+        printError("expected exactly one config file");
+        return EXIT_FAILURE;
     }
 
     try {
@@ -30,9 +38,9 @@ int main(int argc, char* argv[]) {
         //          Event Writable?
         //          write
     } catch (const std::exception& error) {
-        std::cerr << "webserv: " << error.what() << '\n';
-        return 1;
+        printError(error.what());
+        return EXIT_FAILURE;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }
