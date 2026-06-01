@@ -3,8 +3,23 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "http/HttpMethod.hpp"
+
+struct CgiConfig {
+    std::string extension;
+    std::filesystem::path interpreter;
+};
+
+struct UploadConfig {
+    std::filesystem::path uploadPath;
+};
+
+struct RedirectConfig {
+    int statusCode;
+    std::string target;
+};
 
 struct LocationConfig {
     std::string path;
@@ -20,18 +35,4 @@ struct LocationConfig {
     std::optional<RedirectConfig> redirect;
     std::optional<UploadConfig> upload;
     std::optional<CgiConfig> cgi;
-};
-
-struct CgiConfig {
-    std::string extension;
-    std::filesystem::path interpreter;
-};
-
-struct UploadConfig {
-    std::filesystem::path uploadPath;
-};
-
-struct RedirectConfig {
-    int statusCode;
-    std::string target;
 };
