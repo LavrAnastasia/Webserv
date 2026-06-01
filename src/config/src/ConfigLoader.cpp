@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "ConfigLexer.hpp"
+#include "ConfigParser.hpp"
 #include "ConfigReadError.hpp"
 
 namespace {
@@ -44,9 +45,9 @@ std::string ConfigLoader::read(const std::filesystem::path& path) {
 Config ConfigLoader::load(const std::string& path) {
     const std::string source = ConfigLoader::read(std::filesystem::path{path});
     const std::vector<Token> tokens = ConfigLexer::tokenize(source);
+    const std::vector<ConfigNode> nodes = ConfigParser::parse(tokens);
 
-    (void)tokens;
-    // parse()
+    (void)nodes;
     // validate()
     // normalize()
     return Config{};
