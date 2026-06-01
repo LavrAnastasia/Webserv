@@ -46,5 +46,8 @@ Config ConfigLoader::load(const std::string& path) {
     const std::vector<Token> tokens = ConfigLexer::tokenize(source);
 
     (void)tokens;
+    // parse()
+    // validate()
+    // normalize()
     return Config{};
 }
