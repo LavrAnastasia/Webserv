@@ -21,7 +21,7 @@ BraceWrapping:
 
   IndentBraces: false
 
-AccessModifierOffset: 0
+AccessModifierOffset: -4
 
 AllowShortFunctionsOnASingleLine: InlineOnly
 AllowShortIfStatementsOnASingleLine: false
@@ -38,6 +38,7 @@ BinPackArguments: false
 BinPackParameters: false
 AlignAfterOpenBracket: Align
 ContinuationIndentWidth: 4
+AlignOperands: DontAlign
 
 IndentCaseLabels: true
 IndentPPDirectives: AfterHash
@@ -50,3 +51,5 @@ SpaceBeforeAssignmentOperators: true
 
 ReflowComments: false
 AlignTrailingComments: false
+
+NamespaceIndentation: All
