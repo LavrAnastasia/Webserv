@@ -24,7 +24,7 @@ public:
     static std::unordered_map<int, std::filesystem::path> decodeErrorPage(const std::vector<std::string>& arguments);
     static std::unordered_set<HttpMethod> decodeMethods(const std::vector<std::string>& values);
     static bool decodeAutoIndex(std::string_view value);
-    static RedirectConfig decodeRedirect(const std::vector<std::string>& arguments);
+    static RedirectConfig decodeRedirect(std::string_view statusCode, std::string_view target);
     static UploadConfig decodeUpload(std::string_view value);
     static CgiConfig decodeCgi(std::string_view extension, std::string_view interpreter);
 };

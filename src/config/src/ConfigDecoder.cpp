@@ -48,6 +48,10 @@ namespace {
 
         return static_cast<std::uint16_t>(port);
     }
+
+    bool isRedirectTarget(std::string_view target) {
+        return target.starts_with("/") || target.starts_with("http://") || target.starts_with("https://");
+    }
 } // namespace
 
 std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
@@ -138,10 +142,20 @@ std::unordered_set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<st
     return methods;
 }
 
-RedirectConfig ConfigDecoder::decodeRedirect(const std::vector<std::string>& arguments) {
-    (void)arguments;
+RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status, std::string_view target) {
+    int statusCode = 0;
 
-    return RedirectConfig{};
+    const auto [ptr, error] = std::from_chars(status.data(), status.data() + status.size(), statusCode);
+
+    if (error != std::errc{} || ptr != status.data() + status.size() || statusCode < 300 || statusCode > 399) {
+        throw std::runtime_error("Invalid redirect status code: " + std::string(status));
+    }
+
+    if (!isRedirectTarget(target)) {
+        throw std::runtime_error("Redirect target must not be empty");
+    }
+
+    return RedirectConfig{.statusCode = statusCode, .target = std::string(target)};
 }
 
 UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
