@@ -3,10 +3,12 @@
 #include "ConfigDecoder.hpp"
 #include "http/HttpMethod.hpp"
 
-std::string ConfigDecoder::decodeLocationPath(const std::vector<std::string>& arguments) {
-    (void)arguments;
+std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
+    if (value.empty() || value.front() != '/') {
+        throw std::runtime_error("Invalid location path: '" + std::string(value) + "'");
+    }
 
-    return "";
+    return std::string(value);
 }
 
 ListenConfig ConfigDecoder::decodeListen(const std::vector<std::string>& arguments) {
@@ -15,16 +17,22 @@ ListenConfig ConfigDecoder::decodeListen(const std::vector<std::string>& argumen
     return ListenConfig{};
 }
 
-std::filesystem::path ConfigDecoder::decodeRoot(const std::vector<std::string>& arguments) {
-    (void)arguments;
+std::filesystem::path ConfigDecoder::decodeRoot(std::string_view value) {
+    const std::filesystem::path path{value};
 
-    return std::filesystem::path{};
+    if (path.empty()) {
+        throw std::runtime_error("Root path must not be empty");
+    }
+
+    return path;
 }
 
-std::string ConfigDecoder::decodeIndex(const std::vector<std::string>& arguments) {
-    (void)arguments;
+std::string ConfigDecoder::decodeIndex(std::string_view value) {
+    if (value.empty()) {
+        throw std::runtime_error("Index file name must not be empty");
+    }
 
-    return "";
+    return std::string(value);
 }
 
 bool ConfigDecoder::decodeAutoIndex(std::string_view value) {
@@ -81,10 +89,14 @@ RedirectConfig ConfigDecoder::decodeRedirect(const std::vector<std::string>& arg
     return RedirectConfig{};
 }
 
-UploadConfig ConfigDecoder::decodeUpload(const std::vector<std::string>& arguments) {
-    (void)arguments;
+UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
+    const std::filesystem::path path{value};
 
-    return UploadConfig{};
+    if (path.empty()) {
+        throw std::runtime_error("Upload path must not be empty");
+    }
+
+    return UploadConfig{.uploadPath = path};
 }
 
 CgiConfig ConfigDecoder::decodeCgi(const std::vector<std::string>& arguments) {

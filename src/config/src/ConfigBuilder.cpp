@@ -11,7 +11,7 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
 
     LocationConfig config{};
 
-    config.path = ConfigDecoder::decodeLocationPath(node.arguments);
+    config.path = ConfigDecoder::decodeLocationPath(node.arguments[0]);
 
     std::unordered_set<Config::Directive> directives;
 
@@ -23,10 +23,10 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
 
         switch (directive) {
             case Config::Directive::Root:
-                config.root = ConfigDecoder::decodeRoot(child.arguments);
+                config.root = ConfigDecoder::decodeRoot(child.arguments[0]);
                 break;
             case Config::Directive::Index:
-                config.index = ConfigDecoder::decodeIndex(child.arguments);
+                config.index = ConfigDecoder::decodeIndex(child.arguments[0]);
                 break;
             case Config::Directive::ClientMaxBodySize:
                 config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
@@ -38,7 +38,7 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
                 config.allowedMethods = ConfigDecoder::decodeMethods(child.arguments);
                 break;
             case Config::Directive::UploadPath:
-                config.upload = ConfigDecoder::decodeUpload(child.arguments);
+                config.upload = ConfigDecoder::decodeUpload(child.arguments[0]);
                 break;
             case Config::Directive::Return:
                 config.redirect = ConfigDecoder::decodeRedirect(child.arguments);
@@ -75,10 +75,10 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
                     config.listen.push_back(ConfigDecoder::decodeListen(child.arguments));
                     break;
                 case Config::Directive::Root:
-                    config.root = ConfigDecoder::decodeRoot(child.arguments);
+                    config.root = ConfigDecoder::decodeRoot(child.arguments[0]);
                     break;
                 case Config::Directive::Index:
-                    config.index = ConfigDecoder::decodeIndex(child.arguments);
+                    config.index = ConfigDecoder::decodeIndex(child.arguments[0]);
                     break;
                 case Config::Directive::ClientMaxBodySize:
                     config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
