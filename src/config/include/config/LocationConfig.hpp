@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "config/CgiConfig.hpp"
@@ -23,5 +24,5 @@ struct LocationConfig {
 
     std::optional<RedirectConfig> redirect;
     std::optional<UploadConfig> upload;
-    std::optional<CgiConfig> cgi;
+    std::unordered_map<std::string, CgiConfig> cgi;
 };

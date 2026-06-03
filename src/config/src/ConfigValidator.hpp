@@ -28,4 +28,6 @@ public:
         const std::unordered_map<int, std::filesystem::path>& oldPages,
         const std::unordered_map<int, std::filesystem::path>& newPages
     );
+    static void
+    validateCgiDuplication(const std::unordered_map<std::string, CgiConfig>& cgis, const std::string& extension);
 };

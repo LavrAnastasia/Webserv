@@ -51,7 +51,7 @@ void ConfigValidator::validate(const Configuration& config) {
 
 void ConfigValidator::validate(const LocationConfig& config) {
     const int behaviorCount = static_cast<int>(config.redirect.has_value()) +
-        static_cast<int>(config.upload.has_value()) + static_cast<int>(config.cgi.has_value());
+        static_cast<int>(config.upload.has_value()) + static_cast<int>(!config.cgi.empty());
 
     if (behaviorCount > 1) {
         throw std::runtime_error("Location cannot define multiple handler behaviors");
@@ -145,5 +145,13 @@ void ConfigValidator::validateErrorPages(
         if (oldPages.contains(statusCode)) {
             throw std::runtime_error("Duplicate error_page status code");
         }
+    }
+}
+
+void ConfigValidator::validateCgiDuplication(
+    const std::unordered_map<std::string, CgiConfig>& cgis, const std::string& extension
+) {
+    if (cgis.contains(extension)) {
+        throw std::runtime_error("Duplicate CGI extension: " + extension);
     }
 }

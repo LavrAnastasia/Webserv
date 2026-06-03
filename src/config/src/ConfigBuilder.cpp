@@ -43,9 +43,14 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
             case Config::Directive::Return:
                 config.redirect = ConfigDecoder::decodeRedirect(child.arguments[0], child.arguments[1]);
                 break;
-            case Config::Directive::Cgi:
-                config.cgi = ConfigDecoder::decodeCgi(child.arguments[0], child.arguments[1]);
+            case Config::Directive::Cgi: {
+                const CgiConfig cgi = ConfigDecoder::decodeCgi(child.arguments[0], child.arguments[1]);
+
+                ConfigValidator::validateCgiDuplication(config.cgi, cgi.extension);
+                config.cgi.emplace(cgi.extension, cgi);
+
                 break;
+            }
             default:
                 break;
         }

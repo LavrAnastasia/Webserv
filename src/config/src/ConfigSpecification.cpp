@@ -65,7 +65,12 @@ namespace {
         },
         {
             "cgi",
-            {.directive = Config::Directive::Cgi, .contexts = {Config::Block::Location}, .argumentCount = {2, 2}},
+            {
+                .directive = Config::Directive::Cgi,
+                .contexts = {Config::Block::Location},
+                .argumentCount = {2, 2},
+                .repeatable = true,
+            },
         },
     };
 }
