@@ -11,17 +11,10 @@
 //  validate Final Config ? Noramlize?
 
 namespace {
-    constexpr std::string_view blockName(Config::Block block) {
-        switch (block) {
-            case Config::Block::Server:
-                return "server";
-
-            case Config::Block::Location:
-                return "location";
-        }
-
-        throw std::logic_error("Unknown config block type");
-    }
+    const std::unordered_map<std::string_view, Config::Block> blocks = {
+        {"server", Config::Block::Server},
+        {"location", Config::Block::Location},
+    };
 
     const std::unordered_map<std::string_view, Config::Directive> directives = {
         {"listen", Config::Directive::Listen},
@@ -39,10 +32,15 @@ namespace {
 
 
 void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node) {
-    const std::string_view expectedName = blockName(block);
+    const auto blockIt = blocks.find(node.name);
+    ;
 
-    if (node.name != expectedName) {
-        throw std::runtime_error("Expected '" + std::string(expectedName) + "' block, got '" + node.name + "'");
+    if (blockIt == blocks.end()) {
+        throw std::runtime_error("Unknown block '" + node.name + "'");
+    }
+
+    if (block != blockIt->second) {
+        throw std::runtime_error("Block '" + node.name + "' is not allowed at this level");
     }
     switch (block) {
         case Config::Block::Server:
@@ -75,21 +73,22 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
 }
 
 Config::Directive ConfigValidator::validateDirective(Config::Block block, const ConfigNode& node) {
-    const auto directive = directives.find(node.name);
+    const auto directiveIt = directives.find(node.name);
 
-    if (directive == directives.end()) {
+    if (directiveIt == directives.end()) {
         throw std::runtime_error("Unknown directive '" + node.name + "'");
+    }
+
+    if (node.body.has_value()) {
+        throw std::runtime_error("Directive '" + node.name + "' must not have body");
     }
 
     switch (block) {
         case Config::Block::Server:
             break;
         case Config::Block::Location:
-            if (node.body.has_value()) {
-                throw std::runtime_error("Nested blocks are not allowed inside location block");
-            }
             break;
     }
 
-    return directive->second;
+    return directiveIt->second;
 }
