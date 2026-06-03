@@ -1,5 +1,6 @@
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "ConfigValidator.hpp"
 
@@ -27,6 +28,25 @@ namespace {
         {"upload_path", Config::Directive::UploadPath},
         {"return", Config::Directive::Return},
         {"cgi", Config::Directive::Cgi},
+    };
+
+    const std::unordered_set<Config::Directive> serverDirectives = {
+        Config::Directive::Listen,
+        Config::Directive::Root,
+        Config::Directive::Index,
+        Config::Directive::ClientMaxBodySize,
+        Config::Directive::ErrorPage,
+    };
+
+    const std::unordered_set<Config::Directive> locationDirectives = {
+        Config::Directive::Root,
+        Config::Directive::Index,
+        Config::Directive::ClientMaxBodySize,
+        Config::Directive::Methods,
+        Config::Directive::AutoIndex,
+        Config::Directive::UploadPath,
+        Config::Directive::Return,
+        Config::Directive::Cgi,
     };
 } // namespace
 
@@ -83,10 +103,17 @@ Config::Directive ConfigValidator::validateDirective(Config::Block block, const 
         throw std::runtime_error("Directive '" + node.name + "' must not have body");
     }
 
+    const auto directive = directiveIt->second;
     switch (block) {
         case Config::Block::Server:
+            if (!serverDirectives.contains(directive)) {
+                throw std::runtime_error("Directive " + node.name + "is not allowed in server block");
+            }
             break;
         case Config::Block::Location:
+            if (!locationDirectives.contains(directive)) {
+                throw std::runtime_error("Directive " + node.name + "is not allowed in server block");
+            }
             break;
     }
 
