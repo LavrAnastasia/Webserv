@@ -1,16 +1,16 @@
 #pragma once
 
-// namespace Config {
-//     enum Directive {
-//         Listen,
-//         Root,
-//         Index,
-//         MaxBodySize,
-//         ErrorPage,
-//         Methods,
-//         AutoIndex,
-//         UploadPath,
-//         Return,
-//         Cgi
-//     }
-// }
+namespace Config {
+    enum Directive {
+        Listen,
+        Root,
+        Index,
+        ClientMaxBodySize,
+        ErrorPage,
+        Methods,
+        AutoIndex,
+        UploadPath,
+        Return,
+        Cgi,
+    };
+}

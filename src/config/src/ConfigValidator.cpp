@@ -1,4 +1,5 @@
 #include <string_view>
+#include <unordered_map>
 
 #include "ConfigValidator.hpp"
 
@@ -21,21 +22,20 @@ namespace {
 
         throw std::logic_error("Unknown config block type");
     }
+
+    const std::unordered_map<std::string_view, Config::Directive> directives = {
+        {"listen", Config::Directive::Listen},
+        {"root", Config::Directive::Root},
+        {"index", Config::Directive::Index},
+        {"client_max_body_size", Config::Directive::ClientMaxBodySize},
+        {"error_page", Config::Directive::ErrorPage},
+        {"methods", Config::Directive::Methods},
+        {"autoindex", Config::Directive::AutoIndex},
+        {"upload_path", Config::Directive::UploadPath},
+        {"return", Config::Directive::Return},
+        {"cgi", Config::Directive::Cgi},
+    };
 } // namespace
-
-// namespace Config::Directive {
-//     constexpr std::string_view listen = "listen";
-//     constexpr std::string_view root = "root";
-//     constexpr std::string_view index = "index";
-
-//     constexpr std::string_view clientMaxBodySize = "client_max_body_size";
-//     constexpr std::string_view errorPage =  "error_page";
-//     constexpr std::string_view methods = "methods";
-//     constexpr std::string_view autoindex = "autoindex";
-//     constexpr std::string_view upload_path = "upload_path";
-//     constexpr std::string_view redirect = "return";
-//     constexpr std::string_view cgi = "cgi";
-// }
 
 
 void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node) {
@@ -74,7 +74,13 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
     }
 }
 
-void ConfigValidator::validateDirective(Config::Block block, const ConfigNode& node) {
+Config::Directive ConfigValidator::validateDirective(Config::Block block, const ConfigNode& node) {
+    const auto directive = directives.find(node.name);
+
+    if (directive == directives.end()) {
+        throw std::runtime_error("Unknown directive '" + node.name + "'");
+    }
+
     switch (block) {
         case Config::Block::Server:
             break;
@@ -84,4 +90,6 @@ void ConfigValidator::validateDirective(Config::Block block, const ConfigNode& n
             }
             break;
     }
+
+    return directive->second;
 }

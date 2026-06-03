@@ -1,6 +1,7 @@
 #include <stdexcept>
 
 #include "ConfigBuilder.hpp"
+#include "ConfigDirective.hpp"
 #include "ConfigValidator.hpp"
 
 LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
@@ -11,9 +12,16 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
     config.path = node.arguments[0];
 
     for (const ConfigNode& child : *node.body) {
-        ConfigValidator::validateDirective(Config::Block::Location, child);
+        const auto directive = ConfigValidator::validateDirective(Config::Block::Location, child);
 
         // write directive to Config
+        switch (directive) {
+            case Config::Directive::Root:
+                break;
+
+            default:
+                break;
+        }
     }
 
     return config;
@@ -29,9 +37,17 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
             config.locations.push_back(buildLocationConfig(child));
 
         } else {
-            ConfigValidator::validateDirective(Config::Block::Server, child);
+            const auto directive = ConfigValidator::validateDirective(Config::Block::Server, child);
 
             // write directive to Config
+            switch (directive) {
+                case Config::Directive::Root:
+                    /* code */
+                    break;
+
+                default:
+                    break;
+            }
         }
     }
 

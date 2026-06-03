@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ConfigBlock.hpp"
+#include "ConfigDirective.hpp"
 #include "ConfigNode.hpp"
 
 class ConfigValidator {
@@ -10,5 +11,5 @@ private:
 
 public:
     static void validateBlock(Config::Block block, const ConfigNode& node);
-    static void validateDirective(Config::Block block, const ConfigNode& node);
+    static Config::Directive validateDirective(Config::Block block, const ConfigNode& node);
 };
