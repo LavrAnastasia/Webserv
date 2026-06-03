@@ -1,6 +1,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "ConfigSpecification.hpp"
 #include "ConfigValidator.hpp"
 
 // TODO: validate Server Final Block
@@ -13,43 +14,6 @@ namespace {
     const std::unordered_map<std::string_view, Config::Block> blocks = {
         {"server", Config::Block::Server},
         {"location", Config::Block::Location},
-    };
-
-    const std::unordered_map<std::string_view, Config::Directive> directives = {
-        {"listen", Config::Directive::Listen},
-        {"root", Config::Directive::Root},
-        {"index", Config::Directive::Index},
-        {"client_max_body_size", Config::Directive::ClientMaxBodySize},
-        {"error_page", Config::Directive::ErrorPage},
-        {"methods", Config::Directive::Methods},
-        {"autoindex", Config::Directive::AutoIndex},
-        {"upload_path", Config::Directive::UploadPath},
-        {"return", Config::Directive::Return},
-        {"cgi", Config::Directive::Cgi},
-    };
-
-    const std::unordered_set<Config::Directive> serverDirectives = {
-        Config::Directive::Listen,
-        Config::Directive::Root,
-        Config::Directive::Index,
-        Config::Directive::ClientMaxBodySize,
-        Config::Directive::ErrorPage,
-    };
-
-    const std::unordered_set<Config::Directive> locationDirectives = {
-        Config::Directive::Root,
-        Config::Directive::Index,
-        Config::Directive::ClientMaxBodySize,
-        Config::Directive::Methods,
-        Config::Directive::AutoIndex,
-        Config::Directive::UploadPath,
-        Config::Directive::Return,
-        Config::Directive::Cgi,
-    };
-
-    const std::unordered_set<Config::Directive> directivesAllowingDuplicates = {
-        Config::Directive::ErrorPage,
-        Config::Directive::Listen,
     };
 } // namespace
 
@@ -95,37 +59,29 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
 }
 
 Config::Directive ConfigValidator::validateDirective(Config::Block block, const ConfigNode& node) {
-    const auto directiveIt = directives.find(node.name);
-
-    if (directiveIt == directives.end()) {
-        throw std::runtime_error("Unknown directive '" + node.name + "'");
-    }
+    const auto& rule = ConfigSpecification::directiveRule(node.name);
 
     if (node.body.has_value()) {
         throw std::runtime_error("Directive '" + node.name + "' must not have body");
     }
 
-    const auto directive = directiveIt->second;
-    switch (block) {
-        case Config::Block::Server:
-            if (!serverDirectives.contains(directive)) {
-                throw std::runtime_error("Directive " + node.name + "is not allowed in server block");
-            }
-            break;
-        case Config::Block::Location:
-            if (!locationDirectives.contains(directive)) {
-                throw std::runtime_error("Directive " + node.name + "is not allowed in server block");
-            }
-            break;
+    if (!rule.contexts.contains(block)) {
+        throw std::runtime_error("Directive " + node.name + "is not allowed in this block");
     }
 
-    return directive;
+    if (node.arguments.size() < rule.argumentCount.min || node.arguments.size() > rule.argumentCount.max) {
+        throw std::runtime_error("Wrong argument count for directive '" + node.name + "'");
+    }
+
+    return rule.directive;
 }
 
 void ConfigValidator::validateDirectiveDuplication(
     const std::unordered_set<Config::Directive>& directives, Config::Directive directive
 ) {
-    if (directivesAllowingDuplicates.contains(directive)) {
+    const auto& rule = ConfigSpecification::directiveRule(directive);
+
+    if (rule.repeatable) {
         return;
     }
 
@@ -138,7 +94,9 @@ void ConfigValidator::validateErrorPages(
     const std::unordered_map<int, std::filesystem::path>& oldPages,
     const std::unordered_map<int, std::filesystem::path>& newPages
 ) {
-    for (const auto& [statusCode, path] : newPages) {
+    for (const auto& page : newPages) {
+        const int statusCode = page.first;
+
         if (oldPages.contains(statusCode)) {
             throw std::runtime_error("Duplicate error_page status code");
         }

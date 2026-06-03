@@ -32,7 +32,7 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
                 config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
                 break;
             case Config::Directive::AutoIndex:
-                config.autoindex = ConfigDecoder::decodeAutoIndex(child.arguments);
+                config.autoindex = ConfigDecoder::decodeAutoIndex(child.arguments[0]);
                 break;
             case Config::Directive::Methods:
                 config.allowedMethods = ConfigDecoder::decodeMethods(child.arguments);

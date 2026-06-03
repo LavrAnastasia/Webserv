@@ -11,6 +11,7 @@ CONFIG_SRC := \
 	src/config/src/ConfigLoader.cpp \
 	src/config/src/ConfigLexer.cpp \
 	src/config/src/ConfigParser.cpp \
+	src/config/src/ConfigSpecification.cpp \
 	src/config/src/ConfigValidator.cpp \
 	src/config/src/ConfigDecoder.cpp \
 	src/config/src/ConfigBuilder.cpp \

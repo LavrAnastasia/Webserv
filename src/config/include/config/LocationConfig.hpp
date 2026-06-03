@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
+#include <unordered_set>
 
 #include "config/CgiConfig.hpp"
 #include "config/RedirectConfig.hpp"
@@ -17,7 +17,7 @@ struct LocationConfig {
     std::string index;
     std::size_t clientMaxBodySize;
 
-    std::vector<HttpMethod> allowedMethods;
+    std::unordered_set<HttpMethod> allowedMethods;
 
     bool autoindex;
 
