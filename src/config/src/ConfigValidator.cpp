@@ -1,6 +1,5 @@
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 
 #include "ConfigValidator.hpp"
 
@@ -48,12 +47,15 @@ namespace {
         Config::Directive::Return,
         Config::Directive::Cgi,
     };
+
+    const std::unordered_set<Config::Directive> directivesAllowingDuplicates = {
+        Config::Directive::ErrorPage,
+    };
 } // namespace
 
 
 void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node) {
     const auto blockIt = blocks.find(node.name);
-    ;
 
     if (blockIt == blocks.end()) {
         throw std::runtime_error("Unknown block '" + node.name + "'");
@@ -117,5 +119,17 @@ Config::Directive ConfigValidator::validateDirective(Config::Block block, const 
             break;
     }
 
-    return directiveIt->second;
+    return directive;
+}
+
+void ConfigValidator::validateDirectiveDuplication(
+    const std::unordered_set<Config::Directive>& directives, Config::Directive directive
+) {
+    if (directivesAllowingDuplicates.contains(directive)) {
+        return;
+    }
+
+    if (directives.contains(directive)) {
+        throw std::runtime_error("Directive is duplicated");
+    }
 }

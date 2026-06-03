@@ -3,6 +3,7 @@
 #include "ConfigBlock.hpp"
 #include "ConfigDirective.hpp"
 #include "ConfigNode.hpp"
+#include <unordered_set>
 
 class ConfigValidator {
 private:
@@ -12,4 +13,6 @@ private:
 public:
     static void validateBlock(Config::Block block, const ConfigNode& node);
     static Config::Directive validateDirective(Config::Block block, const ConfigNode& node);
+    static void
+    validateDirectiveDuplication(const std::unordered_set<Config::Directive>& directives, Config::Directive directive);
 };

@@ -5,21 +5,10 @@
 #include <string>
 #include <vector>
 
+#include "config/CgiConfig.hpp"
+#include "config/RedirectConfig.hpp"
+#include "config/UploadConfig.hpp"
 #include "http/HttpMethod.hpp"
-
-struct CgiConfig {
-    std::string extension;
-    std::filesystem::path interpreter;
-};
-
-struct UploadConfig {
-    std::filesystem::path uploadPath;
-};
-
-struct RedirectConfig {
-    int statusCode;
-    std::string target;
-};
 
 struct LocationConfig {
     std::string path;

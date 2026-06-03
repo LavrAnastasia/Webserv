@@ -1,6 +1,8 @@
 #include <stdexcept>
+#include <unordered_set>
 
 #include "ConfigBuilder.hpp"
+#include "ConfigDecoder.hpp"
 #include "ConfigDirective.hpp"
 #include "ConfigValidator.hpp"
 
@@ -9,11 +11,15 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
 
     LocationConfig config{};
 
-    config.path = node.arguments[0];
+    config.path = ConfigDecoder::decodeLocationPath(node.arguments);
+
+    std::unordered_set<Config::Directive> directives;
 
     for (const ConfigNode& child : *node.body) {
         const auto directive = ConfigValidator::validateDirective(Config::Block::Location, child);
 
+        ConfigValidator::validateDirectiveDuplication(directives, directive);
+        directives.insert(directive);
         // write directive to Config
         switch (directive) {
             case Config::Directive::Root:
@@ -32,6 +38,8 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
 
     ServerConfig config{};
 
+    std::unordered_set<Config::Directive> directives;
+
     for (const ConfigNode& child : *node.body) {
         if (child.body.has_value()) {
             config.locations.push_back(buildLocationConfig(child));
@@ -39,6 +47,8 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
         } else {
             const auto directive = ConfigValidator::validateDirective(Config::Block::Server, child);
 
+            ConfigValidator::validateDirectiveDuplication(directives, directive);
+            directives.insert(directive);
             // write directive to Config
             switch (directive) {
                 case Config::Directive::Root:
