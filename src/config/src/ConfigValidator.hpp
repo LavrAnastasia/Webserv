@@ -1,11 +1,16 @@
 #pragma once
 
-#include "ConfigBlock.hpp"
-#include "ConfigDirective.hpp"
-#include "ConfigNode.hpp"
 #include <filesystem>
 #include <unordered_map>
 #include <unordered_set>
+
+#include "config/LocationConfig.hpp"
+#include "config/ServerConfig.hpp"
+
+#include "ConfigBlock.hpp"
+#include "ConfigDirective.hpp"
+#include "ConfigNode.hpp"
+
 
 class ConfigValidator {
 private:
@@ -13,6 +18,8 @@ private:
     static void validateLocationBlock(const ConfigNode& node);
 
 public:
+    static void validate(const LocationConfig& config);
+    static void validate(const ServerConfig& config);
     static void validateBlock(Config::Block block, const ConfigNode& node);
     static Config::Directive validateDirective(Config::Block block, const ConfigNode& node);
     static void

@@ -4,11 +4,7 @@
 #include "ConfigSpecification.hpp"
 #include "ConfigValidator.hpp"
 
-// TODO: validate Server Final Block
-
-// TODO: validate Location Final  Block
-
-// TODO: validate Final Config ? Noramlize?
+// TODO: validate Final Config
 
 namespace {
     const std::unordered_map<std::string_view, Config::Block> blocks = {
@@ -17,26 +13,7 @@ namespace {
     };
 } // namespace
 
-
-void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node) {
-    const auto blockIt = blocks.find(node.name);
-
-    if (blockIt == blocks.end()) {
-        throw std::runtime_error("Unknown block '" + node.name + "'");
-    }
-
-    if (block != blockIt->second) {
-        throw std::runtime_error("Block '" + node.name + "' is not allowed at this level");
-    }
-    switch (block) {
-        case Config::Block::Server:
-            validateServerBlock(node);
-            break;
-        case Config::Block::Location:
-            validateLocationBlock(node);
-            break;
-    }
-}
+// Private
 
 void ConfigValidator::validateServerBlock(const ConfigNode& node) {
     if (!node.arguments.empty()) {
@@ -55,6 +32,62 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
 
     if (!node.body.has_value()) {
         throw std::runtime_error("Location block must have body");
+    }
+}
+
+// Public
+
+void ConfigValidator::validate(const LocationConfig& config) {
+    const int behaviorCount = static_cast<int>(config.redirect.has_value()) +
+        static_cast<int>(config.upload.has_value()) + static_cast<int>(config.cgi.has_value());
+
+    if (behaviorCount > 1) {
+        throw std::runtime_error("Location cannot define multiple handler behaviors");
+    }
+
+    if (config.allowedMethods.empty()) {
+        throw std::runtime_error("Server must define at least one method directive");
+    }
+}
+void ConfigValidator::validate(const ServerConfig& config) {
+    if (config.listen.empty()) {
+        throw std::runtime_error("Server must define at least one listen directive");
+    }
+
+    if (config.root.empty()) {
+        throw std::runtime_error("Server must define at least one root directive");
+    }
+
+    if (config.locations.empty()) {
+        throw std::runtime_error("Server must define at least one location");
+    }
+
+    std::unordered_set<std::string> locationPaths;
+
+    for (const LocationConfig& location : config.locations) {
+        if (!locationPaths.insert(location.path).second) {
+            throw std::runtime_error("Duplicate location path: " + location.path);
+        }
+    }
+}
+
+void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node) {
+    const auto blockIt = blocks.find(node.name);
+
+    if (blockIt == blocks.end()) {
+        throw std::runtime_error("Unknown block '" + node.name + "'");
+    }
+
+    if (block != blockIt->second) {
+        throw std::runtime_error("Block '" + node.name + "' is not allowed at this level");
+    }
+    switch (block) {
+        case Config::Block::Server:
+            validateServerBlock(node);
+            break;
+        case Config::Block::Location:
+            validateLocationBlock(node);
+            break;
     }
 }
 

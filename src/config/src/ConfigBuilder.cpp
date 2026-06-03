@@ -51,6 +51,8 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
         }
     }
 
+    ConfigValidator::validate(config);
+
     return config;
 }
 
@@ -97,6 +99,8 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
         }
     }
 
+    ConfigValidator::validate(config);
+
     return config;
 }
 
@@ -109,6 +113,8 @@ Configuration ConfigBuilder::build(const std::vector<ConfigNode>& nodes) {
     for (const auto& node : nodes) {
         config.servers.push_back(buildServerConfig(node));
     }
+
+    // Noramlize
 
     return config;
 }
