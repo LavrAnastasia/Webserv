@@ -114,6 +114,7 @@ Configuration ConfigBuilder::build(const std::vector<ConfigNode>& nodes) {
         config.servers.push_back(buildServerConfig(node));
     }
 
+    ConfigValidator::validate(config);
     // Noramlize
 
     return config;

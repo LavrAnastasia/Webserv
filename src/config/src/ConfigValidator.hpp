@@ -4,8 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "config/LocationConfig.hpp"
-#include "config/ServerConfig.hpp"
+#include "config/Configuration.hpp"
 
 #include "ConfigBlock.hpp"
 #include "ConfigDirective.hpp"
@@ -18,6 +17,7 @@ private:
     static void validateLocationBlock(const ConfigNode& node);
 
 public:
+    static void validate(const Configuration& config);
     static void validate(const LocationConfig& config);
     static void validate(const ServerConfig& config);
     static void validateBlock(Config::Block block, const ConfigNode& node);

@@ -4,8 +4,6 @@
 #include "ConfigSpecification.hpp"
 #include "ConfigValidator.hpp"
 
-// TODO: validate Final Config
-
 namespace {
     const std::unordered_map<std::string_view, Config::Block> blocks = {
         {"server", Config::Block::Server},
@@ -36,6 +34,20 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
 }
 
 // Public
+
+void ConfigValidator::validate(const Configuration& config) {
+    std::unordered_set<std::string> endpoints;
+
+    for (const ServerConfig& server : config.servers) {
+        for (const ListenConfig& listen : server.listen) {
+            const std::string endpoint = listen.host + ":" + std::to_string(listen.port);
+
+            if (!endpoints.insert(endpoint).second) {
+                throw std::runtime_error("Duplicate listen endpoint: " + endpoint);
+            }
+        }
+    }
+}
 
 void ConfigValidator::validate(const LocationConfig& config) {
     const int behaviorCount = static_cast<int>(config.redirect.has_value()) +
