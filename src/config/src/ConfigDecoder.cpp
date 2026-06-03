@@ -24,6 +24,12 @@ std::string ConfigDecoder::decodeIndex(const std::vector<std::string>& arguments
     return "";
 }
 
+bool ConfigDecoder::decodeAutoIndex(const std::vector<std::string>& arguments) {
+    (void)arguments;
+
+    return false;
+}
+
 std::size_t ConfigDecoder::decodeClientMaxBodySize(const std::vector<std::string>& arguments) {
     (void)arguments;
 

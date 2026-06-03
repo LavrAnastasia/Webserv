@@ -20,11 +20,32 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
 
         ConfigValidator::validateDirectiveDuplication(directives, directive);
         directives.insert(directive);
-        // write directive to Config
+
         switch (directive) {
             case Config::Directive::Root:
+                config.root = ConfigDecoder::decodeRoot(child.arguments);
                 break;
-
+            case Config::Directive::Index:
+                config.index = ConfigDecoder::decodeIndex(child.arguments);
+                break;
+            case Config::Directive::ClientMaxBodySize:
+                config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
+                break;
+            case Config::Directive::AutoIndex:
+                config.autoindex = ConfigDecoder::decodeAutoIndex(child.arguments);
+                break;
+            case Config::Directive::Methods:
+                config.allowedMethods = ConfigDecoder::decodeMethods(child.arguments);
+                break;
+            case Config::Directive::UploadPath:
+                config.upload = ConfigDecoder::decodeUpload(child.arguments);
+                break;
+            case Config::Directive::Return:
+                config.redirect = ConfigDecoder::decodeRedirect(child.arguments);
+                break;
+            case Config::Directive::Cgi:
+                config.cgi = ConfigDecoder::decodeCgi(child.arguments);
+                break;
             default:
                 break;
         }
@@ -43,18 +64,33 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
     for (const ConfigNode& child : *node.body) {
         if (child.body.has_value()) {
             config.locations.push_back(buildLocationConfig(child));
-
         } else {
             const auto directive = ConfigValidator::validateDirective(Config::Block::Server, child);
 
             ConfigValidator::validateDirectiveDuplication(directives, directive);
             directives.insert(directive);
-            // write directive to Config
-            switch (directive) {
-                case Config::Directive::Root:
-                    /* code */
-                    break;
 
+            switch (directive) {
+                case Config::Directive::Listen:
+                    config.listen.push_back(ConfigDecoder::decodeListen(child.arguments));
+                    break;
+                case Config::Directive::Root:
+                    config.root = ConfigDecoder::decodeRoot(child.arguments);
+                    break;
+                case Config::Directive::Index:
+                    config.index = ConfigDecoder::decodeIndex(child.arguments);
+                    break;
+                case Config::Directive::ClientMaxBodySize:
+                    config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
+                    break;
+                case Config::Directive::ErrorPage: {
+                    const auto pages = ConfigDecoder::decodeErrorPage(child.arguments);
+
+                    ConfigValidator::validateErrorPages(config.errorPages, pages);
+
+                    config.errorPages.insert(pages.begin(), pages.end());
+                    break;
+                }
                 default:
                     break;
             }
@@ -65,7 +101,7 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
 }
 
 Configuration ConfigBuilder::build(const std::vector<ConfigNode>& nodes) {
-    if (nodes.size() == 0) {
+    if (nodes.empty()) {
         throw std::runtime_error("empty config");
     }
 

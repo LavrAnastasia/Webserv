@@ -1,15 +1,13 @@
 #include <stdexcept>
 #include <string_view>
-#include <unordered_map>
 
 #include "ConfigValidator.hpp"
 
+// TODO: validate Server Final Block
 
-// validate Server Final Block
+// TODO: validate Location Final  Block
 
-//  validate Location Final  Block
-
-//  validate Final Config ? Noramlize?
+// TODO: validate Final Config ? Noramlize?
 
 namespace {
     const std::unordered_map<std::string_view, Config::Block> blocks = {
@@ -51,6 +49,7 @@ namespace {
 
     const std::unordered_set<Config::Directive> directivesAllowingDuplicates = {
         Config::Directive::ErrorPage,
+        Config::Directive::Listen,
     };
 } // namespace
 
@@ -132,5 +131,16 @@ void ConfigValidator::validateDirectiveDuplication(
 
     if (directives.contains(directive)) {
         throw std::runtime_error("Directive is duplicated");
+    }
+}
+
+void ConfigValidator::validateErrorPages(
+    const std::unordered_map<int, std::filesystem::path>& oldPages,
+    const std::unordered_map<int, std::filesystem::path>& newPages
+) {
+    for (const auto& [statusCode, path] : newPages) {
+        if (oldPages.contains(statusCode)) {
+            throw std::runtime_error("Duplicate error_page status code");
+        }
     }
 }
