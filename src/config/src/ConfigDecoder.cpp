@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <charconv>
+#include <limits>
 #include <stdexcept>
 #include <system_error>
 
@@ -27,7 +28,8 @@ namespace {
             unsigned int number = 0;
             const auto [ptr, error] = std::from_chars(part.data(), part.data() + part.size(), number);
 
-            if (error != std::errc{} || ptr != part.data() + part.size() || number > 255) {
+            if (error != std::errc{} || (part.size() > 1 && part.front() == '0') || ptr != part.data() + part.size() ||
+                number > 255) {
                 throw std::runtime_error("Invalid listen host: " + std::string(value));
             }
 
@@ -105,17 +107,61 @@ bool ConfigDecoder::decodeAutoIndex(std::string_view value) {
     throw std::runtime_error("unsuppoorted autoindex value: " + std::string(value));
 }
 
-std::size_t ConfigDecoder::decodeClientMaxBodySize(const std::vector<std::string>& arguments) {
-    (void)arguments;
+std::size_t ConfigDecoder::decodeClientMaxBodySize(std::string_view value) {
+    if (value.empty()) {
+        throw std::runtime_error("Client max body size must not be empty");
+    }
 
-    return 0;
+    std::size_t multiplier = 1;
+
+    if (value.ends_with("k")) {
+        multiplier = 1024;
+        value.remove_suffix(1);
+    } else if (value.ends_with("m")) {
+        multiplier = 1024 * 1024;
+        value.remove_suffix(1);
+    }
+
+    std::size_t size = 0;
+
+    const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), size);
+
+    if (error != std::errc{} || ptr != value.data() + value.size()) {
+        throw std::runtime_error("Invalid client_max_body_size value");
+    }
+
+    if (size > std::numeric_limits<std::size_t>::max() / multiplier) {
+        throw std::runtime_error("Client max body size is too large");
+    }
+
+    return size * multiplier;
 }
 
-std::unordered_map<int, std::filesystem::path>
-ConfigDecoder::decodeErrorPage(const std::vector<std::string>& arguments) {
-    (void)arguments;
+std::unordered_map<int, std::filesystem::path> ConfigDecoder::decodeErrorPage(const std::vector<std::string>& values) {
+    const std::filesystem::path path{values.back()};
 
-    return {};
+    if (path.empty()) {
+        throw std::runtime_error("Error page path must not be empty");
+    }
+
+    std::unordered_map<int, std::filesystem::path> pages;
+
+    for (std::size_t index = 0; index < values.size() - 1; ++index) {
+        int statusCode = 0;
+
+        const std::string& value = values[index];
+        const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), statusCode);
+
+        if (error != std::errc{} || ptr != value.data() + value.size() || statusCode < 400 || statusCode > 599) {
+            throw std::runtime_error("Invalid error_page status code: " + value);
+        }
+
+        if (!pages.emplace(statusCode, path).second) {
+            throw std::runtime_error("Duplicate error_page status code: " + value);
+        }
+    }
+
+    return pages;
 }
 
 std::unordered_set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>& values) {
@@ -152,7 +198,7 @@ RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status, std::strin
     }
 
     if (!isRedirectTarget(target)) {
-        throw std::runtime_error("Redirect target must not be empty");
+        throw std::runtime_error("Invalid redirect target: " + std::string(target));
     }
 
     return RedirectConfig{.statusCode = statusCode, .target = std::string(target)};

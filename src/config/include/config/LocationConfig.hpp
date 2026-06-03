@@ -15,7 +15,7 @@ struct LocationConfig {
 
     std::filesystem::path root;
     std::string index;
-    std::size_t clientMaxBodySize;
+    std::optional<std::size_t> clientMaxBodySize;
 
     std::unordered_set<HttpMethod> allowedMethods;
 

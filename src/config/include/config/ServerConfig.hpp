@@ -12,7 +12,7 @@ struct ServerConfig {
 
     std::filesystem::path root;
     std::string index;
-    std::size_t clientMaxBodySize;
+    std::optional<std::size_t> clientMaxBodySize;
 
     std::unordered_map<int, std::filesystem::path> errorPages;
 

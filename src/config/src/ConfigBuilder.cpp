@@ -29,7 +29,7 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
                 config.index = ConfigDecoder::decodeIndex(child.arguments[0]);
                 break;
             case Config::Directive::ClientMaxBodySize:
-                config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
+                config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments[0]);
                 break;
             case Config::Directive::AutoIndex:
                 config.autoindex = ConfigDecoder::decodeAutoIndex(child.arguments[0]);
@@ -81,7 +81,7 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
                     config.index = ConfigDecoder::decodeIndex(child.arguments[0]);
                     break;
                 case Config::Directive::ClientMaxBodySize:
-                    config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments);
+                    config.clientMaxBodySize = ConfigDecoder::decodeClientMaxBodySize(child.arguments[0]);
                     break;
                 case Config::Directive::ErrorPage: {
                     const auto pages = ConfigDecoder::decodeErrorPage(child.arguments);
