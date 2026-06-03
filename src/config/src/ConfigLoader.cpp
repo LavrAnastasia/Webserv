@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "ConfigBuilder.hpp"
 #include "ConfigLexer.hpp"
 #include "ConfigParser.hpp"
 #include "ConfigReadError.hpp"
@@ -42,13 +43,10 @@ std::string ConfigLoader::read(const std::filesystem::path& path) {
     return buffer.str();
 }
 
-Config ConfigLoader::load(const std::string& path) {
+Configuration ConfigLoader::load(const std::string& path) {
     const std::string source = ConfigLoader::read(std::filesystem::path{path});
     const std::vector<Token> tokens = ConfigLexer::tokenize(source);
     const std::vector<ConfigNode> nodes = ConfigParser::parse(tokens);
 
-    (void)nodes;
-    // validate()
-    // normalize()
-    return Config{};
+    return ConfigBuilder::build(nodes);
 }

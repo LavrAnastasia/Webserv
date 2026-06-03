@@ -4,6 +4,6 @@
 
 #include "config/ServerConfig.hpp"
 
-struct Config {
+struct Configuration {
     std::vector<ServerConfig> servers;
 };

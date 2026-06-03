@@ -3,12 +3,12 @@
 #include <filesystem>
 #include <string>
 
-#include "config/Config.hpp"
+#include "config/Configuration.hpp"
 
 class ConfigLoader {
 private:
     static std::string read(const std::filesystem::path& path);
 
 public:
-    static Config load(const std::string& path);
+    static Configuration load(const std::string& path);
 };

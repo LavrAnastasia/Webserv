@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        const Config config = ConfigLoader::load(argv[1]);
+        const Configuration config = ConfigLoader::load(argv[1]);
 
         (void)config;
 
