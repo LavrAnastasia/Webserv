@@ -1,7 +1,54 @@
+#include <algorithm>
+#include <charconv>
 #include <stdexcept>
+#include <system_error>
 
 #include "ConfigDecoder.hpp"
 #include "http/HttpMethod.hpp"
+
+namespace {
+    std::string decodeHost(std::string_view value) {
+        if (value == "localhost") {
+            return "127.0.0.1";
+        }
+
+        if (std::ranges::count(value, '.') != 3) {
+            throw std::runtime_error("Invalid listen host: " + std::string(value));
+        }
+
+        std::size_t start = 0;
+
+        for (int index = 0; index < 4; ++index) {
+            const std::size_t end = value.find('.', start);
+
+            const std::string_view part =
+                value.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+
+            unsigned int number = 0;
+            const auto [ptr, error] = std::from_chars(part.data(), part.data() + part.size(), number);
+
+            if (error != std::errc{} || ptr != part.data() + part.size() || number > 255) {
+                throw std::runtime_error("Invalid listen host: " + std::string(value));
+            }
+
+            start = end + 1;
+        }
+
+        return std::string(value);
+    }
+
+    std::uint16_t decodePort(std::string_view value) {
+        unsigned int port = 0;
+
+        const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), port);
+
+        if (error != std::errc{} || ptr != value.data() + value.size() || port == 0 || port > 65535) {
+            throw std::runtime_error("Invalid listen port");
+        }
+
+        return static_cast<std::uint16_t>(port);
+    }
+} // namespace
 
 std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
     if (value.empty() || value.front() != '/') {
@@ -11,10 +58,18 @@ std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
     return std::string(value);
 }
 
-ListenConfig ConfigDecoder::decodeListen(const std::vector<std::string>& arguments) {
-    (void)arguments;
+ListenConfig ConfigDecoder::decodeListen(std::string_view value) {
+    const std::size_t separator = value.find(':');
 
-    return ListenConfig{};
+    if (separator == std::string_view::npos || separator == 0 || separator == value.size() - 1 ||
+        value.find(':', separator + 1) != std::string_view::npos) {
+        throw std::runtime_error("Invalid listen endpoint format: " + std::string(value));
+    }
+
+    const std::string_view hostValue = value.substr(0, separator);
+    const std::string_view portValue = value.substr(separator + 1);
+
+    return ListenConfig{.host = decodeHost(hostValue), .port = decodePort(portValue)};
 }
 
 std::filesystem::path ConfigDecoder::decodeRoot(std::string_view value) {
@@ -43,7 +98,7 @@ bool ConfigDecoder::decodeAutoIndex(std::string_view value) {
         return false;
     }
 
-    throw std::runtime_error("unsuppoorted directive value: " + std::string(value));
+    throw std::runtime_error("unsuppoorted autoindex value: " + std::string(value));
 }
 
 std::size_t ConfigDecoder::decodeClientMaxBodySize(const std::vector<std::string>& arguments) {
@@ -99,8 +154,16 @@ UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
     return UploadConfig{.uploadPath = path};
 }
 
-CgiConfig ConfigDecoder::decodeCgi(const std::vector<std::string>& arguments) {
-    (void)arguments;
+CgiConfig ConfigDecoder::decodeCgi(std::string_view extension, std::string_view interpreter) {
+    if (extension.empty() || extension.front() != '.') {
+        throw std::runtime_error("Invalid CGI extension: " + std::string(extension));
+    }
 
-    return CgiConfig{};
+    const std::filesystem::path interpreterPath{interpreter};
+
+    if (interpreterPath.empty()) {
+        throw std::runtime_error("CGI interpreter path must not be empty");
+    }
+
+    return CgiConfig{.extension = std::string(extension), .interpreter = interpreterPath};
 }

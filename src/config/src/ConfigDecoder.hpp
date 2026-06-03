@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,7 +17,7 @@
 class ConfigDecoder {
 public:
     static std::string decodeLocationPath(std::string_view value);
-    static ListenConfig decodeListen(const std::vector<std::string>& arguments);
+    static ListenConfig decodeListen(std::string_view value);
     static std::filesystem::path decodeRoot(std::string_view value);
     static std::string decodeIndex(std::string_view value);
     static std::size_t decodeClientMaxBodySize(const std::vector<std::string>& arguments);
@@ -25,5 +26,5 @@ public:
     static bool decodeAutoIndex(std::string_view value);
     static RedirectConfig decodeRedirect(const std::vector<std::string>& arguments);
     static UploadConfig decodeUpload(std::string_view value);
-    static CgiConfig decodeCgi(const std::vector<std::string>& arguments);
+    static CgiConfig decodeCgi(std::string_view extension, std::string_view interpreter);
 };

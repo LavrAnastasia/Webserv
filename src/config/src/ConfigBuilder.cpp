@@ -44,7 +44,7 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
                 config.redirect = ConfigDecoder::decodeRedirect(child.arguments);
                 break;
             case Config::Directive::Cgi:
-                config.cgi = ConfigDecoder::decodeCgi(child.arguments);
+                config.cgi = ConfigDecoder::decodeCgi(child.arguments[0], child.arguments[1]);
                 break;
             default:
                 break;
@@ -72,7 +72,7 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
 
             switch (directive) {
                 case Config::Directive::Listen:
-                    config.listen.push_back(ConfigDecoder::decodeListen(child.arguments));
+                    config.listen.push_back(ConfigDecoder::decodeListen(child.arguments[0]));
                     break;
                 case Config::Directive::Root:
                     config.root = ConfigDecoder::decodeRoot(child.arguments[0]);
