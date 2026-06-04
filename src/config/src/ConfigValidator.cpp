@@ -58,7 +58,7 @@ void ConfigValidator::validate(const LocationConfig& config) {
     }
 
     if (config.allowedMethods.empty()) {
-        throw std::runtime_error("Server must define at least one method directive");
+        throw std::runtime_error("Location must define at least one method directive");
     }
 }
 void ConfigValidator::validate(const ServerConfig& config) {
@@ -111,7 +111,7 @@ Config::Directive ConfigValidator::validateDirective(Config::Block block, const 
     }
 
     if (!rule.contexts.contains(block)) {
-        throw std::runtime_error("Directive " + node.name + "is not allowed in this block");
+        throw std::runtime_error("Directive " + node.name + " is not allowed in this block");
     }
 
     if (node.arguments.size() < rule.argumentCount.min || node.arguments.size() > rule.argumentCount.max) {

@@ -120,7 +120,6 @@ Configuration ConfigBuilder::build(const std::vector<ConfigNode>& nodes) {
     }
 
     ConfigValidator::validate(config);
-    // Noramlize
 
     return config;
 }

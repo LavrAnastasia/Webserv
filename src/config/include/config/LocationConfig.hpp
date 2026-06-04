@@ -14,13 +14,13 @@
 struct LocationConfig {
     std::string path;
 
-    std::filesystem::path root;
-    std::string index;
+    std::optional<std::filesystem::path> root;
+    std::optional<std::string> index;
     std::optional<std::size_t> clientMaxBodySize;
 
     std::unordered_set<HttpMethod> allowedMethods;
 
-    bool autoindex;
+    bool autoindex = false;
 
     std::optional<RedirectConfig> redirect;
     std::optional<UploadConfig> upload;
