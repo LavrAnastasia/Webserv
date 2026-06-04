@@ -1,9 +1,10 @@
-#include <stdexcept>
+
 #include <unordered_set>
 
 #include "ConfigBuilder.hpp"
 #include "ConfigDecoder.hpp"
 #include "ConfigDirective.hpp"
+#include "ConfigValidationError.hpp"
 #include "ConfigValidator.hpp"
 
 LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
@@ -111,7 +112,7 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
 
 Configuration ConfigBuilder::build(const std::vector<ConfigNode>& nodes) {
     if (nodes.empty()) {
-        throw std::runtime_error("empty config");
+        throw ConfigValidationError(ConfigValidationError::Reason::EmptyConfig);
     }
 
     Configuration config{};

@@ -1,7 +1,8 @@
-#include <stdexcept>
+#include <string>
 #include <string_view>
 
 #include "ConfigSpecification.hpp"
+#include "ConfigValidationError.hpp"
 #include "ConfigValidator.hpp"
 
 namespace {
@@ -15,21 +16,21 @@ namespace {
 
 void ConfigValidator::validateServerBlock(const ConfigNode& node) {
     if (!node.arguments.empty()) {
-        throw std::runtime_error("Server block must not have arguments");
+        throw ConfigValidationError(ConfigValidationError::Reason::WrongArgumentCount, "server block");
     }
 
     if (!node.body.has_value()) {
-        throw std::runtime_error("Server block must have body");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingBody, "server block");
     }
 }
 
 void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
     if (node.arguments.size() != 1) {
-        throw std::runtime_error("Location block has to have exactly one arg");
+        throw ConfigValidationError(ConfigValidationError::Reason::WrongArgumentCount, "location block");
     }
 
     if (!node.body.has_value()) {
-        throw std::runtime_error("Location block must have body");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingBody, "location block");
     }
 }
 
@@ -43,7 +44,9 @@ void ConfigValidator::validate(const Configuration& config) {
             const std::string endpoint = listen.host + ":" + std::to_string(listen.port);
 
             if (!endpoints.insert(endpoint).second) {
-                throw std::runtime_error("Duplicate listen endpoint: " + endpoint);
+                throw ConfigValidationError(
+                    ConfigValidationError::Reason::DuplicateValue, "listen endpoint: " + endpoint
+                );
             }
         }
     }
@@ -54,31 +57,33 @@ void ConfigValidator::validate(const LocationConfig& config) {
         static_cast<int>(config.upload.has_value()) + static_cast<int>(!config.cgi.empty());
 
     if (behaviorCount > 1) {
-        throw std::runtime_error("Location cannot define multiple handler behaviors");
+        throw ConfigValidationError(ConfigValidationError::Reason::ConflictingBehavior);
     }
 
     if (config.allowedMethods.empty()) {
-        throw std::runtime_error("Location must define at least one method directive");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingDirective, "method");
     }
 }
 void ConfigValidator::validate(const ServerConfig& config) {
     if (config.listen.empty()) {
-        throw std::runtime_error("Server must define at least one listen directive");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingDirective, "listen");
     }
 
     if (config.root.empty()) {
-        throw std::runtime_error("Server must define at least one root directive");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingDirective, "root");
     }
 
     if (config.locations.empty()) {
-        throw std::runtime_error("Server must define at least one location");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingDirective, "location");
     }
 
     std::unordered_set<std::string> locationPaths;
 
     for (const LocationConfig& location : config.locations) {
         if (!locationPaths.insert(location.path).second) {
-            throw std::runtime_error("Duplicate location path: " + location.path);
+            throw ConfigValidationError(
+                ConfigValidationError::Reason::DuplicateValue, "location path: " + location.path
+            );
         }
     }
 }
@@ -87,11 +92,11 @@ void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node)
     const auto blockIt = blocks.find(node.name);
 
     if (blockIt == blocks.end()) {
-        throw std::runtime_error("Unknown block '" + node.name + "'");
+        throw ConfigValidationError(ConfigValidationError::Reason::UnknownBlock, node.name);
     }
 
     if (block != blockIt->second) {
-        throw std::runtime_error("Block '" + node.name + "' is not allowed at this level");
+        throw ConfigValidationError(ConfigValidationError::Reason::BlockNotAllowed, node.name);
     }
     switch (block) {
         case Config::Block::Server:
@@ -107,15 +112,15 @@ Config::Directive ConfigValidator::validateDirective(Config::Block block, const 
     const auto& rule = ConfigSpecification::directiveRule(node.name);
 
     if (node.body.has_value()) {
-        throw std::runtime_error("Directive '" + node.name + "' must not have body");
+        throw ConfigValidationError(ConfigValidationError::Reason::UnexpectedBody, node.name);
     }
 
     if (!rule.contexts.contains(block)) {
-        throw std::runtime_error("Directive " + node.name + " is not allowed in this block");
+        throw ConfigValidationError(ConfigValidationError::Reason::DirectiveNotAllowed, node.name);
     }
 
     if (node.arguments.size() < rule.argumentCount.min || node.arguments.size() > rule.argumentCount.max) {
-        throw std::runtime_error("Wrong argument count for directive '" + node.name + "'");
+        throw ConfigValidationError(ConfigValidationError::Reason::WrongArgumentCount, node.name);
     }
 
     return rule.directive;
@@ -131,7 +136,7 @@ void ConfigValidator::validateDirectiveDuplication(
     }
 
     if (directives.contains(directive)) {
-        throw std::runtime_error("Directive is duplicated");
+        throw ConfigValidationError(ConfigValidationError::Reason::DuplicateDirective);
     }
 }
 
@@ -143,7 +148,7 @@ void ConfigValidator::validateErrorPages(
         const int statusCode = page.first;
 
         if (oldPages.contains(statusCode)) {
-            throw std::runtime_error("Duplicate error_page status code");
+            throw ConfigValidationError(ConfigValidationError::Reason::DuplicateValue, "error page status code");
         }
     }
 }
@@ -152,6 +157,6 @@ void ConfigValidator::validateCgiDuplication(
     const std::unordered_map<std::string, CgiConfig>& cgis, const std::string& extension
 ) {
     if (cgis.contains(extension)) {
-        throw std::runtime_error("Duplicate CGI extension: " + extension);
+        throw ConfigValidationError(ConfigValidationError::Reason::DuplicateValue, "CGI extension: " + extension);
     }
 }

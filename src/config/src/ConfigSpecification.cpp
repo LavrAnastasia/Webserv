@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "ConfigSpecification.hpp"
+#include "ConfigValidationError.hpp"
 
 namespace {
     const std::unordered_map<std::string_view, Config::DirectiveRule> directiveRules = {
@@ -79,7 +80,7 @@ const Config::DirectiveRule& ConfigSpecification::directiveRule(std::string_view
     const auto ruleIt = directiveRules.find(name);
 
     if (ruleIt == directiveRules.end()) {
-        throw std::runtime_error("Unknown directive '" + std::string(name) + "'");
+        throw ConfigValidationError(ConfigValidationError::Reason::UnknownDirective, std::string(name));
     }
 
     return ruleIt->second;

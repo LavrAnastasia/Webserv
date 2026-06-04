@@ -16,6 +16,7 @@ CONFIG_SRC := \
 	src/config/src/ConfigDecoder.cpp \
 	src/config/src/ConfigBuilder.cpp \
 	src/config/src/ConfigDecodingError.cpp \
+	src/config/src/ConfigValidationError.cpp \
 	src/config/src/ConfigError.cpp \
 	src/config/src/ConfigReadError.cpp \
 	src/config/src/ConfigSyntaxError.cpp
