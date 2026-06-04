@@ -1,10 +1,10 @@
 #include <algorithm>
 #include <charconv>
 #include <limits>
-#include <stdexcept>
 #include <system_error>
 
 #include "ConfigDecoder.hpp"
+#include "ConfigDecodingError.hpp"
 #include "http/HttpMethod.hpp"
 
 namespace {
@@ -14,7 +14,7 @@ namespace {
         }
 
         if (std::ranges::count(value, '.') != 3) {
-            throw std::runtime_error("Invalid listen host: " + std::string(value));
+            throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "listen host: " + std::string(value));
         }
 
         std::size_t start = 0;
@@ -30,7 +30,9 @@ namespace {
 
             if (error != std::errc{} || (part.size() > 1 && part.front() == '0') || ptr != part.data() + part.size() ||
                 number > 255) {
-                throw std::runtime_error("Invalid listen host: " + std::string(value));
+                throw ConfigDecodingError(
+                    ConfigDecodingError::Reason::InvalidFormat, "listen host: " + std::string(value)
+                );
             }
 
             start = end + 1;
@@ -45,7 +47,7 @@ namespace {
         const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), port);
 
         if (error != std::errc{} || ptr != value.data() + value.size() || port == 0 || port > 65535) {
-            throw std::runtime_error("Invalid listen port");
+            throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "listen port: " + std::string(value));
         }
 
         return static_cast<std::uint16_t>(port);
@@ -58,7 +60,7 @@ namespace {
 
 std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
     if (value.empty() || value.front() != '/') {
-        throw std::runtime_error("Invalid location path: '" + std::string(value) + "'");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "path: " + std::string(value));
     }
 
     return std::string(value);
@@ -69,7 +71,7 @@ ListenConfig ConfigDecoder::decodeListen(std::string_view value) {
 
     if (separator == std::string_view::npos || separator == 0 || separator == value.size() - 1 ||
         value.find(':', separator + 1) != std::string_view::npos) {
-        throw std::runtime_error("Invalid listen endpoint format: " + std::string(value));
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "listen: " + std::string(value));
     }
 
     const std::string_view hostValue = value.substr(0, separator);
@@ -82,7 +84,7 @@ std::filesystem::path ConfigDecoder::decodeRoot(std::string_view value) {
     const std::filesystem::path path{value};
 
     if (path.empty()) {
-        throw std::runtime_error("Root path must not be empty");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "root");
     }
 
     return path;
@@ -90,7 +92,7 @@ std::filesystem::path ConfigDecoder::decodeRoot(std::string_view value) {
 
 std::string ConfigDecoder::decodeIndex(std::string_view value) {
     if (value.empty()) {
-        throw std::runtime_error("Index file name must not be empty");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "index");
     }
 
     return std::string(value);
@@ -104,12 +106,12 @@ bool ConfigDecoder::decodeAutoIndex(std::string_view value) {
         return false;
     }
 
-    throw std::runtime_error("unsuppoorted autoindex value: " + std::string(value));
+    throw ConfigDecodingError(ConfigDecodingError::Reason::UnsupportedValue, "autoindex: " + std::string(value));
 }
 
 std::size_t ConfigDecoder::decodeClientMaxBodySize(std::string_view value) {
     if (value.empty()) {
-        throw std::runtime_error("Client max body size must not be empty");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "client max body size");
     }
 
     std::size_t multiplier = 1;
@@ -127,11 +129,13 @@ std::size_t ConfigDecoder::decodeClientMaxBodySize(std::string_view value) {
     const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), size);
 
     if (error != std::errc{} || ptr != value.data() + value.size()) {
-        throw std::runtime_error("Invalid client_max_body_size value");
+        throw ConfigDecodingError(
+            ConfigDecodingError::Reason::InvalidFormat, "client max body size: " + std::string(value)
+        );
     }
 
     if (size > std::numeric_limits<std::size_t>::max() / multiplier) {
-        throw std::runtime_error("Client max body size is too large");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::OutOfRange, "client max body size");
     }
 
     return size * multiplier;
@@ -141,7 +145,7 @@ std::unordered_map<int, std::filesystem::path> ConfigDecoder::decodeErrorPage(co
     const std::filesystem::path path{values.back()};
 
     if (path.empty()) {
-        throw std::runtime_error("Error page path must not be empty");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "error page path");
     }
 
     std::unordered_map<int, std::filesystem::path> pages;
@@ -153,11 +157,11 @@ std::unordered_map<int, std::filesystem::path> ConfigDecoder::decodeErrorPage(co
         const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), statusCode);
 
         if (error != std::errc{} || ptr != value.data() + value.size() || statusCode < 400 || statusCode > 599) {
-            throw std::runtime_error("Invalid error_page status code: " + value);
+            throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "error page status code: " + value);
         }
 
         if (!pages.emplace(statusCode, path).second) {
-            throw std::runtime_error("Duplicate error_page status code: " + value);
+            throw ConfigDecodingError(ConfigDecodingError::Reason::Duplicate, "error page status code: " + value);
         }
     }
 
@@ -177,11 +181,11 @@ std::unordered_set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<st
         } else if (value == "DELETE") {
             method = HttpMethod::Delete;
         } else {
-            throw std::runtime_error("Unsupported HTTP method: " + value);
+            throw ConfigDecodingError(ConfigDecodingError::Reason::UnsupportedValue, "method: " + value);
         }
 
         if (!methods.insert(method).second) {
-            throw std::runtime_error("Duplicate HTTP method: " + value);
+            throw ConfigDecodingError(ConfigDecodingError::Reason::Duplicate, "method: " + value);
         }
     }
 
@@ -194,11 +198,15 @@ RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status, std::strin
     const auto [ptr, error] = std::from_chars(status.data(), status.data() + status.size(), statusCode);
 
     if (error != std::errc{} || ptr != status.data() + status.size() || statusCode < 300 || statusCode > 399) {
-        throw std::runtime_error("Invalid redirect status code: " + std::string(status));
+        throw ConfigDecodingError(
+            ConfigDecodingError::Reason::InvalidFormat, "redirect status code: " + std::string(status)
+        );
     }
 
     if (!isRedirectTarget(target)) {
-        throw std::runtime_error("Invalid redirect target: " + std::string(target));
+        throw ConfigDecodingError(
+            ConfigDecodingError::Reason::InvalidFormat, "redirect target: " + std::string(target)
+        );
     }
 
     return RedirectConfig{.statusCode = statusCode, .target = std::string(target)};
@@ -208,7 +216,7 @@ UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
     const std::filesystem::path path{value};
 
     if (path.empty()) {
-        throw std::runtime_error("Upload path must not be empty");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "upload path");
     }
 
     return UploadConfig{.uploadPath = path};
@@ -216,13 +224,15 @@ UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
 
 CgiConfig ConfigDecoder::decodeCgi(std::string_view extension, std::string_view interpreter) {
     if (extension.empty() || extension.front() != '.') {
-        throw std::runtime_error("Invalid CGI extension: " + std::string(extension));
+        throw ConfigDecodingError(
+            ConfigDecodingError::Reason::InvalidFormat, "CGI extension: " + std::string(extension)
+        );
     }
 
     const std::filesystem::path interpreterPath{interpreter};
 
     if (interpreterPath.empty()) {
-        throw std::runtime_error("CGI interpreter path must not be empty");
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "CGI interpreter path");
     }
 
     return CgiConfig{.extension = std::string(extension), .interpreter = interpreterPath};
