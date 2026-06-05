@@ -3,12 +3,7 @@
 #include <string>
 #include <vector>
 
-enum class TokenType { Word, LeftBrace, RightBrace, Semicolon };
-
-struct Token {
-    TokenType type;
-    std::string value;
-};
+#include "ConfigToken.hpp"
 
 class ConfigLexer {
 private:
