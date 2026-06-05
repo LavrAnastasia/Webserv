@@ -1,10 +1,12 @@
 #include "ServerSocket.hpp"
+#include <arpa/inet.h> // inet_pton()
 #include <fcntl.h> // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <stdexcept>
+#include <string>
 #include <sys/socket.h> // socket(), AF_INET, SOCK_STREAM
 #include <unistd.h>
 
-ServerSocket::ServerSocket(int port) : port_(port), fd_(-1) {
+ServerSocket::ServerSocket(const std::string& host, int port) : port_(port), fd_(-1) {
     fd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (fd_ < 0) {
         throw std::runtime_error("NetError: Failed to create socket.");
@@ -12,8 +14,16 @@ ServerSocket::ServerSocket(int port) : port_(port), fd_(-1) {
 
     address_.sin_family = AF_INET; //external IPv4 address
     address_.sin_port = htons(port_); //convert port_ from machine to server byte order
-    address_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
 
+    if (host.empty() || host == "0.0.0.0") {
+        address_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
+    } else {
+        // convert string to uint32_t to be usable by OS
+        if (inet_pton(AF_INET, host.c_str(), &address_.sin_addr) <= 0) {
+            close(fd_);
+            throw std::runtime_error("NetError: Invalid host IP address: " + host);
+        }
+    }
     int opt = 1;
     if (setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
         close(fd_);
@@ -88,4 +98,9 @@ void ServerSocket::setNonBlocking() {
                 F_SETFL (change internal state of target)
     3. INPUT:   a) unused when only getting data
                 b) flags | O_NONBLOCK = bitwise merge, which sets specific bit of nonblock flag to 1
+
+    inet_pton(AF_INET, host.c_str(), &address_.sin_addr) converts a string address to uint32_t
+    1. CONVERSION RULE (address type): AF_INET = IPv4
+    2. INPUT: host.c_str() converts a std::string object to a c-style string
+    3. OUTPUT: &address_.sin_addr = location of binary IP address, used by the OS
 */

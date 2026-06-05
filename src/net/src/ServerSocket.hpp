@@ -1,6 +1,7 @@
 #pragma once
 
 #include <netinet/in.h>
+#include <string>
 
 class ServerSocket {
 private:
@@ -9,7 +10,7 @@ private:
     struct sockaddr_in address_;
 
 public:
-    explicit ServerSocket(int port);
+    ServerSocket(const std::string& host, int port);
     ~ServerSocket();
 
     int getFd() const;
@@ -31,6 +32,7 @@ public:
     (eg. ServerSocket mySocket(8080)), and will not allow the compiler to
     do potentially unintended implicit conversions like
     ServerSocket mySocket = 8080
+    With the addition of the second parameter, this is not necessary
 
     Manual destructor necessary, because the port corresponding to fd_ needs
     to be closed when the object is destroyed.

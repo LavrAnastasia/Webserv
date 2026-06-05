@@ -19,7 +19,7 @@ void SocketManager::createServers(const std::vector<ServerConfig>& configs) {
         //2. loop through listen configs in each server config
         for (const ListenConfig& listenBlock : config.listen) {
             //3. create socket, set it to non-blocking and save it in servers_
-            ServerSocket* newSocket = new ServerSocket(listenBlock.port);
+            ServerSocket* newSocket = new ServerSocket(listenBlock.host, listenBlock.port);
             newSocket->setNonBlocking();
             servers_.push_back(newSocket);
         }
