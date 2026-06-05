@@ -4,7 +4,9 @@ CXX := c++
 CXXFLAGS := -std=c++23 -Wall -Wextra -Werror
 INCLUDES := \
 	-Isrc/http/include \
-	-Isrc/config/include
+	-Isrc/config/include \
+	-Isrc/net/include
+
 DEPFLAGS := -MMD -MP
 
 CONFIG_SRC := \
@@ -15,9 +17,14 @@ CONFIG_SRC := \
 	src/config/src/ConfigReadError.cpp \
 	src/config/src/ConfigSyntaxError.cpp
 
+NET_SRC := \
+	src/net/src/ServerSocket.cpp \
+	src/net/src/SocketManager.cpp
+
 SRC := \
 	app/main.cpp \
-	${CONFIG_SRC}
+	${CONFIG_SRC} \
+	${NET_SRC}
 
 BUILD_DIR := build
 
