@@ -21,9 +21,13 @@ CONFIG_SRC := \
 	src/config/src/ConfigReadError.cpp \
 	src/config/src/ConfigSyntaxError.cpp
 
+HTTP_SRC := \
+	src/http/src/HttpMethod.cpp
+
 SRC := \
 	app/main.cpp \
-	${CONFIG_SRC}
+	${CONFIG_SRC} \
+	${HTTP_SRC}
 
 BUILD_DIR := build
 
