@@ -1,0 +1,75 @@
+#pragma once
+
+#include <ctime>
+#include <string>
+
+/*
+    The connection class:
+    This class is the bridge between the OS and high-level HTTP logic.
+    It receives the chopped-up TCP transmission sent by the client, combines
+    the pieces and holds the message string for the server to retrieve.
+
+    Tasks:
+        1.  buffer data: saves the pieces of a HTTP request in a read buffer
+            until the whole request has arrived.
+        2.  manage id: stores socket fd and IP address of the client
+        3.  track state:
+                READING - HTTP request not yet fully received from client
+                PARSING - request received and sent to HTTP parser
+                WRITING - sending response to client
+                CLOSED - sequence complete, or fatal error occurred
+
+    Inputs:
+        1.  From client (via OS): raw bytes to read with C system call recv() or read()
+        2.  From server logic: HTTP response string like "HTTP/1.1 200 OK\r\n\r\n<html>..."
+
+    Outputs:
+        1.  To server:  complete, validated HTTP request string (which server passes
+                        onto the HTTP parser)
+        2.  To client (via OS): HTTP response from server, converted into raw bytes
+            and sent with C system call send() or write()
+
+    Interacts with :
+        1.  Poller (indirectly): when poller tells server that a socket has data,
+                server tells corresponding connection to call recv()
+        2.  HTTP parser (indirectly): when the connection has received a complete request
+                string, server pulls it out and passes it onto the HTTP parser
+        3. Event loop: event loop tracks state of each connection, and when it sees
+                CLOSED, it closes the corresponding fd and deletes the connection
+*/
+
+class Connection {
+public:
+    enum class State { READING, PARSING, WRITING, CLOSED };
+
+private:
+    int fd_;
+    std::string clientIp_;
+    int clientPort_;
+    std::string readBuffer_;
+    std::string writeBuffer_;
+    State currentState_;
+    time_t lastActivity_;
+
+public:
+    Connection(int fd, const std::string& ip, int port);
+    ~Connection();
+    Connection(const Connection&) = delete; // prevent accidental copying and fd sharing
+    Connection& operator=(const Connection&) = delete; // same as above
+
+    int getFd() const { return fd_; }
+    const std::string& getClientIp() const { return clientIp_; }
+    State getState() const { return currentState_; }
+    // used by server to pull raw text, to pass onto http parser
+    const std::string& getReadBuffer() const { return readBuffer_; }
+    // check for \r\n\r\n sequence to indicate full header received
+    bool hasCompleteHeaders() const;
+    // called by server, consumes bytes which were parsed by http parser
+    void consumeReadBuffer(size_t bytes);
+    // called by server, appends HTTP response string to writeBuffer_
+    void appendResponse(const std::string& response);
+    //called by server when status == POLLIN, calls recv() and appends to readBuffer_
+    bool read();
+    //called by server when status == POLLOUT, calls send() and removes bytes from writeBuffer_
+    bool write();
+};
