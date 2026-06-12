@@ -1,21 +1,21 @@
 #pragma once
 
+#include "Socket.hpp"
+
 #include <netinet/in.h>
 #include <string>
 
-class ServerSocket {
+class ServerSocket : public Socket {
 private:
-    int fd_; //int representing open socket
     int port_; //port to listen on
-    struct sockaddr_in address_;
+    struct sockaddr_in socketAddress_;
 
 public:
     ServerSocket(const std::string& host, int port);
-    ~ServerSocket();
 
-    int getFd() const;
     int getPort() const;
-    void setNonBlocking();
+
+    int acceptConnection(std::string& clientIp, int& clientPort);
 };
 
 /*
@@ -26,6 +26,11 @@ public:
     unsigned short   sin_port;     // Port number (e.g., 8080)
     struct in_addr   sin_addr;     // IP address
     char             sin_zero[8];  // Padding to make it the right size
+    };
+
+    struct in_addr {
+    unsigned long s_addr;          // load with inet_aton()
+    };
 
     Constructors with exactly one parameter should ALWAYS be explicit:
     this makes the constructor only callable with the proper syntax

@@ -1,25 +1,24 @@
 #include "ServerSocket.hpp"
 #include <arpa/inet.h> // inet_pton()
-#include <fcntl.h> // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h> // socket(), AF_INET, SOCK_STREAM
 #include <unistd.h>
 
-ServerSocket::ServerSocket(const std::string& host, int port) : port_(port), fd_(-1) {
+ServerSocket::ServerSocket(const std::string& host, int port) : port_(port) {
     fd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (fd_ < 0) {
         throw std::runtime_error("NetError: Failed to create socket.");
     }
 
-    address_.sin_family = AF_INET; //external IPv4 address
-    address_.sin_port = htons(port_); //convert port_ from machine to server byte order
+    socketAddress_.sin_family = AF_INET; //external IPv4 address
+    socketAddress_.sin_port = htons(port_); //convert port_ from machine to server byte order
 
     if (host.empty() || host == "0.0.0.0") {
-        address_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
+        socketAddress_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
     } else {
         // convert string to uint32_t to be usable by OS
-        if (inet_pton(AF_INET, host.c_str(), &address_.sin_addr) <= 0) {
+        if (inet_pton(AF_INET, host.c_str(), &socketAddress_.sin_addr) <= 0) {
             close(fd_);
             throw std::runtime_error("NetError: Invalid host IP address: " + host);
         }
@@ -30,7 +29,7 @@ ServerSocket::ServerSocket(const std::string& host, int port) : port_(port), fd_
         throw std::runtime_error("NetError: Failed to set SO_REUSEADDR.");
     } //override port's TIME_WAIT, allowing instant reconnection
 
-    if (bind(fd_, (struct sockaddr*)&address_, sizeof(address_)) == -1) {
+    if (bind(fd_, (struct sockaddr*)&socketAddress_, sizeof(socketAddress_)) == -1) {
         close(fd_);
         throw std::runtime_error("NetError: Failed to bind to port.");
     } //bind() can fail if port is already in use, or if permission is denied
@@ -41,29 +40,32 @@ ServerSocket::ServerSocket(const std::string& host, int port) : port_(port), fd_
     } //set network socket to listen mode, SOMAXCONN = max allowed connection queue size
 }
 
-ServerSocket::~ServerSocket() {
-    if (fd_ >= 0) {
-        close(fd_);
-    }
-}
-
-int ServerSocket::getFd() const {
-    return fd_;
-}
-
 int ServerSocket::getPort() const {
     return port_;
 }
 
-void ServerSocket::setNonBlocking() {
-    int flags = fcntl(fd_, F_GETFL, 0); //return all flags active on fd_
-    if (flags == -1) {
-        throw std::runtime_error("NetError: Failed to get socket flags.");
+int ServerSocket::acceptConnection(std::string& clientIp, int& clientPort) {
+    // data for accept() to fill out
+    struct sockaddr_in clientAddress;
+    socklen_t clientLen = sizeof(clientAddress);
+
+    // OS fills out argument variables with caller's actual info
+    int clientFd = accept(fd_, (struct sockaddr*)&clientAddress, &clientLen);
+
+    if (clientFd < 0) {
+        return -1;
     }
-    if (fcntl(fd_, F_SETFL, flags | O_NONBLOCK) == -1) {
-        throw std::runtime_error("NetError: Failed to set socket to non-blocking.");
-    }
+
+    // convert binary IP address into readable string and pass it outside of function by reference
+    clientIp = inet_ntoa(clientAddress.sin_addr);
+
+    // convert port from network byte order to normal and pass outside of function by reference
+    clientPort = ntohs(clientAddress.sin_port);
+
+    // return new fd for each accepted connection
+    return clientFd;
 }
+
 
 /*
     The anatomy of socket(AF_INET, SOCK_STREAM, 0):
@@ -99,8 +101,10 @@ void ServerSocket::setNonBlocking() {
     3. INPUT:   a) unused when only getting data
                 b) flags | O_NONBLOCK = bitwise merge, which sets specific bit of nonblock flag to 1
 
-    inet_pton(AF_INET, host.c_str(), &address_.sin_addr) converts a string address to uint32_t
+    inet_pton(AF_INET, host.c_str(), &socketAddress_.sin_addr) converts a string address to uint32_t
     1. CONVERSION RULE (address type): AF_INET = IPv4
     2. INPUT: host.c_str() converts a std::string object to a c-style string
-    3. OUTPUT: &address_.sin_addr = location of binary IP address, used by the OS
+    3. OUTPUT: &socketAddress_.sin_addr = location of binary IP address, used by the OS
+
+    NOTE:
 */

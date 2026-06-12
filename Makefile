@@ -18,6 +18,7 @@ CONFIG_SRC := \
 	src/config/src/ConfigSyntaxError.cpp
 
 NET_SRC := \
+	src/net/src/Socket.cpp \
 	src/net/src/ServerSocket.cpp \
 	src/net/src/SocketManager.cpp
 
