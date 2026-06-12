@@ -22,7 +22,8 @@ CONFIG_SRC := \
 	src/config/src/ConfigSyntaxError.cpp
 
 HTTP_SRC := \
-	src/http/src/HttpMethod.cpp
+	src/http/src/HttpMethod.cpp \
+	src/http/src/HttpRequest.cpp
 
 SRC := \
 	app/main.cpp \
