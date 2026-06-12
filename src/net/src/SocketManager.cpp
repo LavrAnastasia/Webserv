@@ -1,4 +1,5 @@
-#include "SocketManager.hpp"
+#include "net/SocketManager.hpp"
+#include "ServerSocket.hpp"
 #include "config/ServerConfig.hpp"
 
 SocketManager::~SocketManager() {
