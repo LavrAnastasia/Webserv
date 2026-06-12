@@ -2,8 +2,9 @@
 
 #include <vector>
 
-#include "ServerSocket.hpp"
 #include "config/ServerConfig.hpp"
+
+class ServerSocket;
 
 class SocketManager {
 private:
