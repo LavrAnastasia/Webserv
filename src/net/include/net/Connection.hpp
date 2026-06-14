@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Socket.hpp"
+
 #include <ctime>
 #include <string>
 
@@ -38,12 +40,11 @@
                 CLOSED, it closes the corresponding fd and deletes the connection
 */
 
-class Connection {
+class Connection : public Socket {
 public:
     enum class State { READING, PARSING, WRITING, CLOSED };
 
 private:
-    int fd_;
     std::string clientIp_;
     int clientPort_;
     std::string readBuffer_;
@@ -53,11 +54,8 @@ private:
 
 public:
     Connection(int fd, const std::string& ip, int port);
-    ~Connection();
-    Connection(const Connection&) = delete; // prevent accidental copying and fd sharing
-    Connection& operator=(const Connection&) = delete; // same as above
+    virtual ~Connection() = default;
 
-    int getFd() const { return fd_; }
     const std::string& getClientIp() const { return clientIp_; }
     State getState() const { return currentState_; }
     // used by server to pull raw text, to pass onto http parser
