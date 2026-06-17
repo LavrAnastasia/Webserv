@@ -12,28 +12,28 @@
     the pieces and holds the message string for the server to retrieve.
 
     Tasks:
-        1.  buffer data: saves the pieces of a HTTP request in a read buffer
+        1.  buffer data: saves the pieces of a HTTP request in a receive buffer
             until the whole request has arrived.
         2.  manage id: stores socket fd and IP address of the client
         3.  track state:
-                READING - HTTP request not yet fully received from client
+                RECEIVING - HTTP request not yet fully received from client
                 PARSING - request received and sent to HTTP parser
-                WRITING - sending response to client
+                SENDING - sending response to client
                 CLOSED - sequence complete, or fatal error occurred
 
     Inputs:
-        1.  From client (via OS): raw bytes to read with C system call recv() or read()
+        1.  From client (via OS): raw bytes to receive with C system call recv()
         2.  From server logic: HTTP response string like "HTTP/1.1 200 OK\r\n\r\n<html>..."
 
     Outputs:
         1.  To server:  complete, validated HTTP request string (which server passes
                         onto the HTTP parser)
         2.  To client (via OS): HTTP response from server, converted into raw bytes
-            and sent with C system call send() or write()
+            and sent with C system call send()
 
     Interacts with :
         1.  Poller (indirectly): when poller tells server that a socket has data,
-                server tells corresponding connection to call recv()
+                server tells corresponding connection to call receiveRequest()
         2.  HTTP parser (indirectly): when the connection has received a complete request
                 string, server pulls it out and passes it onto the HTTP parser
         3. Event loop: event loop tracks state of each connection, and when it sees
@@ -42,13 +42,13 @@
 
 class Connection : public Socket {
 public:
-    enum class State { READING, PARSING, WRITING, CLOSED };
+    enum class State { RECEIVING, PARSING, SENDING, CLOSED };
 
 private:
     std::string clientIp_;
     int clientPort_;
-    std::string readBuffer_;
-    std::string writeBuffer_;
+    std::string receiveBuffer_;
+    std::string sendBuffer_;
     State currentState_;
     time_t lastActivity_;
 
@@ -59,15 +59,15 @@ public:
     const std::string& getClientIp() const { return clientIp_; }
     State getState() const { return currentState_; }
     // used by server to pull raw text, to pass onto http parser
-    const std::string& getReadBuffer() const { return readBuffer_; }
+    const std::string& getReceiveBuffer() const { return receiveBuffer_; }
     // check for \r\n\r\n sequence to indicate full header received
     bool hasCompleteHeaders() const;
     // called by server, consumes bytes which were parsed by http parser
-    void consumeReadBuffer(size_t bytes);
-    // called by server, appends HTTP response string to writeBuffer_
+    void consumeReceiveBuffer(size_t bytes);
+    // called by server, appends HTTP response string to sendBuffer_
     void appendResponse(const std::string& response);
-    //called by server when status == POLLIN, calls recv() and appends to readBuffer_
-    bool read();
-    //called by server when status == POLLOUT, calls send() and removes bytes from writeBuffer_
-    bool write();
+    //called by server when status == POLLIN, calls recv() and appends to receiveBuffer_
+    bool receiveRequest();
+    //called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
+    bool sendResponse();
 };
