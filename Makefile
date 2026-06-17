@@ -20,7 +20,8 @@ CONFIG_SRC := \
 NET_SRC := \
 	src/net/src/Socket.cpp \
 	src/net/src/ServerSocket.cpp \
-	src/net/src/SocketManager.cpp
+	src/net/src/SocketManager.cpp \
+	src/net/src/Connection.cpp
 
 SRC := \
 	app/main.cpp \

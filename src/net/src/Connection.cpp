@@ -1,4 +1,4 @@
-#include "Connection.hpp"
+#include "net/Connection.hpp"
 
 #include <errno.h>
 #include <sys/socket.h>
