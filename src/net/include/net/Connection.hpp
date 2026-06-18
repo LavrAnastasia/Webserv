@@ -70,4 +70,5 @@ public:
     bool receiveRequest();
     //called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
     bool sendResponse();
+    bool hasTimedOut(time_t currentTime, int timeoutSeconds) const;
 };
