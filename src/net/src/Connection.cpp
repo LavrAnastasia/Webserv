@@ -7,7 +7,7 @@
 Connection::Connection(int fd, const std::string& ip, int port)
     : clientIp_(ip), clientPort_(port), currentState_(State::RECEIVING) {
     fd_ = fd;
-    lastActivity_ = time(nullptr); //set start of timeout timer
+    lastActivity_ = std::time(nullptr); //set start of timeout timer
 }
 
 
@@ -59,6 +59,7 @@ bool Connection::receiveRequest() {
 
     // recv return > 0 indicates number of bytes successfully received
     receiveBuffer_.append(buffer, bytesReceived);
+    lastActivity_ = std::time(nullptr); // update timeout timer
     return true;
 }
 
@@ -90,5 +91,16 @@ bool Connection::sendResponse() {
     if (sendBuffer_.empty()) {
         currentState_ = State::RECEIVING;
     }
+    lastActivity_ = std::time(nullptr); //update timeout timer
     return true;
+}
+
+/*
+    -difftime returns difference between time_t arguments in seconds, as a double
+    -for safety, time_t values should not be directly subtracted from one-another,
+    because the C++ standard does technically not guarantee that time_t is always
+    an integer
+*/
+bool Connection::hasTimedOut(time_t currentTime, int timeoutSeconds) const {
+    return std::difftime(currentTime, lastActivity_) > timeoutSeconds;
 }
