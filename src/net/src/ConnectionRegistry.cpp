@@ -1,5 +1,7 @@
 #include "ConnectionRegistry.hpp"
 
+#include <ctime>
+
 /*
     -called by TCP server when new client connects
     -creates a key/value pair in activeConnections_,
@@ -38,10 +40,26 @@ Connection* ConnectionRegistry::getConnection(int fd) const {
 }
 
 /*
-deletes timed out connections from activeConnections_ and returns a vector
-of the pruned fds for the poller to stop tracking
+    deletes timed out connections from activeConnections_ and returns a vector
+    of the pruned fds for the poller to stop tracking
+
+    .erase(it) is an overloaded erase() specifically for loops. It automatically
+    sets it to point to the next valid item *before* destroying the current object
 */
 std::vector<int> ConnectionRegistry::pruneConnections(int timeoutSeconds) {
+    std::vector<int> deadFds;
+    time_t currentTime = std::time(nullptr);
+
+    for (auto it = activeConnections_.begin(); it != activeConnections_.end();) {
+        if (it->second.hasTimedOut(currentTime, timeoutSeconds)) {
+            deadFds.push_back(it->first);
+            // .erase(it) avoids invalid iterator issue caused by removeConnection(it->first)
+            it = activeConnections_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return deadFds;
 }
 
 /*
