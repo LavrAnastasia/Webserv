@@ -11,12 +11,27 @@ void Poller::addSocket(int fd) {
     pollFds_.push_back(newEvent);
 }
 
+/*
+    called by EventLoop to toggle between receive and send modes
+    1. receive (POLLIN) (wake me up when client has sent bytes to my read bucket)
+    Then, when client request is done (complete header received), switch to:
+    2. send (POLLOUT) (ready to send response (HTML page) to client)
+
+*/
+void Poller::modifySocket(int fd, short newEvents) {
+    for (pollfd& p : pollFds_) {
+        if (p.fd == fd) {
+            p.events = newEvents;
+            break;
+        }
+    }
+}
 
 void Poller::removeSocket(int fd) {
     std::erase_if(pollFds_, [fd](const pollfd& p) { return p.fd == fd; });
 }
 
-std::vector<int> Poller::waitForEvents() {
+std::vector<pollfd> Poller::waitForEvents() {
     int activeCount = poll(pollFds_.data(), pollFds_.size(), -1); //how many sockets active?
     if (activeCount < 0) {
         if (errno == EINTR) {
@@ -24,10 +39,11 @@ std::vector<int> Poller::waitForEvents() {
         }
         throw std::runtime_error("NetError: poll() failed: " + std::string(std::strerror(errno)));
     }
-    std::vector<int> activeSockets;
+    std::vector<pollfd> activeSockets;
     for (const pollfd& p : pollFds_) {
-        if (p.revents & POLLIN) {
-            activeSockets.push_back(p.fd);
+        // if revents != 0, some network activity happened
+        if (p.revents != 0) {
+            activeSockets.push_back(p);
         } // check p.revents value with bitwise 'and' operation
     }
     return activeSockets;
