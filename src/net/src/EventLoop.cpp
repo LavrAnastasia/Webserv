@@ -3,21 +3,6 @@
 #include <algorithm>
 #include <vector>
 
-/*
-    void handleNewConnection(int listenFd);
-    void handleClientActivity(int clientFd, uint32_t events);
-    void performGarbageCollection();
-
-public:
-    EventLoop(TcpServer& server)
-        : tcpServer_(server), isRunning_(false), clientTimeoutSeconds_(60) {}
-    ~EventLoop() = default;
-
-    void initialize();
-    void run();
-    void stop();
-*/
-
 void EventLoop::handleNewConnection(int listenFd) {
     TcpServer::ClientInfo clientInfo = tcpServer_.acceptClient(listenFd);
 
