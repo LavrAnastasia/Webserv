@@ -9,6 +9,7 @@ private:
 
 public:
     void addSocket(int fd);
+    void modifySocket(int fd, short newEvents);
     void removeSocket(int fd);
-    std::vector<int> waitForEvents();
+    std::vector<pollfd> waitForEvents();
 };
