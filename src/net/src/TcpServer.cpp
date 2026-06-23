@@ -7,8 +7,10 @@
 
     -Implementation already handled in SocketManager class
 */
-void TcpServer::setupServers(const std::vector<ServerConfig>& configs) {
-    socketManager_.createServers(configs);
+void TcpServer::setupServers(const Config& config) {
+    //store config struct locally as a private variable
+    config_ = config;
+    socketManager_.createServers(config_.servers);
 }
 
 /*
@@ -25,6 +27,20 @@ std::vector<int> TcpServer::getListeningFds() const {
     return fds;
 }
 
+/*
+    Called by EventLoop to retrieve config block associated with a specific
+    server port, to check rules for incoming network requests.
+*/
+const ServerConfig* TcpServer::getServerConfigByPort(int port) const {
+    for (const auto& server : config_.servers) {
+        for (const auto& listen : server.listen) {
+            if (listen.port == port) {
+                return &server;
+            }
+        }
+    }
+    return nullptr;
+}
 
 /*
     Called by EventLoop when Poller triggers a POLLIN on a listening port.
@@ -39,7 +55,10 @@ TcpServer::ClientInfo TcpServer::acceptClient(int listenFd) {
 
     for (ServerSocket* server : socketManager_.getServers()) {
         if (server->getFd() == listenFd) {
+            // populate IP and client port
             info.fd = server->acceptConnection(info.ip, info.port);
+            // capture server (listening) port
+            info.serverPort = server->getPort();
             return info;
         }
     }
