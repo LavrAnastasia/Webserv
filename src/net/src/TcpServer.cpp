@@ -30,6 +30,18 @@ std::vector<int> TcpServer::getListeningFds() const {
     Called by EventLoop when Poller triggers a POLLIN on a listening port.
     Finds the corresponding ServerSocket object and tells it to accept the new client.
     Obtains client info from the ServerSocket and returns it as a ClientInfo object.
+    ClientInfo ip and port variables are passed by reference and populated by
+    acceptConnection()
 */
 TcpServer::ClientInfo TcpServer::acceptClient(int listenFd) {
+    ClientInfo info;
+    info.fd = -1;
+
+    for (ServerSocket* server : socketManager_.getServers()) {
+        if (server->getFd() == listenFd) {
+            info.fd = server->acceptConnection(info.ip, info.port);
+            return info;
+        }
+    }
+    return info;
 }

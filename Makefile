@@ -21,7 +21,10 @@ NET_SRC := \
 	src/net/src/Socket.cpp \
 	src/net/src/ServerSocket.cpp \
 	src/net/src/SocketManager.cpp \
-	src/net/src/Connection.cpp
+	src/net/src/Connection.cpp \
+	src/net/src/ConnectionRegistry.cpp \
+	src/net/src/Poller.cpp \
+	src/net/src/TcpServer.cpp
 
 SRC := \
 	app/main.cpp \
