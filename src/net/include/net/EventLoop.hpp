@@ -17,7 +17,7 @@ private:
 
     void handleNewConnection(int listenFd);
     void handleClientActivity(int clientFd, uint32_t events);
-    void performGarbageCollection();
+    void cleanupTimedOutConnections();
 
 public:
     EventLoop(TcpServer& server) : tcpServer_(server), isRunning_(false), clientTimeoutSeconds_(60) {}
