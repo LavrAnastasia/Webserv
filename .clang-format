@@ -36,7 +36,7 @@ IncludeBlocks: Preserve
 
 BinPackArguments: false
 BinPackParameters: false
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: BlockIndent
 ContinuationIndentWidth: 4
 AlignOperands: DontAlign
 

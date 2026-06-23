@@ -3,36 +3,26 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
+#include "config/CgiConfig.hpp"
+#include "config/RedirectConfig.hpp"
+#include "config/UploadConfig.hpp"
 #include "http/HttpMethod.hpp"
-
-struct CgiConfig {
-    std::string extension;
-    std::filesystem::path interpreter;
-};
-
-struct UploadConfig {
-    std::filesystem::path uploadPath;
-};
-
-struct RedirectConfig {
-    int statusCode;
-    std::string target;
-};
 
 struct LocationConfig {
     std::string path;
 
-    std::filesystem::path root;
-    std::string index;
-    std::size_t clientMaxBodySize;
+    std::optional<std::filesystem::path> root;
+    std::optional<std::string> index;
+    std::optional<std::size_t> clientMaxBodySize;
 
-    std::vector<HttpMethod> allowedMethods;
+    std::unordered_set<HttpMethod> allowedMethods;
 
-    bool autoindex;
+    bool autoindex = false;
 
     std::optional<RedirectConfig> redirect;
     std::optional<UploadConfig> upload;
-    std::optional<CgiConfig> cgi;
+    std::unordered_map<std::string, CgiConfig> cgi;
 };

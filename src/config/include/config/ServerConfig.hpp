@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -11,8 +13,8 @@ struct ServerConfig {
     std::vector<ListenConfig> listen;
 
     std::filesystem::path root;
-    std::string index;
-    std::size_t clientMaxBodySize;
+    std::string index = "index.html";
+    std::size_t clientMaxBodySize = 1 * 1024 * 1024;
 
     std::unordered_map<int, std::filesystem::path> errorPages;
 
