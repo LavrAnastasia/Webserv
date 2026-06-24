@@ -4,12 +4,15 @@
 #include <vector>
 
 void EventLoop::handleNewConnection(int listenFd) {
+    //accept client and get info
     TcpServer::ClientInfo clientInfo = tcpServer_.acceptClient(listenFd);
 
     //check for dropped connection
     if (clientInfo.fd != -1) {
-        //add new connection to registry
-        connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, clientInfo.port);
+        //get config block for this port
+        const ServerConfig* config = tcpServer_.getServerConfigByPort(clientInfo.serverPort);
+        //add new connection to registry, including config block
+        connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, clientInfo.port, config);
         //tell poller to track it (watch for incoming http request)
         poller_.addSocket(clientInfo.fd);
     }
@@ -40,7 +43,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             //if we finished receiving the entire HTTP request:
             //PLACEHOLDER RESPONSE! This will integrate with the HTTP parser later!
             connection->appendResponse(
-                "HTTP/1.1 200 OK\r\nContent-Length: 37\r\n\r\n<html><body><h1>:)</h1></body></html>");
+                "HTTP/1.1 200 OK\r\nContent-Length: 37\r\n\r\n<html><body><h1>:)</h1></body></html>"
+            );
             poller_.modifySocket(clientFd, POLLOUT);
         }
     }
@@ -52,8 +56,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             connectionRegistry_.removeConnection(clientFd);
             return;
         }
-        //sendResponse() sets state to RECEIVING when send is complete (buffer is empty)
-        if (connection->getState() == Connection::State::RECEIVING) {
+        //sendResponse() sets state to READING_HEADERS when send is complete (buffer is empty)
+        if (connection->getState() == Connection::State::READING_HEADERS) {
             //tells poller send phase is done, now watch for new requests
             poller_.modifySocket(clientFd, POLLIN);
         }
