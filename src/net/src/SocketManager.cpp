@@ -2,12 +2,7 @@
 #include "ServerSocket.hpp"
 #include "config/ServerConfig.hpp"
 
-SocketManager::~SocketManager() {
-    for (ServerSocket* server : servers_) {
-        delete server;
-    }
-    servers_.clear();
-}
+//destructor impementation not needed with smart pointers
 
 /*
     const std::vector<ServerConfig>& configs
@@ -19,20 +14,25 @@ void SocketManager::createServers(const std::vector<ServerConfig>& configs) {
     for (const ServerConfig& config : configs) {
         //2. loop through listen configs in each server config
         for (const ListenConfig& listenBlock : config.listen) {
-            //3. create socket, set it to non-blocking and save it in servers_
-            ServerSocket* newSocket = new ServerSocket(listenBlock.host, listenBlock.port);
+            //3. create smart pointer
+            auto newSocket = std::make_unique<ServerSocket>(listenBlock.host, listenBlock.port);
+            //4. configure socket
             newSocket->setNonBlocking();
-            servers_.push_back(newSocket);
+            //5. unique pointer cannot be copied and must be moved into vector
+            servers_.push_back(std::move(newSocket));
         }
     }
 }
 
-/*
-    when function signature specifies return by reference, '&' not needed in return statement
-*/
 
-const std::vector<ServerSocket*>& SocketManager::getServers() const {
-    return servers_;
+std::vector<ServerSocket*> SocketManager::getServers() const {
+    std::vector<ServerSocket*> rawPointers;
+
+    for (const auto& serverPtr : servers_) {
+        //get() returns raw pointer address without transferring ownership
+        rawPointers.push_back(serverPtr.get());
+    }
+    return rawPointers;
 }
 
 /*
