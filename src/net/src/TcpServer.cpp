@@ -7,7 +7,7 @@
 
     -Implementation already handled in SocketManager class
 */
-void TcpServer::setupServers(const Config& config) {
+void TcpServer::setupServers(const Configuration& config) {
     //store config struct locally as a private variable
     config_ = config;
     socketManager_.createServers(config_.servers);
@@ -28,7 +28,7 @@ std::vector<int> TcpServer::getListeningFds() const {
 }
 
 /*
-    Called by EventLoop to retrieve config block associated with a specific
+    Called by EventLoop to retrieve *the first* config block associated with a specific
     server port, to check rules for incoming network requests.
 */
 const ServerConfig* TcpServer::getServerConfigByPort(int port) const {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "SocketManager.hpp"
-#include "config/Config.hpp"
+#include "config/Configuration.hpp"
 
 #include <string>
 #include <vector>
@@ -16,7 +16,7 @@ private:
     //mapping of ports to FDs is handled inside the SocketManager's ServerSocket objects
     SocketManager socketManager_;
     //copy of Config struct stored locally
-    Config config_;
+    Configuration config_;
 
 
 public:
@@ -32,7 +32,7 @@ public:
     are passed to SocketManager, which creates,
     binds and sets sockets to listen mode.
     */
-    void setupServers(const Config& config);
+    void setupServers(const Configuration& config);
 
     /*
     Called once by EventLoop at startup, to get list of listening FDs to
@@ -48,12 +48,20 @@ public:
     */
     const ServerConfig* getServerConfigByPort(int port) const;
 
+    /*
+    TO DO: implement function to get server config by *name* if multiple
+    servers share the same listening port
+
+    const ServerConfig* getServerConfigByName(int port, std::string name)
+    */
+
     struct ClientInfo {
         int fd;
         std::string ip;
         int port; // Port on client's machine
         int serverPort; // Port on our machine (80, 443 etc)
     };
+
     /*
     Called by EventLoop when Poller triggers a POLLIN on a listening port.
     Finds the corresponding ServerSocket object and tells it to accept the new client.
