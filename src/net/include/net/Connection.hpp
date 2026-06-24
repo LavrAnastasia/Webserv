@@ -85,3 +85,17 @@ public:
     bool sendResponse();
     bool hasTimedOut(time_t currentTime, int timeoutSeconds) const;
 };
+
+/*
+    TODO: FUTURE CONNECTION EXTENSIONS?
+
+    1. PARSING: Integrate teammate's HttpRequest class to store parsed data.
+    2. ROUTING: Implement LocationConfig matching (Longest Prefix Match).
+    3. SECURITY: Enforce client_max_body_size early (after header phase).
+    4. METHODS: Validate HttpMethod against allowedMethods in LocationConfig.
+    5. POST: Handle 'Transfer-Encoding: chunked' and large body disk-buffering.
+    6. REDIR: Handle 'return' directives for 301/302 redirects.
+    7. STATIC: Support Autoindex (directory listing) and root/index resolution.
+    8. CGI: Implement fork/exec/pipe logic for dynamic script execution.
+    9. ERRORS: Resolve custom error_page paths from ServerConfig.
+ */
