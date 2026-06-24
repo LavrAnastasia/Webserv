@@ -40,9 +40,12 @@
                 CLOSED, it closes the corresponding fd and deletes the connection
 */
 
+//forward declaration sufficient for pointer
+struct ServerConfig;
+
 class Connection : public Socket {
 public:
-    enum class State { RECEIVING, PARSING, SENDING, CLOSED };
+    enum class State { READING_HEADERS, READING_BODY, PARSING, SENDING, CLOSED };
 
 private:
     std::string clientIp_;
@@ -51,23 +54,33 @@ private:
     std::string sendBuffer_;
     State currentState_;
     time_t lastActivity_;
+    ServerConfig* serverConfig_;
 
 public:
-    Connection(int fd, const std::string& ip, int port);
+    Connection(int fd, const std::string& ip, int port, const ServerConfig* config);
     virtual ~Connection() = default;
 
     const std::string& getClientIp() const { return clientIp_; }
     State getState() const { return currentState_; }
+
+    //get server configuration to access rule sets
+    const ServerConfig* getServerConfig() const { return serverConfig_; }
+
     // used by server to pull raw text, to pass onto http parser
     const std::string& getReceiveBuffer() const { return receiveBuffer_; }
+
     // check for \r\n\r\n sequence to indicate full header received
     bool hasCompleteHeaders() const;
+
     // called by server, consumes bytes which were parsed by http parser
     void consumeReceiveBuffer(size_t bytes);
+
     // called by server, appends HTTP response string to sendBuffer_
     void appendResponse(const std::string& response);
+
     //called by server when status == POLLIN, calls recv() and appends to receiveBuffer_
     bool receiveRequest();
+
     //called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
     bool sendResponse();
     bool hasTimedOut(time_t currentTime, int timeoutSeconds) const;
