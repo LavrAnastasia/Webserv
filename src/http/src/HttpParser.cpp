@@ -35,6 +35,11 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
                 std::string headersBlock = _buffer.substr(0, headersEnd);
                 _buffer.erase(0, headersEnd + 4);
 
+                if (!_request.headers.parseHeadersBlock(headersBlock)) {
+                    _state = ParserState::Error;
+                    break;
+                }
+
 
                 if (_contentLength > 0) {
                     _state = ParserState::Body;

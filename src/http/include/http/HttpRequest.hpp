@@ -5,6 +5,7 @@
 #include <vector>
 
 
+#include "http/HttpHeaders.hpp"
 #include "http/HttpMethod.hpp"
 
 struct HttpRequest {
@@ -14,7 +15,7 @@ struct HttpRequest {
     std::string path;
     std::string query;
     std::string version;
-    // HttpHeaders headers;
+    HttpHeaders headers;
     std::string body;
 };
 

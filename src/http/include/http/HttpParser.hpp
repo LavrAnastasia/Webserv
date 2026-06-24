@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 
+#include "http/HttpHeaders.hpp"
 #include "http/HttpRequest.hpp"
 
 enum class ParseStatus {
