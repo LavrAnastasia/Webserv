@@ -1,15 +1,30 @@
 #include "http/HttpHeaders.hpp"
 
+namespace {
+    std::string normalizeHeaderName(const std::string& name) {
+        std::string result = name;
+        std::size_t index = 0;
+
+        while (index < result.size()) {
+            if (result[index] >= 'A' && result[index] <= 'Z') {
+                result[index] = static_cast<char>(result[index] - 'A' + 'a');
+            }
+            ++index;
+        }
+        return result;
+    }
+} // namespace
+
 void HttpHeaders::set(const std::string& name, const std::string& value) {
-    _headers[name] = value;
+    _headers[normalizeHeaderName(name)] = value;
 }
 
 bool HttpHeaders::has(const std::string& name) const {
-    return _headers.find(name) != _headers.end();
+    return _headers.find(normalizeHeaderName(name)) != _headers.end();
 }
 
 std::optional<std::string> HttpHeaders::get(const std::string& name) const {
-    std::map<std::string, std::string>::const_iterator it = _headers.find(name);
+    std::map<std::string, std::string>::const_iterator it = _headers.find(normalizeHeaderName(name));
     if (it == _headers.end())
         return std::nullopt;
     return it->second;
