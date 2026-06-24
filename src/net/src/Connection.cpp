@@ -4,8 +4,8 @@
 #include <sys/socket.h>
 
 
-Connection::Connection(int fd, const std::string& ip, int port)
-    : clientIp_(ip), clientPort_(port), currentState_(State::RECEIVING) {
+Connection::Connection(int fd, const std::string& ip, int port, const ServerConfig* config)
+    : clientIp_(ip), clientPort_(port), currentState_(State::READING_HEADERS), serverConfig_(config) {
     fd_ = fd;
     lastActivity_ = std::time(nullptr); //set start of timeout timer
 }
@@ -89,9 +89,10 @@ bool Connection::sendResponse() {
     //bytes successfully sent
     sendBuffer_.erase(0, bytesSent);
     if (sendBuffer_.empty()) {
-        currentState_ = State::RECEIVING;
+        currentState_ = State::READING_HEADERS;
     }
-    lastActivity_ = std::time(nullptr); //update timeout timer
+    //update timeout timer whenever bytes sent: prevent timeout during large transfers
+    lastActivity_ = std::time(nullptr);
     return true;
 }
 

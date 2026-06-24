@@ -54,7 +54,7 @@ private:
     std::string sendBuffer_;
     State currentState_;
     time_t lastActivity_;
-    ServerConfig* serverConfig_;
+    const ServerConfig* serverConfig_;
 
 public:
     Connection(int fd, const std::string& ip, int port, const ServerConfig* config);
