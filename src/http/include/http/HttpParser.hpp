@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-#include "http/HttpHeaders.hpp"
+
 #include "http/HttpRequest.hpp"
 
 enum class ParseStatus {
@@ -33,6 +33,9 @@ private:
     ParserState _state;
     HttpRequest _request;
     std::size_t _contentLength;
+
+    std::optional<std::size_t> parseContentLength(const std::string& value);
+    bool loadContentLength();
 
 public:
     HttpParser();

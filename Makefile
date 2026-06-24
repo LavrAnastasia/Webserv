@@ -23,7 +23,9 @@ CONFIG_SRC := \
 
 HTTP_SRC := \
 	src/http/src/HttpMethod.cpp \
-	src/http/src/HttpRequest.cpp
+	src/http/src/HttpRequestLine.cpp \
+	src/http/src/HttpParser.cpp \
+	src/http/src/HttpHeaders.cpp
 
 SRC := \
 	app/main.cpp \
