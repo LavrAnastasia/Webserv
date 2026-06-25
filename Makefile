@@ -30,7 +30,8 @@ NET_SRC := \
 	src/net/src/Connection.cpp \
 	src/net/src/ConnectionRegistry.cpp \
 	src/net/src/Poller.cpp \
-	src/net/src/TcpServer.cpp
+	src/net/src/TcpServer.cpp \
+	src/net/src/EventLoop.cpp
 
 SRC := \
 	app/main.cpp \
