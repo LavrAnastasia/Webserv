@@ -52,7 +52,15 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
                 }
                 break;
             }
-            case ParserState::Body:
+            case ParserState::Body: {
+                if (_buffer.size() < _contentLength)
+                    return {ParseStatus::NeedMoreData, std::nullopt};
+
+                _request.body = _buffer.substr(0, _contentLength);
+                _buffer.erase(0, _contentLength);
+                _state = ParserState::Complete;
+                break;
+            }
                 return {ParseStatus::NeedMoreData, std::nullopt};
 
             case ParserState::ChunkSize:
