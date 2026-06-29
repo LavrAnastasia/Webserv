@@ -1,4 +1,5 @@
 #include "http/HttpParser.hpp"
+#include <http/HttpUtils.hpp>
 #include <limits>
 
 HttpParser::HttpParser()
@@ -39,6 +40,12 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
 
                 if (!_request.headers.parseHeadersBlock(headersBlock)) {
                     _state = ParserState::Error;
+                    break;
+                }
+                std::optional<std::string> transferEncoding = _request.headers.get("Transfer-Encoding");
+
+                if (transferEncoding && toLowerAscii(*transferEncoding) == "chunked") {
+                    _state = ParserState::ChunkSize;
                     break;
                 }
                 if (!loadContentLength()) {
@@ -82,7 +89,7 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
                         return {ParseStatus::NeedMoreData, std::nullopt};
                     }
 
-                    if (_buffer.substr(0, 2) != "\r\n") {
+                    if (_buffer.substr(0, 2) != "\r\n") { // два или 4 символа?
                         _state = ParserState::Error;
                         break;
                     }
@@ -97,7 +104,7 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
             }
 
             case ParserState::ChunkData: {
-                if (_buffer.size() < _currentChunkSize + 2)
+                if (_buffer.size() < _currentChunkSize + 2) //add check in owerflow
                     return {ParseStatus::NeedMoreData, std::nullopt};
                 if (_buffer[_currentChunkSize] != '\r' || _buffer[_currentChunkSize + 1] != '\n') {
                     _state = ParserState::Error;
