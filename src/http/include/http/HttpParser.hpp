@@ -33,6 +33,7 @@ private:
     ParserState _state;
     HttpRequest _request;
     std::size_t _contentLength;
+    std::size_t _currentChunkSize;
 
     std::optional<std::size_t> parseContentLength(const std::string& value);
     bool loadContentLength();
@@ -40,4 +41,5 @@ private:
 public:
     HttpParser();
     ParseResult append(const char* data, std::size_t size);
+    std::optional<std::size_t> parseChunkSize(const std::string& value);
 };
