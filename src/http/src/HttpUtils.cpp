@@ -12,3 +12,18 @@ std::string toLowerAscii(const std::string& name) {
     }
     return result;
 }
+
+std::string trimAscii(const std::string& value) {
+    std::size_t start = 0;
+    std::size_t end = value.size();
+
+    while (start < end && (value[start] == ' ' || value[start] == '\t')) {
+        ++start;
+    }
+
+    while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) {
+        --end;
+    }
+
+    return value.substr(start, end - start);
+}

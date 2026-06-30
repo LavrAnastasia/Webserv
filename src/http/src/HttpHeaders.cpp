@@ -25,10 +25,7 @@ bool HttpHeaders::parseHeaderLine(const std::string& line) {
 
     if (name.empty())
         return false;
-    while (!value.empty() && value[0] == ' ') {
-        value.erase(0, 1);
-    }
-    set(name, value);
+    set(name, trimAscii(value));
     return true;
 }
 
