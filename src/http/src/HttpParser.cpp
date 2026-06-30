@@ -74,12 +74,13 @@ bool HttpParser::handleStartLine() {
 
 bool HttpParser::handleHeaders() {
     std::size_t headersEnd = _buffer.find("\r\n\r\n");
-    if (headersEnd == std::string::npos)
+    if (headersEnd == std::string::npos) {
         if (_buffer.size() > MAX_HEADERS_SIZE) {
             _state = ParserState::Error;
             return true;
         }
-    return false;
+        return false;
+    }
 
     if (headersEnd > MAX_HEADERS_SIZE) {
         _state = ParserState::Error;
@@ -94,8 +95,12 @@ bool HttpParser::handleHeaders() {
     }
     std::optional<std::string> transferEncoding = _request.headers.get("Transfer-Encoding");
 
-    if (transferEncoding && toLowerAscii(*transferEncoding) == "chunked") {
-        _state = ParserState::ChunkSize;
+    if (transferEncoding) {
+        if (toLowerAscii(*transferEncoding) == "chunked") {
+            _state = ParserState::ChunkSize;
+            return true;
+        }
+        _state = ParserState::Error;
         return true;
     }
     if (!loadContentLength()) {
@@ -173,7 +178,7 @@ bool HttpParser::handleChunkSize() {
 bool HttpParser::handleChunkData() {
     if (_buffer.size() < _currentChunkSize)
         return false;
-    if (_buffer.size() < _currentChunkSize < 2)
+    if (_buffer.size() - _currentChunkSize < 2)
         return false;
     if (_buffer[_currentChunkSize] != '\r' || _buffer[_currentChunkSize + 1] != '\n') {
         _state = ParserState::Error;
