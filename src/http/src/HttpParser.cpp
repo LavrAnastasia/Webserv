@@ -239,14 +239,17 @@ bool HttpParser::loadContentLength() {
 }
 
 std::optional<std::size_t> HttpParser::parseChunkSize(const std::string& value) {
-    if (value.empty())
+    std::size_t end = value.find(';');
+    std::string sizePart = value.substr(0, end);
+
+    if (sizePart.empty())
         return std::nullopt;
 
     std::size_t result = 0;
     std::size_t index = 0;
 
-    while (index < value.size()) {
-        char c = value[index];
+    while (index < sizePart.size()) {
+        char c = sizePart[index];
         std::size_t digit;
 
         if (c >= '0' && c <= '9') {
