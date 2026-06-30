@@ -6,7 +6,7 @@ namespace {
     constexpr std::size_t MAX_START_LINE_SIZE = 8192;
     constexpr std::size_t MAX_HEADERS_SIZE = 32768;
     constexpr std::size_t MAX_BODY_SIZE = 10485760;
-    constexpr std::size_t MAX_CHUNK_SIZE_LINE_SIZE = 32;
+    constexpr std::size_t MAX_CHUNK_SIZE_LINE_SIZE = 1024;
 } // namespace
 
 HttpParser::HttpParser()

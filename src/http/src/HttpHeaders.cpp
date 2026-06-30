@@ -1,6 +1,45 @@
 #include "http/HttpHeaders.hpp"
 #include "http/HttpUtils.hpp"
 
+namespace {
+    bool isValidHeaderName(const std::string& name) {
+        if (name.empty())
+            return false;
+
+        std::size_t index = 0;
+        while (index < name.size()) {
+            char c = name[index];
+            unsigned char uc = static_cast<unsigned char>(c);
+
+            if (uc <= 32 || uc == 127 || c == ':' || c == '(' || c == ')' || c == '<' || c == '>' || c == '@' ||
+                c == ',' || c == ';' || c == '\\' || c == '"' || c == '/' || c == '[' || c == ']' || c == '?' ||
+                c == '=' || c == '{' || c == '}') {
+                return false;
+            }
+
+            ++index;
+        }
+
+        return true;
+    }
+
+    bool isValidHeaderValue(const std::string& value) {
+        std::size_t index = 0;
+
+        while (index < value.size()) {
+            char c = value[index];
+            unsigned char uc = static_cast<unsigned char>(c);
+
+            if ((uc < 32 && c != '\t') || uc == 127)
+                return false;
+
+            ++index;
+        }
+
+        return true;
+    }
+} // namespace
+
 void HttpHeaders::set(const std::string& name, const std::string& value) {
     _headers[toLowerAscii(name)] = value;
 }
@@ -20,12 +59,17 @@ bool HttpHeaders::parseHeaderLine(const std::string& line) {
     std::size_t colon = line.find(':');
     if (colon == std::string::npos)
         return false;
-    std::string name = line.substr(0, colon);
-    std::string value = line.substr(colon + 1);
 
-    if (name.empty())
+    std::string name = line.substr(0, colon);
+    std::string value = trimAscii(line.substr(colon + 1));
+
+    if (!isValidHeaderName(name))
         return false;
-    set(name, trimAscii(value));
+
+    if (!isValidHeaderValue(value))
+        return false;
+
+    set(name, value);
     return true;
 }
 
