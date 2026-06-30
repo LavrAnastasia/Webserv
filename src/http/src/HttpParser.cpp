@@ -2,6 +2,13 @@
 #include "http/HttpUtils.hpp"
 #include <limits>
 
+namespace {
+    constexpr std::size_t MAX_START_LINE_SIZE = 8192;
+    constexpr std::size_t MAX_HEADERS_SIZE = 32768;
+    constexpr std::size_t MAX_BODY_SIZE = 10485760;
+    constexpr std::size_t MAX_CHUNK_SIZE_LINE_SIZE = 32;
+} // namespace
+
 HttpParser::HttpParser()
     : _buffer(), _state(ParserState::StartLine), _request(), _contentLength(0), _currentChunkSize(0) {
 }
@@ -38,9 +45,19 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
 
 bool HttpParser::handleStartLine() {
     std::size_t lineEnd = _buffer.find("\r\n");
-    if (lineEnd == std::string::npos)
-        return false;
 
+    if (lineEnd == std::string::npos) {
+        if (_buffer.size() > MAX_START_LINE_SIZE) {
+            _state = ParserState::Error;
+            return true;
+        }
+        return false;
+    }
+
+    if (lineEnd > MAX_START_LINE_SIZE) {
+        _state = ParserState::Error;
+        return true;
+    }
     std::string line = _buffer.substr(0, lineEnd);
     _buffer.erase(0, lineEnd + 2);
 
@@ -53,12 +70,21 @@ bool HttpParser::handleStartLine() {
     _state = ParserState::Headers;
     return true;
 }
+
+
 bool HttpParser::handleHeaders() {
     std::size_t headersEnd = _buffer.find("\r\n\r\n");
-    if (headersEnd == std::string::npos) {
-        return false;
-    }
+    if (headersEnd == std::string::npos)
+        if (_buffer.size() > MAX_HEADERS_SIZE) {
+            _state = ParserState::Error;
+            return true;
+        }
+    return false;
 
+    if (headersEnd > MAX_HEADERS_SIZE) {
+        _state = ParserState::Error;
+        return true;
+    }
     std::string headersBlock = _buffer.substr(0, headersEnd);
     _buffer.erase(0, headersEnd + 4);
 
@@ -76,7 +102,10 @@ bool HttpParser::handleHeaders() {
         _state = ParserState::Error;
         return true;
     }
-
+    if (_contentLength > MAX_BODY_SIZE) {
+        _state = ParserState::Error;
+        return true;
+    }
     if (_contentLength > 0) {
         _state = ParserState::Body;
     } else {
@@ -98,8 +127,20 @@ bool HttpParser::handleBody() {
 bool HttpParser::handleChunkSize() {
     std::size_t lineEnd = _buffer.find("\r\n");
 
-    if (lineEnd == std::string::npos)
+    if (lineEnd == std::string::npos) {
+        if (_buffer.size() > MAX_CHUNK_SIZE_LINE_SIZE) {
+            _state = ParserState::Error;
+            return true;
+        }
         return false;
+    }
+
+    if (lineEnd > MAX_CHUNK_SIZE_LINE_SIZE) {
+        _state = ParserState::Error;
+        return true;
+    }
+
+
     std::string sizeLine = _buffer.substr(0, lineEnd);
     _buffer.erase(0, lineEnd + 2);
 
@@ -135,6 +176,11 @@ bool HttpParser::handleChunkData() {
     if (_buffer.size() < _currentChunkSize < 2)
         return false;
     if (_buffer[_currentChunkSize] != '\r' || _buffer[_currentChunkSize + 1] != '\n') {
+        _state = ParserState::Error;
+        return true;
+    }
+
+    if (_currentChunkSize > MAX_BODY_SIZE || _request.body.size() > MAX_BODY_SIZE - _currentChunkSize) {
         _state = ParserState::Error;
         return true;
     }
