@@ -1,5 +1,5 @@
 #include "http/HttpParser.hpp"
-#include <http/HttpUtils.hpp>
+#include "http/HttpUtils.hpp"
 #include <limits>
 
 HttpParser::HttpParser()
@@ -8,122 +8,142 @@ HttpParser::HttpParser()
 
 ParseResult HttpParser::append(const char* data, std::size_t size) {
     _buffer.append(data, size);
-
     while (true) {
+        bool progressed;
         switch (_state) {
-            case ParserState::StartLine: {
-                std::size_t lineEnd = _buffer.find("\r\n");
-                if (lineEnd == std::string::npos) {
-                    return {ParseStatus::NeedMoreData, std::nullopt};
-                }
-
-                std::string line = _buffer.substr(0, lineEnd);
-                _buffer.erase(0, lineEnd + 2);
-
-                std::optional<HttpRequest> request = parseRequestLine(line);
-                if (!request) {
-                    _state = ParserState::Error;
-                    break;
-                }
-                _request = *request;
-                _state = ParserState::Headers;
+            case ParserState::StartLine:
+                progressed = handleStartLine();
                 break;
-            }
-            case ParserState::Headers: {
-                std::size_t headersEnd = _buffer.find("\r\n\r\n");
-                if (headersEnd == std::string::npos) {
-                    return {ParseStatus::NeedMoreData, std::nullopt};
-                }
-
-                std::string headersBlock = _buffer.substr(0, headersEnd);
-                _buffer.erase(0, headersEnd + 4);
-
-                if (!_request.headers.parseHeadersBlock(headersBlock)) {
-                    _state = ParserState::Error;
-                    break;
-                }
-                std::optional<std::string> transferEncoding = _request.headers.get("Transfer-Encoding");
-
-                if (transferEncoding && toLowerAscii(*transferEncoding) == "chunked") {
-                    _state = ParserState::ChunkSize;
-                    break;
-                }
-                if (!loadContentLength()) {
-                    _state = ParserState::Error;
-                    break;
-                }
-
-                if (_contentLength > 0) {
-                    _state = ParserState::Body;
-                } else {
-                    _state = ParserState::Complete;
-                }
+            case ParserState::Headers:
+                progressed = handleHeaders();
                 break;
-            }
-            case ParserState::Body: {
-                if (_buffer.size() < _contentLength)
-                    return {ParseStatus::NeedMoreData, std::nullopt};
-
-                _request.body = _buffer.substr(0, _contentLength);
-                _buffer.erase(0, _contentLength);
-                _state = ParserState::Complete;
+            case ParserState::Body:
+                progressed = handleBody();
                 break;
-            }
-            case ParserState::ChunkSize: {
-                std::size_t lineEnd = _buffer.find("\r\n");
-
-                if (lineEnd == std::string::npos)
-                    return {ParseStatus::NeedMoreData, std::nullopt};
-                std::string sizeLine = _buffer.substr(0, lineEnd);
-                _buffer.erase(0, lineEnd + 2);
-
-                std::optional<std::size_t> chunkSize = parseChunkSize(sizeLine);
-                if (!chunkSize) {
-                    _state = ParserState::Error;
-                    break;
-                }
-                _currentChunkSize = *chunkSize;
-
-                if (_currentChunkSize == 0) {
-                    if (_buffer.size() < 2) {
-                        return {ParseStatus::NeedMoreData, std::nullopt};
-                    }
-
-                    if (_buffer.substr(0, 2) != "\r\n") { // два или 4 символа?
-                        _state = ParserState::Error;
-                        break;
-                    }
-
-                    _buffer.erase(0, 2);
-                    _state = ParserState::Complete;
-                    break;
-                }
-
-                _state = ParserState::ChunkData;
+            case ParserState::ChunkSize:
+                progressed = handleChunkSize();
                 break;
-            }
-
-            case ParserState::ChunkData: {
-                if (_buffer.size() < _currentChunkSize + 2) //add check in owerflow
-                    return {ParseStatus::NeedMoreData, std::nullopt};
-                if (_buffer[_currentChunkSize] != '\r' || _buffer[_currentChunkSize + 1] != '\n') {
-                    _state = ParserState::Error;
-                    break;
-                }
-
-                _request.body += _buffer.substr(0, _currentChunkSize);
-                _buffer.erase(0, _currentChunkSize + 2);
-
-                _state = ParserState::ChunkSize;
+            case ParserState::ChunkData:
+                progressed = handleChunkData();
                 break;
-            }
             case ParserState::Complete:
                 return {ParseStatus::Complete, _request};
-
             case ParserState::Error:
                 return {ParseStatus::BadRequest, std::nullopt};
         }
+        if (!progressed)
+            return {ParseStatus::NeedMoreData, std::nullopt};
     }
+}
+
+bool HttpParser::handleStartLine() {
+    std::size_t lineEnd = _buffer.find("\r\n");
+    if (lineEnd == std::string::npos)
+        return false;
+
+    std::string line = _buffer.substr(0, lineEnd);
+    _buffer.erase(0, lineEnd + 2);
+
+    std::optional<HttpRequest> request = parseRequestLine(line);
+    if (!request) {
+        _state = ParserState::Error;
+        return true;
+    }
+    _request = *request;
+    _state = ParserState::Headers;
+    return true;
+}
+bool HttpParser::handleHeaders() {
+    std::size_t headersEnd = _buffer.find("\r\n\r\n");
+    if (headersEnd == std::string::npos) {
+        return false;
+    }
+
+    std::string headersBlock = _buffer.substr(0, headersEnd);
+    _buffer.erase(0, headersEnd + 4);
+
+    if (!_request.headers.parseHeadersBlock(headersBlock)) {
+        _state = ParserState::Error;
+        return true;
+    }
+    std::optional<std::string> transferEncoding = _request.headers.get("Transfer-Encoding");
+
+    if (transferEncoding && toLowerAscii(*transferEncoding) == "chunked") {
+        _state = ParserState::ChunkSize;
+        return true;
+    }
+    if (!loadContentLength()) {
+        _state = ParserState::Error;
+        return true;
+    }
+
+    if (_contentLength > 0) {
+        _state = ParserState::Body;
+    } else {
+        _state = ParserState::Complete;
+    }
+    return true;
+}
+
+bool HttpParser::handleBody() {
+    if (_buffer.size() < _contentLength)
+        return false;
+
+    _request.body = _buffer.substr(0, _contentLength);
+    _buffer.erase(0, _contentLength);
+    _state = ParserState::Complete;
+    return true;
+}
+
+bool HttpParser::handleChunkSize() {
+    std::size_t lineEnd = _buffer.find("\r\n");
+
+    if (lineEnd == std::string::npos)
+        return false;
+    std::string sizeLine = _buffer.substr(0, lineEnd);
+    _buffer.erase(0, lineEnd + 2);
+
+    std::optional<std::size_t> chunkSize = parseChunkSize(sizeLine);
+    if (!chunkSize) {
+        _state = ParserState::Error;
+        return true;
+    }
+    _currentChunkSize = *chunkSize;
+
+    if (_currentChunkSize == 0) {
+        if (_buffer.size() < 2) {
+            return false;
+        }
+
+        if (_buffer.substr(0, 2) != "\r\n") {
+            _state = ParserState::Error;
+            return true;
+        }
+
+        _buffer.erase(0, 2);
+        _state = ParserState::Complete;
+        return true;
+    }
+
+    _state = ParserState::ChunkData;
+    return true;
+}
+
+bool HttpParser::handleChunkData() {
+    if (_buffer.size() < _currentChunkSize)
+        return false;
+    if (_buffer.size() < _currentChunkSize < 2)
+        return false;
+    if (_buffer[_currentChunkSize] != '\r' || _buffer[_currentChunkSize + 1] != '\n') {
+        _state = ParserState::Error;
+        return true;
+    }
+
+    _request.body += _buffer.substr(0, _currentChunkSize);
+    _buffer.erase(0, _currentChunkSize + 2);
+
+    _state = ParserState::ChunkSize;
+    return true;
 }
 
 

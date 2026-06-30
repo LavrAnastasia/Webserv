@@ -35,6 +35,12 @@ private:
     std::size_t _contentLength;
     std::size_t _currentChunkSize;
 
+    bool handleStartLine();
+    bool handleHeaders();
+    bool handleBody();
+    bool handleChunkSize();
+    bool handleChunkData();
+
     std::optional<std::size_t> parseContentLength(const std::string& value);
     bool loadContentLength();
 
