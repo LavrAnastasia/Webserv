@@ -41,15 +41,18 @@ namespace {
 } // namespace
 
 void HttpHeaders::set(const std::string& name, const std::string& value) {
-    _headers[toLowerAscii(name)] = value;
+    const std::string key = Http::Ascii::tolower(name);
+    _headers[key] = value;
 }
 
 bool HttpHeaders::has(const std::string& name) const {
-    return _headers.find(toLowerAscii(name)) != _headers.end();
+    const std::string key = Http::Ascii::tolower(name);
+    return _headers.find(key) != _headers.end();
 }
 
 std::optional<std::string> HttpHeaders::get(const std::string& name) const {
-    std::map<std::string, std::string>::const_iterator it = _headers.find(toLowerAscii(name));
+    const std::string key = Http::Ascii::tolower(name);
+    std::map<std::string, std::string>::const_iterator it = _headers.find(key);
     if (it == _headers.end())
         return std::nullopt;
     return it->second;
@@ -61,7 +64,7 @@ bool HttpHeaders::parseHeaderLine(const std::string& line) {
         return false;
 
     std::string name = line.substr(0, colon);
-    std::string value = trimAscii(line.substr(colon + 1));
+    std::string value = Http::Ascii::trim(line.substr(colon + 1));
 
     if (!isValidHeaderName(name))
         return false;

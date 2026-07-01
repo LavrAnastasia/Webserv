@@ -1,29 +1,31 @@
 #include "HttpUtils.hpp"
 
-std::string toLowerAscii(const std::string& name) {
-    std::string result = name;
-    std::size_t index = 0;
+namespace Http::Ascii {
+    std::string tolower(const std::string& value) {
+        std::string result = value;
+        std::size_t index = 0;
 
-    while (index < result.size()) {
-        if (result[index] >= 'A' && result[index] <= 'Z') {
-            result[index] = static_cast<char>(result[index] - 'A' + 'a');
+        while (index < result.size()) {
+            if (result[index] >= 'A' && result[index] <= 'Z') {
+                result[index] = static_cast<char>(result[index] - 'A' + 'a');
+            }
+            ++index;
         }
-        ++index;
-    }
-    return result;
-}
-
-std::string trimAscii(const std::string& value) {
-    std::size_t start = 0;
-    std::size_t end = value.size();
-
-    while (start < end && (value[start] == ' ' || value[start] == '\t')) {
-        ++start;
+        return result;
     }
 
-    while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) {
-        --end;
-    }
+    std::string trim(const std::string& value) {
+        std::size_t start = 0;
+        std::size_t end = value.size();
 
-    return value.substr(start, end - start);
-}
+        while (start < end && (value[start] == ' ' || value[start] == '\t')) {
+            ++start;
+        }
+
+        while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) {
+            --end;
+        }
+
+        return value.substr(start, end - start);
+    }
+} // namespace Http::Ascii

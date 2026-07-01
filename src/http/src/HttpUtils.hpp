@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
 
-std::string toLowerAscii(const std::string& name);
-std::string trimAscii(const std::string& value);
+namespace Http::Ascii {
+    std::string tolower(const std::string& value);
+    std::string trim(const std::string& value);
+} // namespace Http::Ascii
