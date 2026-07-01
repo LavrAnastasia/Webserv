@@ -1,11 +1,10 @@
 #pragma once
 
+#include "config/ServerConfig.hpp"
+#include "net/ServerSocket.hpp"
+
 #include <memory> // needed for std::unique_ptr
 #include <vector>
-
-#include "config/ServerConfig.hpp"
-
-class ServerSocket;
 
 class SocketManager {
 private:

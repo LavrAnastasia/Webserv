@@ -1,7 +1,7 @@
 NAME := webserv
 
 CXX := c++
-CXXFLAGS := -std=c++23 -Wall -Wextra -Werror
+CXXFLAGS := -std=c++20 -Wall -Wextra -Werror
 INCLUDES := \
 	-Isrc/http/include \
 	-Isrc/config/include \

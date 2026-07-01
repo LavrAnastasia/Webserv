@@ -1,7 +1,7 @@
 #pragma once
 
-#include "SocketManager.hpp"
 #include "config/Configuration.hpp"
+#include "net/SocketManager.hpp"
 
 #include <string>
 #include <vector>

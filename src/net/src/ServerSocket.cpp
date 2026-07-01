@@ -1,4 +1,5 @@
-#include "ServerSocket.hpp"
+#include "net/ServerSocket.hpp"
+
 #include <arpa/inet.h> // inet_pton()
 #include <stdexcept>
 #include <string>

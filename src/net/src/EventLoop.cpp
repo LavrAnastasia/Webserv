@@ -12,7 +12,7 @@ void EventLoop::handleNewConnection(int listenFd) {
         //get config block for this port
         const ServerConfig* config = tcpServer_.getServerConfigByPort(clientInfo.serverPort);
         //add new connection to registry, including config block
-        connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, clientInfo.port, config);
+        connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, config);
         //tell poller to track it (watch for incoming http request)
         poller_.addSocket(clientInfo.fd);
     }

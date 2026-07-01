@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Socket.hpp"
+#include "net/Socket.hpp"
 
 #include <netinet/in.h>
 #include <string>

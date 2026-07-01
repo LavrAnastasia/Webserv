@@ -1,6 +1,6 @@
-#include "SocketManager.hpp"
-#include "ServerSocket.hpp"
+#include "net/SocketManager.hpp"
 #include "config/ServerConfig.hpp"
+#include "net/ServerSocket.hpp"
 
 //destructor impementation not needed with smart pointers
 

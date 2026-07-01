@@ -29,7 +29,7 @@ public:
     ~ConnectionRegistry() = default;
 
     // called by TCP server when new client connects
-    void addConnection(int fd, const std::string& ip, int port, const ServerConfig* config);
+    void addConnection(int fd, const std::string& ip, const ServerConfig* config);
 
     // called by event loop to clean up disconnected client
     void removeConnection(int fd);

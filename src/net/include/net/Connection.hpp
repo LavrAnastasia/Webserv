@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Socket.hpp"
+#include "net/Socket.hpp"
 
 #include <ctime>
 #include <string>
@@ -49,7 +49,6 @@ public:
 
 private:
     std::string clientIp_;
-    int clientPort_;
     std::string receiveBuffer_;
     std::string sendBuffer_;
     State currentState_;
@@ -57,7 +56,7 @@ private:
     const ServerConfig* serverConfig_;
 
 public:
-    Connection(int fd, const std::string& ip, int port, const ServerConfig* config);
+    Connection(int fd, const std::string& ip, const ServerConfig* config);
     virtual ~Connection() = default;
 
     const std::string& getClientIp() const { return clientIp_; }

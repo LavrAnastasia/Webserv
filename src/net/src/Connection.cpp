@@ -4,8 +4,8 @@
 #include <sys/socket.h>
 
 
-Connection::Connection(int fd, const std::string& ip, int port, const ServerConfig* config)
-    : clientIp_(ip), clientPort_(port), currentState_(State::READING_HEADERS), serverConfig_(config) {
+Connection::Connection(int fd, const std::string& ip, const ServerConfig* config)
+    : clientIp_(ip), currentState_(State::READING_HEADERS), serverConfig_(config) {
     fd_ = fd;
     lastActivity_ = std::time(nullptr); //set start of timeout timer
 }

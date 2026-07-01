@@ -1,4 +1,4 @@
-#include "ConnectionRegistry.hpp"
+#include "net/ConnectionRegistry.hpp"
 
 #include <ctime>
 
@@ -7,8 +7,8 @@
     -creates a key/value pair in activeConnections_,
     where the fd is the key and a Connection object is the value
 */
-void ConnectionRegistry::addConnection(int fd, const std::string& ip, int port, const ServerConfig* config) {
-    activeConnections_.try_emplace(fd, fd, ip, port, config);
+void ConnectionRegistry::addConnection(int fd, const std::string& ip, const ServerConfig* config) {
+    activeConnections_.try_emplace(fd, fd, ip, config);
 }
 
 /*

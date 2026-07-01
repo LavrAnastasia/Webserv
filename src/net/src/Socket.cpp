@@ -1,4 +1,4 @@
-#include "Socket.hpp"
+#include "net/Socket.hpp"
 
 #include <fcntl.h> // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <stdexcept>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ConnectionRegistry.hpp"
-#include "Poller.hpp"
+#include "net/ConnectionRegistry.hpp"
+#include "net/Poller.hpp"
 #include "net/TcpServer.hpp"
 
 #include <vector>
