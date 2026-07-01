@@ -45,14 +45,14 @@ namespace {
     }
 
     void fillPathAndQuery(HttpRequest& request) {
-        std::size_t is_query;
-        is_query = request.target.find('?');
-        if (is_query == std::string::npos) {
+        std::size_t queryPos;
+        queryPos = request.target.find('?');
+        if (queryPos == std::string::npos) {
             request.path = request.target;
             request.query = "";
         } else {
-            request.path = request.target.substr(0, is_query);
-            request.query = request.target.substr(is_query + 1);
+            request.path = request.target.substr(0, queryPos);
+            request.query = request.target.substr(queryPos + 1);
         }
     }
 } // namespace
