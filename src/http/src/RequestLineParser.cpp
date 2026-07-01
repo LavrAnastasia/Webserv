@@ -1,4 +1,5 @@
 #include "RequestLineParser.hpp"
+#include "HttpMethodUtils.hpp"
 
 namespace Http::Syntax {
     constexpr char SP = ' ';
@@ -65,7 +66,7 @@ std::optional<HttpRequest> RequestLineParser::run() {
         return std::nullopt;
     }
 
-    std::optional<HttpMethod> method = parseHttpMethod((*tokens)[0]);
+    std::optional<HttpMethod> method = Http::Method::fromString((*tokens)[0]);
     if (!method) {
         return std::nullopt;
     }
