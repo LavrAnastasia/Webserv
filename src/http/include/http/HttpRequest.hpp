@@ -18,5 +18,3 @@ struct HttpRequest {
     HttpHeaders headers;
     std::string body;
 };
-
-std::optional<HttpRequest> parseRequestLine(const std::string& line);

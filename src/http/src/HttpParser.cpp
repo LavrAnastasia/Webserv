@@ -1,6 +1,8 @@
 #include "http/HttpParser.hpp"
-#include "http/HttpUtils.hpp"
+#include "HttpUtils.hpp"
 #include <limits>
+
+#include "RequestLineParser.hpp"
 
 namespace {
     constexpr std::size_t MAX_START_LINE_SIZE = 8192;
@@ -61,7 +63,7 @@ bool HttpParser::handleStartLine() {
     std::string line = _buffer.substr(0, lineEnd);
     _buffer.erase(0, lineEnd + 2);
 
-    std::optional<HttpRequest> request = parseRequestLine(line);
+    std::optional<HttpRequest> request = RequestLineParser::parse(line);
     if (!request) {
         _state = ParserState::Error;
         return true;
