@@ -48,13 +48,6 @@ public:
     */
     const ServerConfig* getServerConfigByPort(int port) const;
 
-    /*
-    TO DO: implement function to get server config by *name* if multiple
-    servers share the same listening port
-
-    const ServerConfig* getServerConfigByName(int port, std::string name)
-    */
-
     struct ClientInfo {
         int fd;
         std::string ip;
