@@ -1,40 +1,35 @@
 #include "RequestLineParser.hpp"
 
+namespace Http::Syntax {
+    constexpr char SP = ' ';
+}
+
 namespace {
-    std::optional<std::vector<std::string>> requestLineTokens(const std::string& line) {
-        std::vector<std::string> tokens;
-        std::size_t start = 0;
-
-        while (start < line.size()) {
-            std::size_t space = line.find(' ', start);
-            std::string token;
-
-            if (space == std::string::npos) {
-                token = line.substr(start);
-                start = line.size();
-            } else {
-                token = line.substr(start, space - start);
-                start = space + 1;
-            }
-
-            if (token.empty()) {
-                return std::nullopt;
-            }
-
-            tokens.push_back(token);
-
-            if (tokens.size() > 3) {
-                return std::nullopt;
-            }
-        }
-
-        if (tokens.size() != 3) {
+    std::optional<std::vector<std::string>> tokenizeRequestLine(const std::string& line) {
+        const std::size_t methodEnd = line.find(Http::Syntax::SP);
+        if (methodEnd == std::string::npos) {
             return std::nullopt;
         }
 
-        return tokens;
-    }
+        const std::size_t targetEnd = line.find(Http::Syntax::SP, methodEnd + 1);
+        if (targetEnd == std::string::npos) {
+            return std::nullopt;
+        }
 
+        if (line.find(Http::Syntax::SP, targetEnd + 1) != std::string::npos) {
+            return std::nullopt;
+        }
+
+        std::string method = line.substr(0, methodEnd);
+        std::string target = line.substr(methodEnd + 1, targetEnd - methodEnd - 1);
+        std::string version = line.substr(targetEnd + 1);
+
+        if (method.empty() || target.empty() || version.empty()) {
+            return std::nullopt;
+        }
+
+        return std::vector<std::string>{method, target, version};
+    }
 
     bool isValidHttpVersion(const std::string& version) {
         return version == "HTTP/1.1";
@@ -65,7 +60,7 @@ std::optional<HttpRequest> RequestLineParser::parse(const std::string& line) {
 }
 
 std::optional<HttpRequest> RequestLineParser::run() {
-    std::optional<std::vector<std::string>> tokens = requestLineTokens(line_);
+    std::optional<std::vector<std::string>> tokens = tokenizeRequestLine(line_);
     if (!tokens) {
         return std::nullopt;
     }
