@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <stdexcept>
 #include <string_view>
 
 namespace Http::Method {
@@ -28,7 +29,9 @@ namespace Http::Method {
         auto it =
             std::find_if(kMethods.begin(), kMethods.end(), [method](const Entry& m) { return m.method == method; });
 
-        return it == kMethods.end() ? "" : std::string(it->name);
+        if (it == kMethods.end())
+            throw std::logic_error("toString: unhandled HttpMethod");
+        return std::string(it->name);
     }
 
 } // namespace Http::Method
