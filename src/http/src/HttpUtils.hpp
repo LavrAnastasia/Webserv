@@ -7,6 +7,10 @@ namespace Http::Syntax {
     constexpr char HTAB = '\t';
     constexpr char CR = '\r';
     constexpr char LF = '\n';
+
+    constexpr std::string_view CrLf = "\r\n";
+    constexpr std::string_view HeaderSectionEnd = "\r\n\r\n";
+
 } // namespace Http::Syntax
 
 namespace Http::Ascii {
