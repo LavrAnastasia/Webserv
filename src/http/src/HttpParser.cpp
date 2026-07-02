@@ -17,8 +17,8 @@ HttpParser::HttpParser()
 
 ParseResult HttpParser::append(const char* data, std::size_t size) {
     _buffer.append(data, size);
-    while (true) {
-        bool progressed;
+    bool progressed = true;
+    while (progressed) {
         switch (_state) {
             case ParserState::StartLine:
                 progressed = handleStartLine();
@@ -40,9 +40,8 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
             case ParserState::Error:
                 return {ParseStatus::BadRequest, std::nullopt};
         }
-        if (!progressed)
-            return {ParseStatus::NeedMoreData, std::nullopt};
     }
+    return {ParseStatus::NeedMoreData, std::nullopt};
 }
 
 bool HttpParser::handleStartLine() {
