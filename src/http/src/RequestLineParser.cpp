@@ -3,6 +3,7 @@
 #include "HttpUtils.hpp"
 
 #include <algorithm>
+#include <vector>
 
 
 namespace {
