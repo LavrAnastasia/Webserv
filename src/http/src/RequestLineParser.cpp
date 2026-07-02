@@ -1,11 +1,9 @@
 #include "RequestLineParser.hpp"
 #include "HttpMethodUtils.hpp"
+#include "HttpUtils.hpp"
 
 #include <algorithm>
 
-namespace Http::Syntax {
-    constexpr char SP = ' ';
-}
 
 namespace {
     std::optional<std::vector<std::string>> tokenizeRequestLine(const std::string& line) {

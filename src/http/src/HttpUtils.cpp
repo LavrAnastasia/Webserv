@@ -1,31 +1,42 @@
 #include "HttpUtils.hpp"
 
+#include <algorithm>
+#include <cctype>
+
+namespace {
+    bool isWhiteSpace(char c) {
+        return std::isspace(static_cast<unsigned char>(c));
+    }
+    bool isNotWhiteSpace(char c) {
+        return !isWhiteSpace(c);
+    }
+    char toLowerChar(char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+} // namespace
+
+
 namespace Http::Ascii {
     std::string tolower(const std::string& value) {
         std::string result = value;
-        std::size_t index = 0;
 
-        while (index < result.size()) {
-            if (result[index] >= 'A' && result[index] <= 'Z') {
-                result[index] = static_cast<char>(result[index] - 'A' + 'a');
-            }
-            ++index;
-        }
+        std::transform(result.begin(), result.end(), result.begin(), toLowerChar);
+
         return result;
     }
 
     std::string trim(const std::string& value) {
-        std::size_t start = 0;
-        std::size_t end = value.size();
+        std::string::const_iterator start = std::find_if(value.begin(), value.end(), isNotWhiteSpace);
 
-        while (start < end && (value[start] == ' ' || value[start] == '\t')) {
-            ++start;
+        if (start == value.end()) {
+            return "";
         }
 
-        while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) {
-            --end;
-        }
+        std::string::const_reverse_iterator reverseEnd = std::find_if(value.rbegin(), value.rend(), isNotWhiteSpace);
 
-        return value.substr(start, end - start);
+        std::string::const_iterator end = reverseEnd.base();
+
+        return std::string(start, end);
     }
+
 } // namespace Http::Ascii
