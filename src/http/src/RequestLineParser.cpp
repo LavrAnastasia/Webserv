@@ -1,6 +1,8 @@
 #include "RequestLineParser.hpp"
 #include "HttpMethodUtils.hpp"
 
+#include <algorithm>
+
 namespace Http::Syntax {
     constexpr char SP = ' ';
 }
@@ -36,8 +38,13 @@ namespace {
         return version == "HTTP/1.1";
     }
 
+    bool isControlCharacter(char c) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        return uc < 0x20 || uc == 0x7f;
+    }
+
     bool isValidRequestTarget(const std::string& target) {
-        return !target.empty() && target[0] == '/';
+        return !target.empty() && target[0] == '/' && std::none_of(target.begin(), target.end(), isControlCharacter);
     }
 
     void fillPathAndQuery(HttpRequest& request) {
