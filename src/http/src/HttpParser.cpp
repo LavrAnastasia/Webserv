@@ -176,7 +176,7 @@ bool HttpParser::handleChunkSize() {
     std::string sizeLine = _buffer.substr(0, lineEnd);
     _buffer.erase(0, lineEnd + Http::Syntax::CRLF.size());
 
-    std::size_t end = sizeLine.find(';');
+    std::size_t end = sizeLine.find(Http::Syntax::ChunkExtSeparator);
     std::string sizePart = sizeLine.substr(0, end);
 
     if (sizePart.empty()) {

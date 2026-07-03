@@ -43,12 +43,13 @@ namespace {
     }
 
     bool isValidRequestTarget(const std::string& target) {
-        return !target.empty() && target[0] == '/' && std::none_of(target.begin(), target.end(), isControlCharacter);
+        return !target.empty() && target[0] == Http::Syntax::PathPrefix &&
+            std::none_of(target.begin(), target.end(), isControlCharacter);
     }
 
     void fillPathAndQuery(HttpRequest& request) {
         std::size_t queryPos;
-        queryPos = request.target.find('?');
+        queryPos = request.target.find(Http::Syntax::QuerySeparator);
         if (queryPos == std::string::npos) {
             request.path = request.target;
             request.query = "";

@@ -39,7 +39,7 @@ namespace {
             char c = value[index];
             unsigned char uc = static_cast<unsigned char>(c);
 
-            if ((uc < 32 && c != '\t') || uc == 127)
+            if ((uc < 32 && c != Http::Syntax::HTAB) || uc == 127)
                 return false;
 
             ++index;
@@ -67,7 +67,7 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
     if (!line.empty() && (line[0] == Http::Syntax::SP || line[0] == Http::Syntax::HTAB))
         return false;
 
-    std::size_t colon = line.find(':');
+    std::size_t colon = line.find(Http::Syntax::HeaderKeyEnd);
     if (colon == std::string::npos)
         return false;
 
