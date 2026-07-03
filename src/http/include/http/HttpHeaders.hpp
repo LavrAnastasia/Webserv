@@ -12,7 +12,4 @@ public:
     bool set(const std::string& name, const std::string& value);
     bool has(const std::string& name) const;
     std::optional<std::string> get(const std::string& name) const;
-
-    bool parseHeaderLine(const std::string& line);
-    bool parseHeadersBlock(const std::string& headersBlock);
 };

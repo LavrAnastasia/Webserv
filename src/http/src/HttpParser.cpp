@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "RequestLineParser.hpp"
+#include "HeadersParser.hpp"
 
 namespace {
     constexpr std::size_t MAX_START_LINE_SIZE = 8192;
@@ -90,10 +91,12 @@ bool HttpParser::handleHeaders() {
     std::string headersBlock = _buffer.substr(0, headersEnd);
     _buffer.erase(0, headersEnd + Http::Syntax::HeaderSectionEnd.size());
 
-    if (!_request.headers.parseHeadersBlock(headersBlock)) {
+    std::optional<HttpHeaders> headers = HeadersParser::parse(headersBlock);
+    if (!headers) {
         _state = ParserState::Error;
         return true;
     }
+    _request.headers = *headers;
     std::optional<std::string> transferEncoding = _request.headers.get("Transfer-Encoding");
 
     if (transferEncoding) {
