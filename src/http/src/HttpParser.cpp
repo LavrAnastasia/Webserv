@@ -73,7 +73,6 @@ bool HttpParser::handleStartLine() {
     return true;
 }
 
-
 bool HttpParser::handleHeaders() {
     std::string headersBlock;
 
@@ -207,7 +206,6 @@ bool HttpParser::handleChunkData() {
     _state = ParserState::ChunkSize;
     return true;
 }
-
 
 std::optional<std::size_t> HttpParser::parseContentLength(const std::string& value) {
     if (value.empty())

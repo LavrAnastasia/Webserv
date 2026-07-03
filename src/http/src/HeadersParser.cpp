@@ -10,9 +10,7 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
     return HeadersParser{headersBlock}.run();
 }
 
-
 namespace {
-
     bool isValidHeaderName(const std::string& name) {
         if (name.empty())
             return false;
@@ -68,7 +66,6 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
 
     return headers_.set(name, value);
 }
-
 
 std::optional<HttpHeaders> HeadersParser::run() {
     std::size_t start = 0;
