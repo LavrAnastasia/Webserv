@@ -64,6 +64,9 @@ namespace {
 } // namespace
 
 bool HeadersParser::parseHeaderLine(const std::string& line) {
+    if (!line.empty() && (line[0] == Http::Syntax::SP || line[0] == Http::Syntax::HTAB))
+        return false;
+        
     std::size_t colon = line.find(':');
     if (colon == std::string::npos)
         return false;

@@ -102,6 +102,10 @@ bool HttpParser::handleHeaders() {
         return true;
     }
     _request.headers = *headers;
+    if (!_request.headers.has(std::string(Http::Header::Host))) {
+        _state = ParserState::Error;
+        return true;
+    }
     std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Header::TransferEncoding));
 
     if (transferEncoding) {
@@ -166,6 +170,11 @@ bool HttpParser::handleChunkSize() {
 
     _currentChunkSize = *chunkSize;
 
+    if (_currentChunkSize > MAX_BODY_SIZE - _request.body.size()) {
+        _state = ParserState::Error;
+        return true;
+    }
+
     if (_currentChunkSize == 0) {
         if (_buffer.size() < Http::Syntax::CrLf.size()) {
             return false;
@@ -191,11 +200,6 @@ bool HttpParser::handleChunkData() {
     if (_buffer.size() - _currentChunkSize < Http::Syntax::CrLf.size())
         return false;
     if (_buffer.compare(_currentChunkSize, Http::Syntax::CrLf.size(), Http::Syntax::CrLf) != 0) {
-        _state = ParserState::Error;
-        return true;
-    }
-
-    if (_currentChunkSize > MAX_BODY_SIZE || _request.body.size() > MAX_BODY_SIZE - _currentChunkSize) {
         _state = ParserState::Error;
         return true;
     }
