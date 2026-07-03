@@ -3,6 +3,8 @@
 
 #include "HeadersParser.hpp"
 
+#include <algorithm>
+
 HeadersParser::HeadersParser(const std::string& headersBlock) : headersBlock_(headersBlock), headers_() {
 }
 
@@ -12,24 +14,11 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 
 namespace {
     bool isValidHeaderName(const std::string& name) {
-        if (name.empty())
-            return false;
-
-        std::size_t index = 0;
-        while (index < name.size()) {
-            char c = name[index];
+        return !name.empty() && std::ranges::all_of(name, [](char c) {
             unsigned char uc = static_cast<unsigned char>(c);
 
-            if (uc <= 32 || uc == 127 || c == ':' || c == '(' || c == ')' || c == '<' || c == '>' || c == '@' ||
-                c == ',' || c == ';' || c == '\\' || c == '"' || c == '/' || c == '[' || c == ']' || c == '?' ||
-                c == '=' || c == '{' || c == '}') {
-                return false;
-            }
-
-            ++index;
-        }
-
-        return true;
+            return uc > 32 && uc != 127 && std::string_view(":()<>@,;\\\"/[]?={}").find(c) == std::string_view::npos;
+        });
     }
 
     bool isValidHeaderValue(const std::string& value) {
