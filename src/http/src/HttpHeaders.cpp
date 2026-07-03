@@ -1,20 +1,16 @@
 #include "http/HttpHeaders.hpp"
 #include "HttpUtils.hpp"
 
-#include <string_view>
-
 namespace {
-    constexpr std::string_view CONTENT_LENGTH_HEADER = "content-length";
-    constexpr std::string_view TRANSFER_ENCODING_HEADER = "transfer-encoding";
 
     bool canStoreHeader(const std::map<std::string, std::string>& headers, const std::string& key) {
         if (headers.find(key) != headers.end())
             return false;
 
-        if (key == CONTENT_LENGTH_HEADER && headers.find(std::string(TRANSFER_ENCODING_HEADER)) != headers.end())
+        if (key == Http::Header::ContentLength && headers.find(std::string(Http::Header::TransferEncoding)) != headers.end())
             return false;
 
-        if (key == TRANSFER_ENCODING_HEADER && headers.find(std::string(CONTENT_LENGTH_HEADER)) != headers.end())
+        if (key == Http::Header::TransferEncoding && headers.find(std::string(Http::Header::ContentLength)) != headers.end())
             return false;
 
         return true;

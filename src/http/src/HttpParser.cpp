@@ -102,10 +102,10 @@ bool HttpParser::handleHeaders() {
         return true;
     }
     _request.headers = *headers;
-    std::optional<std::string> transferEncoding = _request.headers.get("Transfer-Encoding");
+    std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Header::TransferEncoding));
 
     if (transferEncoding) {
-        if (Http::Ascii::tolower(*transferEncoding) == "chunked") {
+        if (Http::Ascii::tolower(*transferEncoding) == Http::Header::ChunkedValue) {
             _state = ParserState::ChunkSize;
             return true;
         }
@@ -233,7 +233,7 @@ std::optional<std::size_t> HttpParser::parseContentLength(const std::string& val
 }
 
 bool HttpParser::loadContentLength() {
-    std::optional<std::string> contentLengthValue = _request.headers.get("Content-Length");
+    std::optional<std::string> contentLengthValue = _request.headers.get(std::string(Http::Header::ContentLength));
 
     if (!contentLengthValue) {
         _contentLength = 0;
