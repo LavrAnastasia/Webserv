@@ -115,11 +115,13 @@ bool HttpParser::handleHeaders() {
         _state = ParserState::Error;
         return true;
     }
-    _request.headers = *headers;
-    if (!_request.headers.has(std::string(Http::Header::Host))) {
+
+    if (headers.value().has(std::string(Http::Header::Host))) {
         _state = ParserState::Error;
         return true;
     }
+    _request.headers = headers.value();
+
     std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Header::TransferEncoding));
 
     if (transferEncoding) {
