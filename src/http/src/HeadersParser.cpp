@@ -1,10 +1,9 @@
-#include "http/HttpHeaders.hpp"
 #include "HttpUtils.hpp"
+#include "http/HttpHeaders.hpp"
 
 #include "HeadersParser.hpp"
 
-HeadersParser::HeadersParser(const std::string& headersBlock)
-    : headersBlock_(headersBlock), headers_() {
+HeadersParser::HeadersParser(const std::string& headersBlock) : headersBlock_(headersBlock), headers_() {
 }
 
 std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock) {

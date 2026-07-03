@@ -7,7 +7,7 @@ namespace {
     constexpr std::string_view CONTENT_LENGTH_HEADER = "content-length";
     constexpr std::string_view TRANSFER_ENCODING_HEADER = "transfer-encoding";
 
-        bool canStoreHeader(const std::map<std::string, std::string>& headers, const std::string& key) {
+    bool canStoreHeader(const std::map<std::string, std::string>& headers, const std::string& key) {
         if (headers.find(key) != headers.end())
             return false;
 
@@ -19,7 +19,7 @@ namespace {
 
         return true;
     }
-}
+} // namespace
 
 bool HttpHeaders::set(const std::string& name, const std::string& value) {
     const std::string key = Http::Ascii::tolower(name);
@@ -43,4 +43,3 @@ std::optional<std::string> HttpHeaders::get(const std::string& name) const {
         return std::nullopt;
     return it->second;
 }
-

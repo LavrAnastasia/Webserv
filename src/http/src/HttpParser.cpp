@@ -2,8 +2,8 @@
 #include "HttpUtils.hpp"
 #include <limits>
 
-#include "RequestLineParser.hpp"
 #include "HeadersParser.hpp"
+#include "RequestLineParser.hpp"
 
 namespace {
     constexpr std::size_t MAX_START_LINE_SIZE = 8192;
