@@ -41,11 +41,9 @@ private:
     bool handleChunkSize();
     bool handleChunkData();
 
-    std::optional<std::size_t> parseContentLength(const std::string& value);
     bool loadContentLength();
 
 public:
     HttpParser();
     ParseResult append(const char* data, std::size_t size);
-    std::optional<std::size_t> parseChunkSize(const std::string& value);
 };

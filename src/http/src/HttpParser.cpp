@@ -1,6 +1,7 @@
 #include "http/HttpParser.hpp"
 #include "HttpUtils.hpp"
-#include <limits>
+#include <charconv>
+#include <string_view>
 
 #include "HeadersParser.hpp"
 #include "RequestLineParser.hpp"
@@ -10,6 +11,24 @@ namespace {
     constexpr std::size_t MAX_HEADERS_SIZE = 32768;
     constexpr std::size_t MAX_BODY_SIZE = 10485760;
     constexpr std::size_t MAX_CHUNK_SIZE_LINE_SIZE = 1024;
+
+    std::optional<std::size_t> parseUnsigned(std::string_view text, int base) {
+        std::size_t value{};
+    
+        const auto [ptr, ec] = std::from_chars(
+            text.data(),
+            text.data() + text.size(),
+            value,
+            base
+        );
+    
+        if (ec != std::errc{} || ptr != text.data() + text.size()) {
+            return std::nullopt;
+        }
+    
+        return value;
+    }
+
 } // namespace
 
 HttpParser::HttpParser()
@@ -162,14 +181,21 @@ bool HttpParser::handleChunkSize() {
     std::string sizeLine = _buffer.substr(0, lineEnd);
     _buffer.erase(0, lineEnd + Http::Syntax::CrLf.size());
 
-    std::optional<std::size_t> chunkSize = parseChunkSize(sizeLine);
-    if (!chunkSize) {
+    std::size_t end = sizeLine.find(';');
+    std::string sizePart = sizeLine.substr(0, end);
+
+    if (sizePart.empty()) {
         _state = ParserState::Error;
         return true;
     }
 
-    _currentChunkSize = *chunkSize;
+    std::optional<std::size_t> chunkSize = parseUnsigned(sizePart, 16);
 
+    if (!chunkSize) {
+        _state = ParserState::Error;
+        return true;
+    }
+    _currentChunkSize = *chunkSize;
     if (_currentChunkSize > MAX_BODY_SIZE - _request.body.size()) {
         _state = ParserState::Error;
         return true;
@@ -211,31 +237,6 @@ bool HttpParser::handleChunkData() {
     return true;
 }
 
-std::optional<std::size_t> HttpParser::parseContentLength(const std::string& value) {
-    if (value.empty())
-        return std::nullopt;
-
-    std::size_t result = 0;
-    std::size_t index = 0;
-    char c;
-
-    while (index < value.size()) {
-        c = value[index];
-        if (c < '0' || c > '9')
-            return std::nullopt;
-
-        std::size_t digit = static_cast<std::size_t>(c - '0');
-
-        if (result > (std::numeric_limits<std::size_t>::max() - digit) / 10) {
-            return std::nullopt;
-        }
-
-        result = result * 10 + digit;
-        ++index;
-    }
-    return result;
-}
-
 bool HttpParser::loadContentLength() {
     std::optional<std::string> contentLengthValue = _request.headers.get(std::string(Http::Header::ContentLength));
 
@@ -243,44 +244,13 @@ bool HttpParser::loadContentLength() {
         _contentLength = 0;
         return true;
     }
-    std::optional<std::size_t> contentLength = parseContentLength(*contentLengthValue);
+
+    std::optional<std::size_t> contentLength = parseUnsigned(*contentLengthValue, 10);
 
     if (!contentLength)
         return false;
+
     _contentLength = *contentLength;
     return true;
 }
 
-std::optional<std::size_t> HttpParser::parseChunkSize(const std::string& value) {
-    std::size_t end = value.find(';');
-    std::string sizePart = value.substr(0, end);
-
-    if (sizePart.empty())
-        return std::nullopt;
-
-    std::size_t result = 0;
-    std::size_t index = 0;
-
-    while (index < sizePart.size()) {
-        char c = sizePart[index];
-        std::size_t digit;
-
-        if (c >= '0' && c <= '9') {
-            digit = static_cast<std::size_t>(c - '0');
-        } else if (c >= 'a' && c <= 'f') {
-            digit = static_cast<std::size_t>(c - 'a' + 10);
-        } else if (c >= 'A' && c <= 'F') {
-            digit = static_cast<std::size_t>(c - 'A' + 10);
-        } else {
-            return std::nullopt;
-        }
-
-        if (result > (std::numeric_limits<std::size_t>::max() - digit) / 16)
-            return std::nullopt;
-
-        result = result * 16 + digit;
-        ++index;
-    }
-
-    return result;
-}
