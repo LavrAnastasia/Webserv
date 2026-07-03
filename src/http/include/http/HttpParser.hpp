@@ -40,7 +40,6 @@ private:
     bool handleBody();
     bool handleChunkSize();
     bool handleChunkData();
-
     bool loadContentLength();
 
 public:
