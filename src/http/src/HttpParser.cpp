@@ -14,18 +14,13 @@ namespace {
 
     std::optional<std::size_t> parseUnsigned(std::string_view text, int base) {
         std::size_t value{};
-    
-        const auto [ptr, ec] = std::from_chars(
-            text.data(),
-            text.data() + text.size(),
-            value,
-            base
-        );
-    
+
+        const auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value, base);
+
         if (ec != std::errc{} || ptr != text.data() + text.size()) {
             return std::nullopt;
         }
-    
+
         return value;
     }
 
@@ -65,7 +60,7 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
 }
 
 bool HttpParser::handleStartLine() {
-    std::size_t lineEnd = _buffer.find(Http::Syntax::CrLf);
+    std::size_t lineEnd = _buffer.find(Http::Syntax::CRLF);
 
     if (lineEnd == std::string::npos) {
         if (_buffer.size() > MAX_START_LINE_SIZE) {
@@ -80,7 +75,7 @@ bool HttpParser::handleStartLine() {
         return true;
     }
     std::string line = _buffer.substr(0, lineEnd);
-    _buffer.erase(0, lineEnd + Http::Syntax::CrLf.size());
+    _buffer.erase(0, lineEnd + Http::Syntax::CRLF.size());
 
     std::optional<HttpRequest> request = RequestLineParser::parse(line);
     if (!request) {
@@ -95,8 +90,8 @@ bool HttpParser::handleStartLine() {
 bool HttpParser::handleHeaders() {
     std::string headersBlock;
 
-    if (_buffer.compare(0, Http::Syntax::CrLf.size(), Http::Syntax::CrLf) == 0) {
-        _buffer.erase(0, Http::Syntax::CrLf.size());
+    if (_buffer.compare(0, Http::Syntax::CRLF.size(), Http::Syntax::CRLF) == 0) {
+        _buffer.erase(0, Http::Syntax::CRLF.size());
     } else {
         std::size_t headersEnd = _buffer.find(Http::Syntax::HeaderSectionEnd);
         if (headersEnd == std::string::npos) {
@@ -163,7 +158,7 @@ bool HttpParser::handleBody() {
 }
 
 bool HttpParser::handleChunkSize() {
-    std::size_t lineEnd = _buffer.find(Http::Syntax::CrLf);
+    std::size_t lineEnd = _buffer.find(Http::Syntax::CRLF);
 
     if (lineEnd == std::string::npos) {
         if (_buffer.size() > MAX_CHUNK_SIZE_LINE_SIZE) {
@@ -179,7 +174,7 @@ bool HttpParser::handleChunkSize() {
     }
 
     std::string sizeLine = _buffer.substr(0, lineEnd);
-    _buffer.erase(0, lineEnd + Http::Syntax::CrLf.size());
+    _buffer.erase(0, lineEnd + Http::Syntax::CRLF.size());
 
     std::size_t end = sizeLine.find(';');
     std::string sizePart = sizeLine.substr(0, end);
@@ -202,16 +197,16 @@ bool HttpParser::handleChunkSize() {
     }
 
     if (_currentChunkSize == 0) {
-        if (_buffer.size() < Http::Syntax::CrLf.size()) {
+        if (_buffer.size() < Http::Syntax::CRLF.size()) {
             return false;
         }
 
-        if (_buffer.compare(0, Http::Syntax::CrLf.size(), Http::Syntax::CrLf) != 0) {
+        if (_buffer.compare(0, Http::Syntax::CRLF.size(), Http::Syntax::CRLF) != 0) {
             _state = ParserState::Error;
             return true;
         }
 
-        _buffer.erase(0, Http::Syntax::CrLf.size());
+        _buffer.erase(0, Http::Syntax::CRLF.size());
         _state = ParserState::Complete;
         return true;
     }
@@ -223,15 +218,15 @@ bool HttpParser::handleChunkSize() {
 bool HttpParser::handleChunkData() {
     if (_buffer.size() < _currentChunkSize)
         return false;
-    if (_buffer.size() - _currentChunkSize < Http::Syntax::CrLf.size())
+    if (_buffer.size() - _currentChunkSize < Http::Syntax::CRLF.size())
         return false;
-    if (_buffer.compare(_currentChunkSize, Http::Syntax::CrLf.size(), Http::Syntax::CrLf) != 0) {
+    if (_buffer.compare(_currentChunkSize, Http::Syntax::CRLF.size(), Http::Syntax::CRLF) != 0) {
         _state = ParserState::Error;
         return true;
     }
 
     _request.body += _buffer.substr(0, _currentChunkSize);
-    _buffer.erase(0, _currentChunkSize + Http::Syntax::CrLf.size());
+    _buffer.erase(0, _currentChunkSize + Http::Syntax::CRLF.size());
 
     _state = ParserState::ChunkSize;
     return true;
@@ -253,4 +248,3 @@ bool HttpParser::loadContentLength() {
     _contentLength = *contentLength;
     return true;
 }
-
