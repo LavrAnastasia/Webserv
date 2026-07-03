@@ -48,6 +48,19 @@ namespace {
         return true;
     }
 
+    bool canStoreHeader(const HttpHeaders& headers, const std::string& key) {
+        if (headers.has(key))
+            return false;
+    
+        if (key == Http::Header::ContentLength && headers.has(std::string(Http::Header::TransferEncoding)))
+            return false;
+    
+        if (key == Http::Header::TransferEncoding && headers.has(std::string(Http::Header::ContentLength)))
+            return false;
+    
+        return true;
+    }
+
 } // namespace
 
 bool HeadersParser::parseHeaderLine(const std::string& line) {
@@ -64,7 +77,12 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
     if (!isValidHeaderValue(value))
         return false;
 
-    return headers_.set(name, value);
+    std::string key = Http::Ascii::tolower(name);
+
+    if (!canStoreHeader(headers_, key))
+        return false;
+
+    return headers_.set(key, value);
 }
 
 std::optional<HttpHeaders> HeadersParser::run() {
