@@ -1,45 +1,23 @@
 #include "net/TcpServer.hpp"
 #include "net/ServerSocket.hpp"
 
-/*
-    Initialization: Parsed config blocks are passed to SocketManager, which creates,
-    binds and sets sockets to listen mode.
-
-    -Implementation already handled in SocketManager class
-*/
-void TcpServer::setupServers(const Configuration& config) {
-    //store config struct locally as a private variable
-    config_ = config;
+TcpServer::TcpServer(const Configuration& config) : config_(config) {
     socketManager_.createServers(config_.servers);
 }
 
 /*
     Called once by EventLoop at startup, to get list of listening FDs to
     register with Poller
-
-    -function return reference can be used directly in the range-based loop
 */
 std::vector<int> TcpServer::getListeningFds() const {
-    std::vector<int> fds;
-    for (const ServerSocket* server : socketManager_.getServers()) {
-        fds.push_back(server->getFd());
-    }
-    return fds;
+    return socketManager_.getListeningFds();
 }
 
 /*
-    Called by EventLoop to retrieve *the first* config block associated with a specific
-    server port, to check rules for incoming network requests.
+    Called by EventLoop to retrieve the correct configuration for a given fd
 */
-const ServerConfig* TcpServer::getServerConfigByPort(int port) const {
-    for (const auto& server : config_.servers) {
-        for (const auto& listen : server.listen) {
-            if (listen.port == port) {
-                return &server;
-            }
-        }
-    }
-    return nullptr;
+const ServerConfig* TcpServer::getConfigForFd(int listenFd) const {
+    return socketManager_.getConfigForFd(listenFd);
 }
 
 /*
@@ -49,18 +27,21 @@ const ServerConfig* TcpServer::getServerConfigByPort(int port) const {
     ClientInfo ip and port variables are passed by reference and populated by
     acceptConnection()
 */
-TcpServer::ClientInfo TcpServer::acceptClient(int listenFd) {
-    ClientInfo info;
-    info.fd = -1;
-
-    for (ServerSocket* server : socketManager_.getServers()) {
-        if (server->getFd() == listenFd) {
-            // populate IP and client port
-            info.fd = server->acceptConnection(info.ip, info.port);
-            // capture server (listening) port
-            info.serverPort = server->getPort();
-            return info;
-        }
+std::optional<TcpServer::ClientInfo> TcpServer::acceptClient(int listenFd) {
+    ServerSocket* server = socketManager_.getServerByFd(listenFd);
+    if (!server) {
+        //magic number replaced by nullopt
+        return std::nullopt;
     }
+
+    ClientInfo info;
+    info.fd = server->acceptConnection(info.ip, info.port);
+
+    if (info.fd < 0) {
+        return std::nullopt;
+    }
+
+    info.serverPort = server->getPort();
+
     return info;
 }

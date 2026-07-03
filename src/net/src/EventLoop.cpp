@@ -1,20 +1,26 @@
 #include "net/EventLoop.hpp"
 #include "net/TcpServer.hpp"
 #include <algorithm>
+#include <unistd.h> //for close()
 #include <vector>
 
 void EventLoop::handleNewConnection(int listenFd) {
-    //accept client and get info
-    TcpServer::ClientInfo clientInfo = tcpServer_.acceptClient(listenFd);
+    //auto allows nullopt return
+    auto clientInfo = tcpServer_.acceptClient(listenFd);
 
     //check for dropped connection
-    if (clientInfo.fd != -1) {
-        //get config block for this port
-        const ServerConfig* config = tcpServer_.getServerConfigByPort(clientInfo.serverPort);
-        //add new connection to registry, including config block
-        connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, config);
-        //tell poller to track it (watch for incoming http request)
-        poller_.addSocket(clientInfo.fd);
+    if (clientInfo) {
+        //get config block for this fd
+        const ServerConfig* config = tcpServer_.getConfigForFd(listenFd);
+        if (config) {
+            //add new connection to registry, including config block
+            connectionRegistry_.addConnection(clientInfo->fd, clientInfo->ip, config);
+            //tell poller to track it (watch for incoming http request)
+            poller_.addSocket(clientInfo->fd);
+        } else {
+            // if config for accepted client not found, close connection
+            close(clientInfo->fd);
+        }
     }
     //if connection was dropped, do nothing
 }

@@ -2,20 +2,21 @@
 
 #include "net/Socket.hpp"
 
+#include <cstdint>
 #include <netinet/in.h>
 #include <string>
 
 class ServerSocket : public Socket {
 private:
-    int port_; //port to listen on
-    struct sockaddr_in socketAddress_;
+    std::uint16_t port_; //port to listen on
+    struct sockaddr_in socketAddress_{};
 
 public:
-    ServerSocket(const std::string& host, int port);
+    ServerSocket(const std::string& host, std::uint16_t port);
 
-    int getPort() const;
+    std::uint16_t getPort() const;
 
-    int acceptConnection(std::string& clientIp, int& clientPort);
+    int acceptConnection(std::string& clientIp, uint16_t& clientPort);
 };
 
 /*
