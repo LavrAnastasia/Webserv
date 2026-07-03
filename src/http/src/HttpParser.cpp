@@ -75,21 +75,27 @@ bool HttpParser::handleStartLine() {
 
 
 bool HttpParser::handleHeaders() {
-    std::size_t headersEnd = _buffer.find(Http::Syntax::HeaderSectionEnd);
-    if (headersEnd == std::string::npos) {
-        if (_buffer.size() > MAX_HEADERS_SIZE) {
+    std::string headersBlock;
+
+    if (_buffer.compare(0, Http::Syntax::CrLf.size(), Http::Syntax::CrLf) == 0) {
+        _buffer.erase(0, Http::Syntax::CrLf.size());
+    } else {
+        std::size_t headersEnd = _buffer.find(Http::Syntax::HeaderSectionEnd);
+        if (headersEnd == std::string::npos) {
+            if (_buffer.size() > MAX_HEADERS_SIZE) {
+                _state = ParserState::Error;
+                return true;
+            }
+            return false;
+        }
+
+        if (headersEnd > MAX_HEADERS_SIZE) {
             _state = ParserState::Error;
             return true;
         }
-        return false;
+        headersBlock = _buffer.substr(0, headersEnd);
+        _buffer.erase(0, headersEnd + Http::Syntax::HeaderSectionEnd.size());
     }
-
-    if (headersEnd > MAX_HEADERS_SIZE) {
-        _state = ParserState::Error;
-        return true;
-    }
-    std::string headersBlock = _buffer.substr(0, headersEnd);
-    _buffer.erase(0, headersEnd + Http::Syntax::HeaderSectionEnd.size());
 
     std::optional<HttpHeaders> headers = HeadersParser::parse(headersBlock);
     if (!headers) {
