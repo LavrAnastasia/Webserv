@@ -1,7 +1,12 @@
 #include "http/HttpHeaders.hpp"
 #include "HttpUtils.hpp"
 
+#include <string_view>
+
 namespace {
+    constexpr std::string_view CONTENT_LENGTH_HEADER = "content-length";
+    constexpr std::string_view TRANSFER_ENCODING_HEADER = "transfer-encoding";
+
     bool isValidHeaderName(const std::string& name) {
         if (name.empty())
             return false;
@@ -38,11 +43,29 @@ namespace {
 
         return true;
     }
+
+    bool canStoreHeader(const std::map<std::string, std::string>& headers, const std::string& key) {
+        if (headers.find(key) != headers.end())
+            return false;
+
+        if (key == CONTENT_LENGTH_HEADER && headers.find(std::string(TRANSFER_ENCODING_HEADER)) != headers.end())
+            return false;
+
+        if (key == TRANSFER_ENCODING_HEADER && headers.find(std::string(CONTENT_LENGTH_HEADER)) != headers.end())
+            return false;
+
+        return true;
+    }
 } // namespace
 
-void HttpHeaders::set(const std::string& name, const std::string& value) {
+bool HttpHeaders::set(const std::string& name, const std::string& value) {
     const std::string key = Http::Ascii::tolower(name);
-    _headers[key] = value;
+
+    if (!canStoreHeader(_headers, key))
+        return false;
+
+    _headers.emplace(key, value);
+    return true;
 }
 
 bool HttpHeaders::has(const std::string& name) const {
@@ -72,8 +95,7 @@ bool HttpHeaders::parseHeaderLine(const std::string& line) {
     if (!isValidHeaderValue(value))
         return false;
 
-    set(name, value);
-    return true;
+    return set(name, value);
 }
 
 bool HttpHeaders::parseHeadersBlock(const std::string& headersBlock) {
