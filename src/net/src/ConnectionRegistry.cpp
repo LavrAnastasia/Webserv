@@ -1,13 +1,11 @@
 #include "net/ConnectionRegistry.hpp"
 
-#include <ctime>
-
 /*
     -called by TCP server when new client connects
     -creates a key/value pair in activeConnections_,
     where the fd is the key and a Connection object is the value
 
-    try_emplace(fd, fd, ip, port);
+    try_emplace(fd, fd, ip, config);
     1. fd = map key
     2. - 4. = constructor arguments passed to Connection constructor
     "Calculate hash for File Descriptor *** and find the correct memory bucket,
@@ -15,7 +13,8 @@
     directly in that bucket without copying -> EFFICIENT!"
 */
 void ConnectionRegistry::addConnection(int fd, const std::string& ip, const ServerConfig* config) {
-    activeConnections_.try_emplace(fd, fd, ip, config);
+    // dereference config to pass as reference to Connection constructor
+    activeConnections_.try_emplace(fd, fd, ip, *config);
 }
 
 /*
@@ -35,13 +34,11 @@ void ConnectionRegistry::removeConnection(int fd) {
     -end() is a theoretical invalid memory space just past the last item in the map
     -it->first is the KEY of the key/value pair
     -it->second is the VALUE of the pair, in this case a Connection object
-    -const makes every variable accessed by the function temporarily const,
-    but const_cast removes this lock and makes the returned Connection pointer mutable
 */
-Connection* ConnectionRegistry::getConnection(int fd) const {
+Connection* ConnectionRegistry::getConnection(int fd) {
     auto it = activeConnections_.find(fd);
     if (it != activeConnections_.end()) {
-        return const_cast<Connection*>(&(it->second));
+        return &(it->second);
     }
     return nullptr;
 }
@@ -53,9 +50,9 @@ Connection* ConnectionRegistry::getConnection(int fd) const {
     .erase(it) is an overloaded erase() specifically for loops. It automatically
     sets it to point to the next valid item *before* destroying the current object
 */
-std::vector<int> ConnectionRegistry::pruneConnections(int timeoutSeconds) {
+std::vector<int>
+ConnectionRegistry::pruneConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime) {
     std::vector<int> deadFds;
-    time_t currentTime = std::time(nullptr);
 
     for (auto it = activeConnections_.begin(); it != activeConnections_.end();) {
         if (it->second.hasTimedOut(currentTime, timeoutSeconds)) {

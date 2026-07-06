@@ -2,7 +2,7 @@
 
 #include "net/Socket.hpp"
 
-#include <ctime>
+#include <chrono>
 #include <string>
 
 /*
@@ -16,9 +16,8 @@
             until the whole request has arrived.
         2.  manage id: stores socket fd and IP address of the client
         3.  track state:
-                RECEIVING - HTTP request not yet fully received from client
-                PARSING - request received and sent to HTTP parser
-                SENDING - sending response to client
+                READING - HTTP request not yet fully received from client
+                WRITING - sending response to client
                 CLOSED - sequence complete, or fatal error occurred
 
     Inputs:
@@ -45,31 +44,30 @@ struct ServerConfig;
 
 class Connection : public Socket {
 public:
-    enum class State { READING_HEADERS, READING_BODY, PARSING, SENDING, CLOSED };
+    enum class State { READING, WRITING, CLOSED };
 
 private:
     std::string clientIp_;
     std::string receiveBuffer_;
     std::string sendBuffer_;
     State currentState_;
-    time_t lastActivity_;
-    const ServerConfig* serverConfig_;
+    const ServerConfig& serverConfig_;
+    std::chrono::steady_clock::time_point lastActivity_;
 
 public:
-    Connection(int fd, const std::string& ip, const ServerConfig* config);
-    virtual ~Connection() = default;
+    Connection(int fd, const std::string& ip, const ServerConfig& config);
 
     const std::string& getClientIp() const { return clientIp_; }
     State getState() const { return currentState_; }
 
     //get server configuration to access rule sets
-    const ServerConfig* getServerConfig() const { return serverConfig_; }
+    const ServerConfig& getServerConfig() const { return serverConfig_; }
 
     // used by server to pull raw text, to pass onto http parser
     const std::string& getReceiveBuffer() const { return receiveBuffer_; }
 
-    // check for \r\n\r\n sequence to indicate full header received
-    bool hasCompleteHeaders() const;
+    // used by EventLoop to determine when to switch between POLLOUT and POLLIN
+    bool isSendComplete() const { return sendBuffer_.empty(); }
 
     // called by server, consumes bytes which were parsed by http parser
     void consumeReceiveBuffer(size_t bytes);
@@ -82,19 +80,5 @@ public:
 
     //called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
     bool sendResponse();
-    bool hasTimedOut(time_t currentTime, int timeoutSeconds) const;
+    bool hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const;
 };
-
-/*
-    TODO: FUTURE CONNECTION EXTENSIONS?
-
-    1. PARSING: Integrate teammate's HttpRequest class to store parsed data.
-    2. ROUTING: Implement LocationConfig matching (Longest Prefix Match).
-    3. SECURITY: Enforce client_max_body_size early (after header phase).
-    4. METHODS: Validate HttpMethod against allowedMethods in LocationConfig.
-    5. POST: Handle 'Transfer-Encoding: chunked' and large body disk-buffering.
-    6. REDIR: Handle 'return' directives for 301/302 redirects.
-    7. STATIC: Support Autoindex (directory listing) and root/index resolution.
-    8. CGI: Implement fork/exec/pipe logic for dynamic script execution.
-    9. ERRORS: Resolve custom error_page paths from ServerConfig.
- */

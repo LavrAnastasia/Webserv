@@ -2,6 +2,7 @@
 
 #include "net/Connection.hpp"
 
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -26,7 +27,6 @@ public:
     is added later.
 */
     ConnectionRegistry() = default;
-    ~ConnectionRegistry() = default;
 
     // called by TCP server when new client connects
     void addConnection(int fd, const std::string& ip, const ServerConfig* config);
@@ -39,11 +39,11 @@ public:
     returns a pointer, because a reference would break and crash the program
     in case of abrupt client disconnection
 */
-    Connection* getConnection(int fd) const;
+    Connection* getConnection(int fd);
 
     /*
     deletes timed out connections from activeConnections_ and returns a vector
     of the pruned fds for the poller to stop tracking
 */
-    std::vector<int> pruneConnections(int timeoutSeconds);
+    std::vector<int> pruneConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime);
 };

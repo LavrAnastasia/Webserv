@@ -7,10 +7,12 @@
 #include <unistd.h>
 
 ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(port) {
-    fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd_ < 0) {
+    int newFd = socket(AF_INET, SOCK_STREAM, 0);
+    if (newFd < 0) {
         throw std::runtime_error("NetError: Failed to create socket.");
     }
+
+    setFd(newFd);
 
     socketAddress_.sin_family = AF_INET; //external IPv4 address
     socketAddress_.sin_port = htons(port_); //convert port_ from machine to server byte order
@@ -24,15 +26,15 @@ ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(
         }
     }
     int opt = 1;
-    if (setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+    if (setsockopt(getFd(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
         throw std::runtime_error("NetError: Failed to set SO_REUSEADDR.");
     } //override port's TIME_WAIT, allowing instant reconnection
 
-    if (bind(fd_, (struct sockaddr*)&socketAddress_, sizeof(socketAddress_)) == -1) {
+    if (bind(getFd(), (struct sockaddr*)&socketAddress_, sizeof(socketAddress_)) == -1) {
         throw std::runtime_error("NetError: Failed to bind to port.");
     } //bind() can fail if port is already in use, or if permission is denied
 
-    if (listen(fd_, SOMAXCONN) == -1) {
+    if (listen(getFd(), SOMAXCONN) == -1) {
         throw std::runtime_error("NetError: Failed to listen on socket.");
     } //set network socket to listen mode, SOMAXCONN = max allowed connection queue size
 }
@@ -47,7 +49,7 @@ int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) 
     socklen_t clientLen = sizeof(clientAddress);
 
     // OS fills out argument variables with caller's actual info
-    int clientFd = accept(fd_, (struct sockaddr*)&clientAddress, &clientLen);
+    int clientFd = accept(getFd(), (struct sockaddr*)&clientAddress, &clientLen);
 
     if (clientFd < 0) {
         return -1;

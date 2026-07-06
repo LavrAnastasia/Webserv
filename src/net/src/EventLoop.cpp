@@ -1,6 +1,7 @@
 #include "net/EventLoop.hpp"
 #include "net/TcpServer.hpp"
 #include <algorithm>
+#include <chrono>
 #include <unistd.h> //for close()
 #include <vector>
 
@@ -45,9 +46,12 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             connectionRegistry_.removeConnection(clientFd);
             return;
         }
-        if (connection->hasCompleteHeaders()) {
-            //if we finished receiving the entire HTTP request:
-            //PLACEHOLDER RESPONSE! This will integrate with the HTTP parser later!
+        /*
+            PLACEHOLDER BEFORE HTTP PARSER INTEGRATION
+            -if any data has been received, prepare placeholder response
+            and set socket mode to POLLOUT (WRITE)
+        */
+        if (!connection->getReceiveBuffer().empty()) {
             connection->appendResponse(
                 "HTTP/1.1 200 OK\r\nContent-Length: 37\r\n\r\n<html><body><h1>:)</h1></body></html>"
             );
@@ -62,8 +66,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             connectionRegistry_.removeConnection(clientFd);
             return;
         }
-        //sendResponse() sets state to READING_HEADERS when send is complete (buffer is empty)
-        if (connection->getState() == Connection::State::READING_HEADERS) {
+
+        if (connection->isSendComplete()) {
             //tells poller send phase is done, now watch for new requests
             poller_.modifySocket(clientFd, POLLIN);
         }
@@ -101,7 +105,8 @@ void EventLoop::run() {
 
 void EventLoop::cleanupTimedOutConnections() {
     //pruneConnections() removes timed out connections from registry and returns list of their fds
-    std::vector<int> deadFds = connectionRegistry_.pruneConnections(clientTimeoutSeconds_);
+    std::vector<int> deadFds =
+        connectionRegistry_.pruneConnections(clientTimeoutSeconds_, std::chrono::steady_clock::now());
     for (int fd : deadFds) {
         //poller removes them from its own internal list
         poller_.removeSocket(fd);

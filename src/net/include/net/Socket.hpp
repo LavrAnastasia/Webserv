@@ -3,22 +3,21 @@
 #include <unistd.h>
 
 class Socket {
-protected:
+private:
     int fd_;
 
-public:
-    Socket() : fd_(-1) {}
+protected:
+    bool isValidFd() const;
+    void setFd(int fd);
 
-    virtual ~Socket() {
-        if (fd_ >= 0) {
-            close(fd_);
-        }
-    }
+public:
+    Socket();
+    virtual ~Socket();
 
     // disable accidental fd copying
     Socket(const Socket&) = delete;
     Socket& operator=(const Socket&) = delete;
 
-    int getFd() const { return fd_; }
+    int getFd() const;
     void setNonBlocking();
 };

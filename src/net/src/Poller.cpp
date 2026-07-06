@@ -32,7 +32,7 @@ void Poller::removeSocket(int fd) {
 }
 
 std::vector<pollfd> Poller::waitForEvents() {
-    int activeCount = poll(pollFds_.data(), pollFds_.size(), -1); //how many sockets active?
+    int activeCount = poll(pollFds_.data(), pollFds_.size(), 1000); //how many sockets active?
     if (activeCount < 0) {
         if (errno == EINTR) {
             return {}; // benign OS interruption -no need to crash server

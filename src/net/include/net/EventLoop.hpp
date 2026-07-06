@@ -22,7 +22,6 @@ private:
 
 public:
     EventLoop(TcpServer& server) : tcpServer_(server), isRunning_(false), clientTimeoutSeconds_(60) {}
-    ~EventLoop() = default;
 
     void initialize();
     void run();

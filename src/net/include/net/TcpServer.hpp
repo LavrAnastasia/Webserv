@@ -27,7 +27,6 @@ public:
     classes
     */
     explicit TcpServer(const Configuration& config);
-    ~TcpServer() = default;
 
     /*
     Called once by EventLoop at startup, to get list of listening FDs to
