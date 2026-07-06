@@ -116,7 +116,7 @@ bool HttpParser::handleHeaders() {
         return true;
     }
 
-    if (headers.value().has(std::string(Http::Header::Host))) {
+    if (!headers.value().has(std::string(Http::Header::Host))) {
         _state = ParserState::Error;
         return true;
     }
