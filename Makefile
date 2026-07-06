@@ -23,6 +23,14 @@ CONFIG_SRC := \
 	src/config/src/ConfigReadError.cpp \
 	src/config/src/ConfigSyntaxError.cpp
 
+HTTP_SRC := \
+	src/http/src/HttpMethod.cpp \
+	src/http/src/RequestLineParser.cpp \
+	src/http/src/HttpParser.cpp \
+	src/http/src/HttpHeaders.cpp \
+	src/http/src/HttpUtils.cpp \
+	src/http/src/HeadersParser.cpp
+
 NET_SRC := \
 	src/net/src/Socket.cpp \
 	src/net/src/ServerSocket.cpp \
@@ -36,6 +44,7 @@ NET_SRC := \
 SRC := \
 	app/main.cpp \
 	${CONFIG_SRC} \
+	${HTTP_SRC} \
 	${NET_SRC}
 
 BUILD_DIR := build
