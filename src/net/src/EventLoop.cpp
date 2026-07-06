@@ -2,6 +2,8 @@
 #include "net/TcpServer.hpp"
 #include <algorithm>
 #include <chrono>
+#include <exception>
+#include <iostream>
 #include <unistd.h> //for close()
 #include <vector>
 
@@ -14,10 +16,17 @@ void EventLoop::handleNewConnection(int listenFd) {
         //get config block for this fd
         const ServerConfig* config = tcpServer_.getConfigForFd(listenFd);
         if (config) {
-            //add new connection to registry, including config block
-            connectionRegistry_.addConnection(clientInfo->fd, clientInfo->ip, config);
-            //tell poller to track it (watch for incoming http request)
-            poller_.addSocket(clientInfo->fd);
+            try {
+                //add new connection to registry, including config block
+                connectionRegistry_.addConnection(clientInfo->fd, clientInfo->ip, config);
+                //tell poller to track it (watch for incoming http request)
+                poller_.addSocket(clientInfo->fd);
+            } catch (const std::exception& e) {
+                // in case of setNonBlocking() failure, log error and close fd
+                std::cerr << "NetError: Failed to initialize client " << clientInfo->ip << " - " << e.what()
+                          << std::endl;
+                close(clientInfo->fd);
+            }
         } else {
             // if config for accepted client not found, close connection
             close(clientInfo->fd);
