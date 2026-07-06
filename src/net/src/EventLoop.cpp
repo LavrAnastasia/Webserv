@@ -47,10 +47,14 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             return;
         }
         /*
-            PLACEHOLDER BEFORE HTTP PARSER INTEGRATION
-            -if any data has been received, prepare placeholder response
-            and set socket mode to POLLOUT (WRITE)
+            TODO: integrate with HTTP parser
+            HttpParseResult result = httpParser.parse(connection->getReceiveBuffer());
+            if (result.status == Complete) {
+                connection->appendResponse(***)
+            }
         */
+
+        //placeholder response to verify network layer functionality
         if (!connection->getReceiveBuffer().empty()) {
             connection->appendResponse(
                 "HTTP/1.1 200 OK\r\nContent-Length: 37\r\n\r\n<html><body><h1>:)</h1></body></html>"
@@ -68,6 +72,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         }
 
         if (connection->isSendComplete()) {
+            // TODO: setKeepAlive later (net + http layer integration)
             //tells poller send phase is done, now watch for new requests
             poller_.modifySocket(clientFd, POLLIN);
         }
