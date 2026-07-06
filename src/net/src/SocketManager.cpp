@@ -28,6 +28,11 @@ void SocketManager::createServers(const std::vector<ServerConfig>& configs) {
             }
         }
     }
+    if (servers_.empty()) {
+        throw std::runtime_error(
+            "Critical error: No sockets could be opened. Please check if ports are already in use."
+        );
+    }
 }
 
 /*
