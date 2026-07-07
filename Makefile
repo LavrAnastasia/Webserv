@@ -7,27 +7,30 @@ INCLUDES := \
 	-Isrc/config/include
 DEPFLAGS := -MMD -MP
 
-CONFIG_SRC := \
-	src/config/src/ConfigLoader.cpp \
-	src/config/src/ConfigLexer.cpp \
-	src/config/src/ConfigParser.cpp \
-	src/config/src/ConfigSpecification.cpp \
-	src/config/src/ConfigValidator.cpp \
-	src/config/src/ConfigDecoder.cpp \
-	src/config/src/ConfigBuilder.cpp \
-	src/config/src/ConfigDecodingError.cpp \
-	src/config/src/ConfigValidationError.cpp \
-	src/config/src/ConfigError.cpp \
-	src/config/src/ConfigReadError.cpp \
-	src/config/src/ConfigSyntaxError.cpp
+CONFIG_SRC := $(addprefix src/config/src/, \
+	ConfigLoader.cpp \
+	ConfigLexer.cpp \
+	ConfigParser.cpp \
+	ConfigSpecification.cpp \
+	ConfigValidator.cpp \
+	ConfigDecoder.cpp \
+	ConfigBuilder.cpp \
+	ConfigDecodingError.cpp \
+	ConfigValidationError.cpp \
+	ConfigError.cpp \
+	ConfigReadError.cpp \
+	ConfigSyntaxError.cpp \
+)
 
-HTTP_SRC := \
-	src/http/src/HttpMethod.cpp \
-	src/http/src/RequestLineParser.cpp \
-	src/http/src/HttpParser.cpp \
-	src/http/src/HttpHeaders.cpp \
-	src/http/src/HttpUtils.cpp \
-	src/http/src/HeadersParser.cpp
+HTTP_SRC := $(addprefix src/http/src/, \
+	HttpMethod.cpp \
+	RequestLineParser.cpp \
+	HttpParser.cpp \
+	HttpHeaders.cpp \
+	HttpUtils.cpp \
+	HeadersParser.cpp \
+	Router.cpp \
+)
 
 SRC := \
 	app/main.cpp \
@@ -57,6 +60,10 @@ fclean: clean
 	rm -f $(NAME)
 
 re: fclean all
+
+format: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 clang-format -i
+
+format-check: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 clang-format --dry-run --Werror
 
 .PHONY: all clean fclean re
 .SECONDARY: $(BUILD_DIR) $(OBJ)
