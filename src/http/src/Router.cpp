@@ -32,6 +32,22 @@ namespace {
 
         return result;
     }
+
+    std::optional<CgiConfig> resolveCgi(const std::string& requestPath, const LocationConfig& location) {
+        const std::string extension = std::filesystem::path(requestPath).extension().string();
+
+        if (extension.empty()) {
+            return std::nullopt;
+        }
+
+        const auto cgi = location.cgi.find(extension);
+
+        if (cgi == location.cgi.end()) {
+            return std::nullopt;
+        }
+
+        return cgi->second;
+    }
 } // namespace
 
 std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const ServerConfig& server) const {
@@ -57,7 +73,7 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.autoindex = location->autoindex;
     route.redirect = location->redirect;
     route.upload = location->upload;
+    route.cgi = resolveCgi(request.path, *location);
 
-    // cgi resolver
-    return std::nullopt;
+    return route;
 }
