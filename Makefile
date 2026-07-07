@@ -23,7 +23,7 @@ CONFIG_SRC := $(addprefix src/config/src/, \
 )
 
 HTTP_SRC := $(addprefix src/http/src/, \
-	HttpMethod.cpp \
+	HttpMethodUtils.cpp \
 	RequestLineParser.cpp \
 	HttpParser.cpp \
 	HttpHeaders.cpp \
