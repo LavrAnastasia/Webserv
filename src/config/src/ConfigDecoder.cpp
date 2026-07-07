@@ -168,8 +168,8 @@ std::unordered_map<int, std::filesystem::path> ConfigDecoder::decodeErrorPage(co
     return pages;
 }
 
-std::unordered_set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>& values) {
-    std::unordered_set<HttpMethod> methods;
+std::set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>& values) {
+    std::set<HttpMethod> methods;
 
     for (const std::string& value : values) {
         HttpMethod method;

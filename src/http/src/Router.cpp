@@ -53,7 +53,7 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.clientMaxBodySize = location->clientMaxBodySize.value_or(server.clientMaxBodySize);
     route.errorPages = server.errorPages;
 
-    // route.allowedMethods = location->allowedMethods;
+    route.allowedMethods = location->allowedMethods;
     route.autoindex = location->autoindex;
     route.redirect = location->redirect;
     route.upload = location->upload;

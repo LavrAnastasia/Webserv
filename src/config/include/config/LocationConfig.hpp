@@ -2,9 +2,9 @@
 
 #include <filesystem>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 
 #include "config/CgiConfig.hpp"
 #include "config/RedirectConfig.hpp"
@@ -18,7 +18,7 @@ struct LocationConfig {
     std::optional<std::string> index;
     std::optional<std::size_t> clientMaxBodySize;
 
-    std::unordered_set<HttpMethod> allowedMethods;
+    std::set<HttpMethod> allowedMethods;
 
     bool autoindex = false;
 
