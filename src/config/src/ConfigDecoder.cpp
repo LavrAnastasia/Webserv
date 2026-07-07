@@ -6,6 +6,7 @@
 #include "ConfigDecoder.hpp"
 #include "ConfigDecodingError.hpp"
 #include "http/HttpMethod.hpp"
+#include "http/HttpMethodUtils.hpp"
 
 namespace {
     std::string decodeHost(std::string_view value) {
@@ -172,19 +173,13 @@ std::set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>
     std::set<HttpMethod> methods;
 
     for (const std::string& value : values) {
-        HttpMethod method;
+        std::optional<HttpMethod> method = Http::Method::fromString(value);
 
-        if (value == "GET") {
-            method = HttpMethod::Get;
-        } else if (value == "POST") {
-            method = HttpMethod::Post;
-        } else if (value == "DELETE") {
-            method = HttpMethod::Delete;
-        } else {
+        if (!method) {
             throw ConfigDecodingError(ConfigDecodingError::Reason::UnsupportedValue, "method: " + value);
         }
 
-        if (!methods.insert(method).second) {
+        if (!methods.insert(method.value()).second) {
             throw ConfigDecodingError(ConfigDecodingError::Reason::Duplicate, "method: " + value);
         }
     }

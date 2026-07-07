@@ -1,6 +1,7 @@
 #include "RequestLineParser.hpp"
-#include "HttpMethodUtils.hpp"
 #include "HttpUtils.hpp"
+
+#include "http/HttpMethodUtils.hpp"
 
 #include <algorithm>
 #include <vector>
