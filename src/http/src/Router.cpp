@@ -1,6 +1,7 @@
 #include "Router.hpp"
 
 #include "HttpUtils.hpp"
+#include <filesystem>
 
 namespace {
     const std::string kPathSeparator(1, Http::Syntax::PathPrefix);
@@ -40,13 +41,13 @@ namespace {
             return std::nullopt;
         }
 
-        const auto cgi = location.cgi.find(extension);
+        const auto cgiIt = location.cgi.find(extension);
 
-        if (cgi == location.cgi.end()) {
+        if (cgiIt == location.cgi.end()) {
             return std::nullopt;
         }
 
-        return cgi->second;
+        return cgiIt->second;
     }
 } // namespace
 
