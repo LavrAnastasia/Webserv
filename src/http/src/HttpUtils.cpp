@@ -1,7 +1,8 @@
-#include "HttpUtils.hpp"
-
 #include <algorithm>
 #include <cctype>
+
+#include "HttpSyntax.hpp"
+#include "HttpUtils.hpp"
 
 namespace Http::Ascii {
     namespace {

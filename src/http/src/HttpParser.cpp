@@ -1,10 +1,11 @@
-#include "http/HttpParser.hpp"
-#include "HttpUtils.hpp"
 #include <charconv>
 #include <string_view>
 
 #include "HeadersParser.hpp"
+#include "HttpSyntax.hpp"
+#include "HttpUtils.hpp"
 #include "RequestLineParser.hpp"
+#include "http/HttpParser.hpp"
 
 namespace {
     constexpr std::size_t MAX_START_LINE_SIZE = 8192;
