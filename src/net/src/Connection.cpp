@@ -6,7 +6,7 @@
 
 Connection::Connection(int fd, const std::string& ip, const ServerConfig& config)
     : clientIp_(ip), currentState_(State::READING), serverConfig_(config),
-    lastActivity_(std::chrono::steady_clock::now()) {
+      lastActivity_(std::chrono::steady_clock::now()) {
     setFd(fd);
     setNonBlocking();
 }
