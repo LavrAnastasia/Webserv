@@ -1,16 +1,15 @@
 #pragma once
 
 #include <filesystem>
-#include <map>
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 #include "config/CgiConfig.hpp"
 #include "config/RedirectConfig.hpp"
 #include "config/UploadConfig.hpp"
 #include "http/HttpMethod.hpp"
-#include "http/HttpStatus.hpp"
 
 struct ResolvedRoute {
     std::string locationPath;
@@ -26,5 +25,5 @@ struct ResolvedRoute {
     std::optional<UploadConfig> upload;
     std::optional<CgiConfig> cgi;
 
-    std::map<HttpStatus, std::filesystem::path> errorPages;
+    std::unordered_map<int, std::filesystem::path> errorPages;
 };
