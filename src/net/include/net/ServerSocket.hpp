@@ -40,9 +40,6 @@ public:
     ServerSocket mySocket = 8080
     With the addition of the second parameter, this is not necessary
 
-    Manual destructor necessary, because the port corresponding to fd_ needs
-    to be closed when the object is destroyed.
-
     Non-blocking being set in a dedicated method, instead of eg. inside the
     class constructor is considered best practice because of: 1. separation of
     concerns and 2. reusability
