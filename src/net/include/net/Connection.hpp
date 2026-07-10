@@ -43,14 +43,10 @@
 struct ServerConfig;
 
 class Connection : public Socket {
-public:
-    enum class State { READING, WRITING, CLOSED };
-
 private:
     std::string clientIp_;
     std::string receiveBuffer_;
     std::string sendBuffer_;
-    State currentState_;
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
 
@@ -58,7 +54,6 @@ public:
     Connection(int fd, const std::string& ip, const ServerConfig& config);
 
     const std::string& getClientIp() const { return clientIp_; }
-    State getState() const { return currentState_; }
 
     //get server configuration to access rule sets
     const ServerConfig& getServerConfig() const { return serverConfig_; }
