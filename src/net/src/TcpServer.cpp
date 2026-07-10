@@ -1,8 +1,8 @@
 #include "net/TcpServer.hpp"
 #include "net/ServerSocket.hpp"
 
-TcpServer::TcpServer(const Configuration& config) : config_(config) {
-    socketManager_.createServers(config_.servers);
+TcpServer::TcpServer(const Configuration& config) {
+    socketManager_.createServers(config.servers);
 }
 
 /*

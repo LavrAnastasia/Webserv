@@ -17,9 +17,6 @@ class TcpServer {
 private:
     //mapping of ports to FDs is handled inside the SocketManager's ServerSocket objects
     SocketManager socketManager_;
-    //main owns Config struct -> avoid deep copy and only store reference here
-    const Configuration& config_;
-
 
 public:
     /*
