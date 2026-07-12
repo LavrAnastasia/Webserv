@@ -61,10 +61,12 @@ std::vector<Token> ConfigLexer::run() {
 
         it = std::find_if(it, source_.end(), isWordTerminator);
 
-        result.push_back(Token{
-            .type = TokenType::Word,
-            .value = std::string(start, it),
-        });
+        result.push_back(
+            Token{
+                .type = TokenType::Word,
+                .value = std::string(start, it),
+            }
+        );
     }
 
     return result;

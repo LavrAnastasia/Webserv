@@ -6,6 +6,7 @@
 #include "ConfigDecoder.hpp"
 #include "ConfigDecodingError.hpp"
 #include "http/HttpMethod.hpp"
+#include "http/HttpMethodUtils.hpp"
 
 namespace {
     std::string decodeHost(std::string_view value) {
@@ -168,23 +169,17 @@ std::unordered_map<int, std::filesystem::path> ConfigDecoder::decodeErrorPage(co
     return pages;
 }
 
-std::unordered_set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>& values) {
-    std::unordered_set<HttpMethod> methods;
+std::set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>& values) {
+    std::set<HttpMethod> methods;
 
     for (const std::string& value : values) {
-        HttpMethod method;
+        std::optional<HttpMethod> method = Http::Method::fromString(value);
 
-        if (value == "GET") {
-            method = HttpMethod::Get;
-        } else if (value == "POST") {
-            method = HttpMethod::Post;
-        } else if (value == "DELETE") {
-            method = HttpMethod::Delete;
-        } else {
+        if (!method) {
             throw ConfigDecodingError(ConfigDecodingError::Reason::UnsupportedValue, "method: " + value);
         }
 
-        if (!methods.insert(method).second) {
+        if (!methods.insert(method.value()).second) {
             throw ConfigDecodingError(ConfigDecodingError::Reason::Duplicate, "method: " + value);
         }
     }

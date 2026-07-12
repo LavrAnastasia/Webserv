@@ -1,10 +1,9 @@
-#include "RequestLineParser.hpp"
-#include "HttpMethodUtils.hpp"
-#include "HttpUtils.hpp"
-
 #include <algorithm>
 #include <vector>
 
+#include "HttpSyntax.hpp"
+#include "RequestLineParser.hpp"
+#include "http/HttpMethodUtils.hpp"
 
 namespace {
     std::optional<std::vector<std::string>> tokenizeRequestLine(const std::string& line) {

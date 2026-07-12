@@ -11,18 +11,19 @@
 #include "config/UploadConfig.hpp"
 #include "http/HttpMethod.hpp"
 
-struct LocationConfig {
-    std::string path;
+struct ResolvedRoute {
+    std::string locationPath;
 
-    std::optional<std::filesystem::path> root;
-    std::optional<std::string> index;
-    std::optional<std::size_t> clientMaxBodySize;
+    std::filesystem::path root;
+    std::string index;
+    std::size_t clientMaxBodySize;
 
     std::set<HttpMethod> allowedMethods;
-
     bool autoindex = false;
 
     std::optional<RedirectConfig> redirect;
     std::optional<UploadConfig> upload;
-    std::unordered_map<std::string, CgiConfig> cgi;
+    std::optional<CgiConfig> cgi;
+
+    std::unordered_map<int, std::filesystem::path> errorPages;
 };
