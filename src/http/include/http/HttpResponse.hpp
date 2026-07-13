@@ -1,0 +1,40 @@
+#pragma once
+
+#include "http/HttpHeaders.hpp"
+#include "src/HttpUtils.hpp"
+
+enum class ConnectionPreference {
+    KeepAlive,
+    Close,
+};
+
+class HttpResponse {
+private:
+    int _statusCode{200};
+    std::string _reasonPhrase{"OK"};
+    HttpHeaders _headers;
+    std::string _body;
+
+    ConnectionPreference _connectionPreference{ConnectionPreference::KeepAlive};
+
+public:
+    HttpResponse() = default;
+
+    void setStatus(int statusCode);
+
+    void setStatus(int statusCode, std::string reasonPhrase);
+
+    int statusCode() const noexcept;
+
+    std::string_view reasonPhrase() const noexcept;
+
+    void setHeader(std::string name, std::string value);
+
+    bool removeHeader(const std::string& name);
+
+    bool hasHeader(const std::string& name) const;
+
+    std::optional<std::string> header(const std::string& name) const;
+
+    const HttpHeaders& headers() const noexcept;
+};

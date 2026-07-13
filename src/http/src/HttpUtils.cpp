@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cctype>
 
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
@@ -43,3 +42,29 @@ namespace Http::Ascii {
     }
 
 } // namespace Http::Ascii
+
+namespace Http::Header {
+    bool isValidName(const std::string& name) {
+        return !name.empty() && std::ranges::all_of(name, [](char c) {
+            unsigned char uc = static_cast<unsigned char>(c);
+
+            return uc > 32 && uc < 127 && std::string_view(":()<>@,;\\\"/[]?={}").find(c) == std::string_view::npos;
+        });
+    }
+
+    bool isValidValue(const std::string& value) {
+        std::size_t index = 0;
+
+        while (index < value.size()) {
+            char c = value[index];
+            unsigned char uc = static_cast<unsigned char>(c);
+
+            if ((uc < 32 && c != Http::Syntax::HTAB) || uc == 127)
+                return false;
+
+            ++index;
+        }
+
+        return true;
+    }
+} // namespace Http::Header
