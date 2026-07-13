@@ -1,12 +1,11 @@
 #include <algorithm>
-#include <cctype>
 
 #include "HttpUtils.hpp"
 #include "http/HttpHeaders.hpp"
 
 bool HttpHeaders::equals(std::string_view a, std::string_view b) {
     return std::ranges::equal(a, b, [](char lhs, char rhs) {
-        return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
+        return Http::Ascii::tolower(lhs) == Http::Ascii::tolower(rhs);
     });
 }
 
