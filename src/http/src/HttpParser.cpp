@@ -2,6 +2,7 @@
 #include <string_view>
 
 #include "HeadersParser.hpp"
+#include "HttpHeadersUtils.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 #include "RequestLineParser.hpp"
@@ -117,16 +118,16 @@ bool HttpParser::handleHeaders() {
         return true;
     }
 
-    if (!headers.value().has(std::string(Http::Header::Host))) {
+    if (!headers.value().has(std::string(Http::Headers::Host))) {
         _state = ParserState::Error;
         return true;
     }
     _request.headers = headers.value();
 
-    std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Header::TransferEncoding));
+    std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Headers::TransferEncoding));
 
     if (transferEncoding) {
-        if (Http::Ascii::tolower(*transferEncoding) == Http::Header::ChunkedValue) {
+        if (Http::Ascii::tolower(*transferEncoding) == Http::Headers::ChunkedValue) {
             _state = ParserState::ChunkSize;
             return true;
         }
@@ -236,7 +237,7 @@ bool HttpParser::handleChunkData() {
 }
 
 bool HttpParser::loadContentLength() {
-    std::optional<std::string> contentLengthValue = _request.headers.get(std::string(Http::Header::ContentLength));
+    std::optional<std::string> contentLengthValue = _request.headers.get(std::string(Http::Headers::ContentLength));
 
     if (!contentLengthValue) {
         _contentLength = 0;

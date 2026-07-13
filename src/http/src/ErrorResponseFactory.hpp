@@ -10,4 +10,4 @@ public:
     static HttpResponse create(HttpStatus status);
 
     static HttpResponse create(HttpStatus status, const ResolvedRoute& route);
-}
+};

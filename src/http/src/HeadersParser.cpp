@@ -1,6 +1,7 @@
 #include <algorithm>
 
 #include "HeadersParser.hpp"
+#include "HttpHeadersUtils.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 #include "http/HttpHeaders.hpp"
@@ -41,10 +42,10 @@ namespace {
         if (headers.has(key))
             return false;
 
-        if (key == Http::Header::ContentLength && headers.has(std::string(Http::Header::TransferEncoding)))
+        if (key == Http::Headers::ContentLength && headers.has(std::string(Http::Headers::TransferEncoding)))
             return false;
 
-        if (key == Http::Header::TransferEncoding && headers.has(std::string(Http::Header::ContentLength)))
+        if (key == Http::Headers::TransferEncoding && headers.has(std::string(Http::Headers::ContentLength)))
             return false;
 
         return true;
