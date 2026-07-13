@@ -37,4 +37,22 @@ public:
     std::optional<std::string> header(const std::string& name) const;
 
     const HttpHeaders& headers() const noexcept;
+
+    void setBody(std::string body);
+
+    void setBody(std::string body, std::string contentType);
+
+    void clearBody() noexcept;
+
+    std::string_view body() const noexcept;
+
+    void setConnectionPreference(ConnectionPreference preference) noexcept;
+
+    ConnectionPreference connectionPreference() const noexcept;
+
+    bool shouldCloseConnection() const noexcept;
+
+    static HttpResponse error(int statusCode, std::string body = {});
+
+    static HttpResponse redirect(int statusCode, std::string target);
 };

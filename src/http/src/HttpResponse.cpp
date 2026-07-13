@@ -153,3 +153,73 @@ std::optional<std::string> HttpResponse::header(const std::string& name) const {
 const HttpHeaders& HttpResponse::headers() const noexcept {
     return _headers;
 }
+
+void HttpResponse::setBody(std::string body) {
+    _body = std::move(body);
+}
+
+void HttpResponse::setBody(std::string body, std::string contentType) {
+    _body = std::move(body);
+
+    setHeader("Content-Type", std::move(contentType));
+}
+
+void HttpResponse::clearBody() noexcept {
+    _body.clear();
+}
+
+std::string_view HttpResponse::body() const noexcept {
+    return _body;
+}
+
+void HttpResponse::setConnectionPreference(ConnectionPreference preference) noexcept {
+    _connectionPreference = preference;
+}
+
+ConnectionPreference HttpResponse::connectionPreference() const noexcept {
+    return _connectionPreference;
+}
+
+bool HttpResponse::shouldCloseConnection() const noexcept {
+    return _connectionPreference == ConnectionPreference::Close;
+}
+
+HttpResponse HttpResponse::error(int statusCode, std::string body) {
+    if (statusCode < 400 || statusCode > 599) {
+        throw std::invalid_argument(
+            "error response requires "
+            "a 4xx or 5xx status"
+        );
+    }
+
+    HttpResponse response;
+    response.setStatus(statusCode);
+
+    if (body.empty()) {
+        body = std::to_string(statusCode);
+        body += ' ';
+        body += response.reasonPhrase();
+        body += '\n';
+    }
+
+    response.setBody(std::move(body), "text/plain; charset=utf-8");
+
+    return response;
+}
+
+HttpResponse HttpResponse::redirect(int statusCode, std::string target) {
+    if (!isRedirectStatus(statusCode)) {
+        throw std::invalid_argument("unsupported redirect status code");
+    }
+
+    HttpResponse response;
+    response.setStatus(statusCode);
+
+    std::string body = "Redirecting to " + target + "\n";
+
+    response.setHeader("Location", std::move(target));
+
+    response.setBody(std::move(body), "text/plain; charset=utf-8");
+
+    return response;
+}
