@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cctype>
 
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"

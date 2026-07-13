@@ -12,3 +12,7 @@ namespace Http::Ascii {
 namespace Http::TransferCoding {
     constexpr std::string_view Chunked = "chunked";
 } // namespace Http::TransferCoding
+
+namespace Http::ContentType {
+    constexpr std::string_view Html = "text/html";
+}
