@@ -1,11 +1,10 @@
-
 #pragma once
 
 #include <string_view>
 
 namespace Http::Headers {
-    constexpr std::string_view ContentLength = "content-length";
-    constexpr std::string_view TransferEncoding = "transfer-encoding";
-    constexpr std::string_view ChunkedValue = "chunked";
-    constexpr std::string_view Host = "host";
+    constexpr std::string_view ContentLength = "Content-Length";
+    constexpr std::string_view ContentType = "Content-Type";
+    constexpr std::string_view TransferEncoding = "Transfer-Encoding";
+    constexpr std::string_view Host = "Host";
 } // namespace Http::Headers

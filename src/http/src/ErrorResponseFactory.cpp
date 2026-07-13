@@ -15,10 +15,10 @@ namespace {
         const std::string reason = Http::Status::toString(status);
 
         return "<!DOCTYPE html>\n"
-            "<html lang=\"en\">\n"
-            "<head>\n"
-            "    <meta charset=\"UTF-8\">\n"
-            "    <title>" +
+               "<html lang=\"en\">\n"
+               "<head>\n"
+               "    <meta charset=\"UTF-8\">\n"
+               "    <title>" +
             std::to_string(statusCode) + " " + reason +
             "</title>\n"
             "</head>\n"

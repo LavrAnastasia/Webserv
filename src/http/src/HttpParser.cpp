@@ -127,7 +127,7 @@ bool HttpParser::handleHeaders() {
     std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Headers::TransferEncoding));
 
     if (transferEncoding) {
-        if (Http::Ascii::tolower(*transferEncoding) == Http::Headers::ChunkedValue) {
+        if (Http::Ascii::tolower(*transferEncoding) == Http::TransferCoding::Chunked) {
             _state = ParserState::ChunkSize;
             return true;
         }
