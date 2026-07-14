@@ -48,30 +48,44 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         connectionRegistry_.removeConnection(clientFd);
         return;
     }
-    //receive phase (OS read bucket has data)
+    //reading phase (OS kernel receive buffer has data)
     if (events & POLLIN) {
-        if (!connection->receiveRequest()) {
-            //client disconnected
+        //feed bytes from OS kernel's socket buffer into parser and receive status
+        ParseResult result = connection->receiveRequest();
+        /*
+            placeholder response to verify network layer functionality:
+            prepare response when parser is done
+        */
+        if (result.status == ParseStatus::Complete) {
+            /*
+                TODO: integrate with Router logic!
+            */
+            //get path from parsed request
+            std::string path = result.request->path;
+            //create body
+            std::string body = "<html><body><h1>:)</h1><p>Requested: " + path + "</p></body></html>";
+            //create full response
+            std::string response = "HTTP/1.1 200 OK\r\n"
+                                   "Content-Length: " +
+                std::to_string(body.length()) +
+                "\r\n"
+                "Content-Type: text/html\r\n"
+                "\r\n" +
+                body;
+            connection->appendResponse(response);
+            poller_.modifySocket(clientFd, POLLOUT);
+        }
+        // fail case: unable to parse client request, or client disconnected (recv == 0)
+        else if (result.status == ParseStatus::BadRequest) {
             poller_.removeSocket(clientFd);
             connectionRegistry_.removeConnection(clientFd);
             return;
         }
         /*
-            TODO: integrate with HTTP parser
-            HttpParseResult result = httpParser.parse(connection->getReceiveBuffer());
-            if (result.status == Complete) {
-                connection->appendResponse(***)
-            }
+            case 'NeedMoreData': do nothing and wait for next loop - no POLLOUT switch
         */
-
-        //placeholder response to verify network layer functionality
-        if (!connection->getReceiveBuffer().empty()) {
-            connection->appendResponse(
-                "HTTP/1.1 200 OK\r\nContent-Length: 37\r\n\r\n<html><body><h1>:)</h1></body></html>"
-            );
-            poller_.modifySocket(clientFd, POLLOUT);
-        }
     }
+
     //send phase (OS write bucket has space)
     if (events & POLLOUT) {
         if (!connection->sendResponse()) {
@@ -82,8 +96,17 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         }
 
         if (connection->isSendComplete()) {
-            // TODO: setKeepAlive later (net + http layer integration)
-            //tells poller send phase is done, now watch for new requests
+            /*
+                TODO: implement setKeepAlive logic for  (net + http layer integration)
+                check HttpRequest headers: does request require us to close connection?
+                if (shouldClose) {
+                    poller_.removeSocket(clientFd);
+                    connectionRegistry_.removeConnection(clientFd);
+                    return;
+                }
+
+            */
+            // else: default case: keep socket open for next request
             poller_.modifySocket(clientFd, POLLIN);
         }
     }
