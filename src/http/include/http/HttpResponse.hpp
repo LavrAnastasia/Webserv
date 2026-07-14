@@ -1,7 +1,6 @@
 #pragma once
 
 #include "http/HttpHeaders.hpp"
-#include "src/HttpUtils.hpp"
 
 enum class ConnectionPreference {
     KeepAlive,

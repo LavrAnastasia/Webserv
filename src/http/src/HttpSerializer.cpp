@@ -1,6 +1,7 @@
 #include <ctime>
 #include <stdexcept>
 
+#include "HttpUtils.hpp"
 #include "http/HttpSerializer.hpp"
 
 namespace {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "http/HttpResponse.hpp"
-#include "src/HttpUtils.hpp"
 
 class HttpSerializer {
 public:

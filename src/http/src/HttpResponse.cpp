@@ -1,5 +1,6 @@
 #include <stdexcept>
 
+#include "HttpUtils.hpp"
 #include "http/HttpResponse.hpp"
 
 namespace {
@@ -88,7 +89,8 @@ namespace {
     }
 
     bool isManagedHeader(const std::string& key) {
-        return key == Http::Header::ContentLength || key == Http::Header::TransferEncoding || key == "connection";
+        return key == Http::Header::ContentLength || key == Http::Header::TransferEncoding ||
+            key == Http::Header::Connection;
     }
 } // namespace
 
@@ -159,9 +161,8 @@ void HttpResponse::setBody(std::string body) {
 }
 
 void HttpResponse::setBody(std::string body, std::string contentType) {
-    _body = std::move(body);
-
     setHeader("Content-Type", std::move(contentType));
+    _body = std::move(body);
 }
 
 void HttpResponse::clearBody() noexcept {
