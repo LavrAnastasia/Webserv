@@ -47,6 +47,7 @@ private:
     std::string sendBuffer_;
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
+    bool shouldClose_;
 
 public:
     Connection(int fd, const std::string& ip, const ServerConfig& config);
@@ -58,6 +59,9 @@ public:
 
     //allows EventLoop to access parser_ if necessary
     const HttpParser& getParser() const { return parser_; }
+    void setShouldClose(bool state) { shouldClose_ = state; }
+    bool shouldClose() const { return shouldClose_; }
+    void resetParser() { parser_ = HttpParser(); }
 
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN
     bool isSendComplete() const { return sendBuffer_.empty(); }
@@ -72,3 +76,7 @@ public:
     bool sendResponse();
     bool hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const;
 };
+
+//added bool shouldClose_
+//added helpers setShouldClose(), shouldClose()
+//added resetParser()

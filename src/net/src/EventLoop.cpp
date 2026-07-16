@@ -52,19 +52,14 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     if (events & POLLIN) {
         //feed bytes from OS kernel's socket buffer into parser and receive status
         ParseResult result = connection->receiveRequest();
-        /*
-            placeholder response to verify network layer functionality:
-            prepare response when parser is done
-        */
+
         if (result.status == ParseStatus::Complete) {
-            /*
-                TODO: integrate with Router logic!
-            */
-            //get path from parsed request
+            // TODO: WEB-28 RequestHandler integration
+            //PLACEHOLDER: get path from parsed request
             std::string path = result.request->path;
-            //create body
+            //PLACEHOLDER: create body
             std::string body = "<html><body><h1>:)</h1><p>Requested: " + path + "</p></body></html>";
-            //create full response
+            //PLACEHOLDER: create full response
             std::string response = "HTTP/1.1 200 OK\r\n"
                                    "Content-Length: " +
                 std::to_string(body.length()) +
@@ -75,11 +70,15 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             connection->appendResponse(response);
             poller_.modifySocket(clientFd, POLLOUT);
         }
-        // fail case: unable to parse client request, or client disconnected (recv == 0)
+        /*
+        fail case: unable to parse client request, or client disconnected (recv == 0)
+        REQUIREMENT: build error response and close connection after sending!
+        */
         else if (result.status == ParseStatus::BadRequest) {
-            poller_.removeSocket(clientFd);
-            connectionRegistry_.removeConnection(clientFd);
-            return;
+            // TODO: WEB-29 ErrorResponseFactory integration
+            connection->appendResponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n");
+            connection->setShouldClose(true);
+            poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
         /*
             case 'NeedMoreData': do nothing and wait for next loop - no POLLOUT switch
@@ -96,18 +95,13 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         }
 
         if (connection->isSendComplete()) {
-            /*
-                TODO: implement setKeepAlive logic for  (net + http layer integration)
-                check HttpRequest headers: does request require us to close connection?
-                if (shouldClose) {
-                    poller_.removeSocket(clientFd);
-                    connectionRegistry_.removeConnection(clientFd);
-                    return;
-                }
-
-            */
-            // else: default case: keep socket open for next request
-            poller_.modifySocket(clientFd, POLLIN);
+            if (connection->shouldClose()) {
+                poller_.removeSocket(clientFd);
+                connectionRegistry_.removeConnection(clientFd);
+            } else {
+                connection->resetParser();
+                poller_.modifySocket(clientFd, POLLIN);
+            }
         }
     }
 }
