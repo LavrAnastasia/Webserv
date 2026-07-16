@@ -68,7 +68,9 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.root = location->root.value_or(server.root);
     route.index = location->index.value_or(server.index);
     route.clientMaxBodySize = location->clientMaxBodySize.value_or(server.clientMaxBodySize);
-    route.errorPages = server.errorPages;
+    for (const auto& [code, page] : server.errorPages) {
+        route.errorPages.emplace(code, route.root / page.relative_path());
+    }
 
     route.allowedMethods = location->allowedMethods;
     route.autoindex = location->autoindex;
