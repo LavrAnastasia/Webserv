@@ -52,14 +52,14 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     if (events & POLLIN) {
         //feed bytes from OS kernel's socket buffer into parser and receive status
         ParseResult result = connection->receiveRequest();
-
+        // Parsing complete -> build response from HttpRequest
         if (result.status == ParseStatus::Complete) {
             // TODO: WEB-28 RequestHandler integration
-            //PLACEHOLDER: get path from parsed request
+            //PLACEHOLDER RESPONSE: get path from parsed request
             std::string path = result.request->path;
-            //PLACEHOLDER: create body
+            //PLACEHOLDER RESPONSE: create body
             std::string body = "<html><body><h1>:)</h1><p>Requested: " + path + "</p></body></html>";
-            //PLACEHOLDER: create full response
+            //PLACEHOLDER RESPONSE: create full response
             std::string response = "HTTP/1.1 200 OK\r\n"
                                    "Content-Length: " +
                 std::to_string(body.length()) +
@@ -72,7 +72,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         }
         /*
         fail case: unable to parse client request, or client disconnected (recv == 0)
-        REQUIREMENT: build error response and close connection after sending!
+        -> build error response and close connection after sending!
         */
         else if (result.status == ParseStatus::BadRequest) {
             // TODO: WEB-29 ErrorResponseFactory integration
@@ -81,7 +81,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
         /*
-            case 'NeedMoreData': do nothing and wait for next loop - no POLLOUT switch
+            case 'NeedMoreData' -> do nothing and wait for next loop - no POLLOUT switch
         */
     }
 
