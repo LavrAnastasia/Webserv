@@ -2,10 +2,38 @@
 #include "net/TcpServer.hpp"
 #include <algorithm>
 #include <chrono>
+#include <csignal> //for std::signal and SIGINT
 #include <exception>
 #include <iostream>
 #include <unistd.h> //for close()
 #include <vector>
+
+EventLoop* EventLoop::instance_ = nullptr;
+
+/*
+    -registers the functions we want to call when a specific signal
+    is received, with the OS signal system
+    -instance_ is initialized here, so the signal handler can't call
+    stop() on an EventLoop object that hasn't been fully constructed yet;
+*/
+void EventLoop::registerSignalHandler(EventLoop* instance) {
+    instance_ = instance;
+    std::signal(SIGINT, EventLoop::handleSignal); //Ctrl+C
+    std::signal(SIGTERM, EventLoop::handleSignal); //system kill command
+}
+
+/*
+    Static function is "objectless" -it has no 'this' pointer
+    -> this is required so the OS signal system (written in C) can call it
+    -> this also makes the function 'blind', so we need the static pointer
+    to access our loop instance
+*/
+void EventLoop::handleSignal(int sig) {
+    (void)sig;
+    if (instance_) {
+        instance_->stop();
+    }
+}
 
 void EventLoop::handleNewConnection(int listenFd) {
     //auto allows nullopt return
