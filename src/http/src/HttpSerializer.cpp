@@ -1,6 +1,7 @@
 #include <ctime>
 #include <stdexcept>
 
+#include "HttpStatusUtils.hpp"
 #include "HttpUtils.hpp"
 #include "http/HttpSerializer.hpp"
 
@@ -39,8 +40,8 @@ namespace {
 } // namespace
 
 std::string HttpSerializer::serialize(const HttpResponse& response, bool headersOnly) {
-    const int statusCode = response.statusCode();
-    const auto body = response.body();
+    const int statusCode = static_cast<int>(response.status);
+    const std::string& body = response.body;
 
     const bool bodyForbidden = statusForbidsBody(statusCode);
 
@@ -54,34 +55,26 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
     output.append("HTTP/1.1 ")
         .append(std::to_string(statusCode))
         .append(" ")
-        .append(response.reasonPhrase())
+        .append(Http::Status::toString(response.status))
         .append("\r\n");
 
-    for (const auto& [name, value] : response.headers().entries()) {
+    for (const auto& [name, value] : response.headers.entries()) {
         appendHeader(output, name, value);
     }
 
-    if (!response.hasHeader("Date")) {
+    if (!response.headers.has("Date")) {
         appendHeader(output, "Date", httpDate());
     }
 
-    if (!response.hasHeader("Server")) {
+    if (!response.headers.has("Server")) {
         appendHeader(output, "Server", "webserv");
     }
 
-    appendHeader(output, "Connection", response.shouldCloseConnection() ? "close" : "keep-alive");
-
-    if (!bodyForbidden && !body.empty() && !response.hasHeader("Content-Type")) {
-        appendHeader(output, "Content-Type", "text/plain; charset=utf-8");
-    }
-
-    if (!bodyForbidden) {
-        appendHeader(output, "Content-Length", std::to_string(body.size()));
-    }
     output.append("\r\n");
 
-    if (!headersOnly && !bodyForbidden)
+    if (!headersOnly && !bodyForbidden) {
         output.append(body);
+    }
 
     return output;
 }
