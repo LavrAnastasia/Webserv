@@ -70,6 +70,10 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         appendHeader(output, "Server", "webserv");
     }
 
+    if (!bodyForbidden && !response.headers.has("Content-Length")) {
+        appendHeader(output, "Content-Length", std::to_string(body.size()));
+    }
+
     output.append("\r\n");
 
     if (!headersOnly && !bodyForbidden) {
