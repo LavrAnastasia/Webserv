@@ -59,6 +59,16 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         .append("\r\n");
 
     for (const auto& [name, value] : response.headers.entries()) {
+        // if (HttpHeaders::equals(name, "Content-Length")) {   add this after rebase
+        //     continue;
+        // }
+
+        // if (HttpHeaders::equals(name, "Transfer-Encoding")) {
+        //     throw std::invalid_argument(
+        //         "transfer encoding is not supported"
+        //     );
+        // }
+
         appendHeader(output, name, value);
     }
 
@@ -70,10 +80,9 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         appendHeader(output, "Server", "webserv");
     }
 
-    if (!bodyForbidden && !response.headers.has("Content-Length")) {
+    if (!bodyForbidden) {
         appendHeader(output, "Content-Length", std::to_string(body.size()));
     }
-
     output.append("\r\n");
 
     if (!headersOnly && !bodyForbidden) {
