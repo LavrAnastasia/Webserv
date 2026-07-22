@@ -30,7 +30,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	HttpUtils.cpp \
 	HeadersParser.cpp \
 	Router.cpp \
-	HttpResponse.cpp \
+	HttpStatusUtils.cpp \
 	HttpSerializer.cpp \
 )
 
