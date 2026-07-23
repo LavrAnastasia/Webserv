@@ -5,24 +5,24 @@
 
 namespace Http::Ascii {
     namespace {
-        char toLowerAsciiChar(char c) {
-            unsigned char uc = static_cast<unsigned char>(c);
-
-            if (uc >= 'A' && uc <= 'Z') {
-                return static_cast<char>(uc - 'A' + 'a');
-            }
-
-            return c;
-        }
-
         bool isWhiteSpace(char c) {
             return c == Http::Syntax::SP || c == Http::Syntax::HTAB;
         }
     } // namespace
+
+    char tolower(char c) {
+        unsigned char uc = static_cast<unsigned char>(c);
+
+        if (uc >= 'A' && uc <= 'Z') {
+            return static_cast<char>(uc - 'A' + 'a');
+        }
+
+        return c;
+    }
     std::string tolower(const std::string& value) {
         std::string result = value;
 
-        std::transform(result.begin(), result.end(), result.begin(), [](char c) { return toLowerAsciiChar(c); });
+        std::transform(result.begin(), result.end(), result.begin(), [](char c) { return tolower(c); });
 
         return result;
     }

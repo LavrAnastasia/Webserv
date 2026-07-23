@@ -1,10 +1,12 @@
 NAME := webserv
 
 CXX := c++
-CXXFLAGS := -std=c++23 -Wall -Wextra -Werror
+CXXFLAGS := -std=c++20 -Wall -Wextra -Werror
 INCLUDES := \
 	-Isrc/http/include \
-	-Isrc/config/include
+	-Isrc/config/include \
+	-Isrc/net/include
+
 DEPFLAGS := -MMD -MP
 
 CONFIG_SRC := $(addprefix src/config/src/, \
@@ -30,14 +32,27 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	HttpUtils.cpp \
 	HeadersParser.cpp \
 	Router.cpp \
+	ErrorResponseFactory.cpp \
+	HttpResponseFactory.cpp \
 	HttpStatusUtils.cpp \
-	HttpSerializer.cpp \
+  HttpSerializer.cpp \
 )
+
+NET_SRC := \
+	src/net/src/Socket.cpp \
+	src/net/src/ServerSocket.cpp \
+	src/net/src/SocketManager.cpp \
+	src/net/src/Connection.cpp \
+	src/net/src/ConnectionRegistry.cpp \
+	src/net/src/Poller.cpp \
+	src/net/src/TcpServer.cpp \
+	src/net/src/EventLoop.cpp
 
 SRC := \
 	app/main.cpp \
 	${CONFIG_SRC} \
-	${HTTP_SRC}
+	${HTTP_SRC} \
+	${NET_SRC}
 
 BUILD_DIR := build
 

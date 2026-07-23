@@ -1,0 +1,67 @@
+#include "net/ConnectionRegistry.hpp"
+
+/*
+    -called by TCP server when new client connects
+    -creates a key/value pair in activeConnections_,
+    where the fd is the key and a Connection object is the value
+
+    try_emplace(fd, fd, ip, config);
+    1. fd = map key
+    2. - 4. = constructor arguments passed to Connection constructor
+    "Calculate hash for File Descriptor *** and find the correct memory bucket,
+    then pass the rest of the arguments to the Connection constructor and build the object
+    directly in that bucket without copying -> EFFICIENT!"
+*/
+void ConnectionRegistry::addConnection(int fd, const std::string& ip, const ServerConfig* config) {
+    // dereference config to pass as reference to Connection constructor
+    activeConnections_.try_emplace(fd, fd, ip, *config);
+}
+
+/*
+    -called by event loop to clean up disconnected client
+    -erase() automatically calls the Connection destructor and
+    frees all memory. If the fd doesn't exist, erase safely does nothing
+*/
+void ConnectionRegistry::removeConnection(int fd) {
+    activeConnections_.erase(fd);
+}
+
+/*
+    called by event loop when poller indicates the fd has data
+    returns a pointer, because a reference would break and crash the program
+    in case of abrupt client disconnection
+    -find() returns an iterator pointing to the key/value pair, or end() if not found
+    -end() is a theoretical invalid memory space just past the last item in the map
+    -it->first is the KEY of the key/value pair
+    -it->second is the VALUE of the pair, in this case a Connection object
+*/
+Connection* ConnectionRegistry::getConnection(int fd) {
+    auto it = activeConnections_.find(fd);
+    if (it != activeConnections_.end()) {
+        return &(it->second);
+    }
+    return nullptr;
+}
+
+/*
+    deletes timed out connections from activeConnections_ and returns a vector
+    of the pruned fds for the poller to stop tracking
+
+    .erase(it) is an overloaded erase() specifically for loops. It automatically
+    sets it to point to the next valid item *before* destroying the current object
+*/
+std::vector<int>
+ConnectionRegistry::pruneConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime) {
+    std::vector<int> deadFds;
+
+    for (auto it = activeConnections_.begin(); it != activeConnections_.end();) {
+        if (it->second.hasTimedOut(currentTime, timeoutSeconds)) {
+            deadFds.push_back(it->first);
+            // .erase(it) avoids invalid iterator issue caused by removeConnection(it->first)
+            it = activeConnections_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return deadFds;
+}

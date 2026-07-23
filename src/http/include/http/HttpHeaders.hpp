@@ -11,6 +11,7 @@ private:
 
 public:
     using Storage = std::map<std::string, std::string>;
+    static bool equals(std::string_view a, std::string_view b);
 
     bool set(const std::string& name, const std::string& value);
     bool has(const std::string& name) const;

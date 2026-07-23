@@ -1,4 +1,5 @@
 #include "HeadersParser.hpp"
+#include "HttpHeadersUtils.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 
@@ -11,14 +12,16 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 
 namespace {
 
-    bool canStoreHeader(const HttpHeaders& headers, const std::string& key) {
-        if (headers.has(key))
+    bool canStoreHeader(const HttpHeaders& headers, const std::string& name) {
+        if (headers.has(name))
             return false;
 
-        if (key == Http::Header::ContentLength && headers.has(std::string(Http::Header::TransferEncoding)))
+        if (HttpHeaders::equals(name, Http::Headers::ContentLength) &&
+            headers.has(std::string(Http::Headers::TransferEncoding)))
             return false;
 
-        if (key == Http::Header::TransferEncoding && headers.has(std::string(Http::Header::ContentLength)))
+        if (HttpHeaders::equals(name, Http::Headers::TransferEncoding) &&
+            headers.has(std::string(Http::Headers::ContentLength)))
             return false;
 
         return true;
@@ -34,16 +37,14 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
     if (colon == std::string::npos)
         return false;
 
-    std::string name = line.substr(0, colon);
+    std::string key = line.substr(0, colon);
     std::string value = Http::Ascii::trim(line.substr(colon + 1));
 
-    if (!Http::Header::isValidName(name))
+    if (!Http::Header::isValidName(key))
         return false;
 
     if (!Http::Header::isValidValue(value))
         return false;
-
-    std::string key = Http::Ascii::tolower(name);
 
     if (!canStoreHeader(headers_, key))
         return false;

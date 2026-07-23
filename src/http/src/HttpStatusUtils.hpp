@@ -5,4 +5,4 @@
 
 namespace Http::Status {
     std::string toString(HttpStatus status);
-}
+} // namespace Http::Status
