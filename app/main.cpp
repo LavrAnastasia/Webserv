@@ -1,5 +1,6 @@
 #include "config/ConfigLoader.hpp"
-
+#include "net/EventLoop.hpp"
+#include "net/TcpServer.hpp"
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -19,28 +20,27 @@ int main(int argc, char* argv[]) {
     try {
         const Configuration config = ConfigLoader::load(argv[1]);
 
-        (void)config;
+        TcpServer server(config);
 
-        //  Run HTTP Server (app folder class)
-        //      Run TCP Server (net module)
-        //          Create, Bind, Listen, Register sockets
-        //      Run Event Loop (net module)
-        //          Runs the infinite event cycle
-        //          Waits events from Poller
-        //          Create Connection Entity
-        //          Stores Connection Entity in ConnectionRegistry
-        //          Event readable ? ->
-        //              bad/ closed/ not enough data ? skip or do some work
-        //              Connection -> get HttpRequest
-        //              Request Handler ->  make HttpResponse from HttpRequest
-        //              Serialize Response to bytes
-        //              make event ready to write
-        //          Event Writable?
-        //          write
+        EventLoop loop(server);
+
+        EventLoop::registerSignalHandler(&loop);
+
+        loop.initialize();
+
+        std::cout << "webserv: info: server listening -press Ctrl+C to shut down" << std::endl;
+
+        loop.run();
+
+        //             Request Handler ->  make HttpResponse from HttpRequest
+        //             Serialize Response to bytes
+
     } catch (const std::exception& error) {
         printError(error.what());
         return EXIT_FAILURE;
     }
+
+    std::cout << "webserv: info: graceful shutdown complete" << std::endl;
 
     return EXIT_SUCCESS;
 }
