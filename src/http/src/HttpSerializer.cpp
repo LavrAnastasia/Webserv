@@ -58,7 +58,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         .append(Http::Status::toString(response.status))
         .append("\r\n");
 
-    for (const auto& [name, value] : response.headers.entries()) {
+    for (const auto& [name, value] : response.headers) {
         if (HttpHeaders::equals(name, "Content-Length")) {
             continue;
         }

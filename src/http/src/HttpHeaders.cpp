@@ -27,7 +27,3 @@ std::optional<std::string> HttpHeaders::get(const std::string& name) const {
         return std::nullopt;
     return it->second;
 }
-
-const HttpHeaders::Storage& HttpHeaders::entries() const noexcept {
-    return _headers;
-}

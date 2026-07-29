@@ -10,11 +10,12 @@ private:
     std::map<std::string, std::string> _headers;
 
 public:
-    using Storage = std::map<std::string, std::string>;
     static bool equals(std::string_view a, std::string_view b);
 
     bool set(const std::string& name, const std::string& value);
     bool has(const std::string& name) const;
     std::optional<std::string> get(const std::string& name) const;
-    const Storage& entries() const noexcept;
+    auto begin() const noexcept { return _headers.begin(); }
+
+    auto end() const noexcept { return _headers.end(); }
 };
