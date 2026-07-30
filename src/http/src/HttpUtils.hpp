@@ -20,3 +20,7 @@ namespace Http::TransferCoding {
 namespace Http::ContentType {
     constexpr std::string_view Html = "text/html";
 }
+
+namespace Http::Server {
+    constexpr std::string_view Name = "webserv";
+} // namespace Http::Server

@@ -15,8 +15,8 @@ bool HttpHeaders::set(const std::string& name, const std::string& value) {
     return _headers.emplace(key, value).second;
 }
 
-bool HttpHeaders::has(const std::string& name) const {
-    const std::string key = Http::Ascii::tolower(name);
+bool HttpHeaders::has(std::string_view name) const {
+    const std::string key = Http::Ascii::tolower(std::string(name));
     return _headers.find(key) != _headers.end();
 }
 

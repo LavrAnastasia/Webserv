@@ -1,7 +1,10 @@
 #include <ctime>
 #include <stdexcept>
 
+#include "HttpHeadersUtils.hpp"
 #include "HttpStatusUtils.hpp"
+#include "HttpSyntax.hpp"
+#include "HttpUtils.hpp"
 #include "http/HttpSerializer.hpp"
 
 namespace {
@@ -34,8 +37,12 @@ namespace {
             status == HttpStatus::NotModified;
     }
 
-    void appendHeader(std::string& output, const std::string& name, const std::string& value) {
-        output.append(name).append(": ").append(value).append("\r\n");
+    void appendHeader(std::string& output, std::string_view name, std::string_view value) {
+        output.append(name)
+            .append(1, Http::Syntax::HeaderKeyEnd)
+            .append(1, Http::Syntax::SP)
+            .append(value)
+            .append(Http::Syntax::CRLF);
     }
 } // namespace
 
@@ -54,9 +61,9 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
 
     output.append("HTTP/1.1 ")
         .append(std::to_string(statusCode))
-        .append(" ")
+        .append(1, Http::Syntax::SP)
         .append(Http::Status::toString(response.status))
-        .append("\r\n");
+        .append(Http::Syntax::CRLF);
 
     for (const auto& [name, value] : response.headers) {
         if (HttpHeaders::equals(name, "Content-Length")) {
@@ -70,18 +77,18 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         appendHeader(output, name, value);
     }
 
-    if (!response.headers.has("Date")) {
-        appendHeader(output, "Date", httpDate());
+    if (!response.headers.has(Http::Headers::Date)) {
+        appendHeader(output, Http::Headers::Date, httpDate());
     }
 
-    if (!response.headers.has("Server")) {
-        appendHeader(output, "Server", "webserv");
+    if (!response.headers.has(Http::Headers::Server)) {
+        appendHeader(output, Http::Headers::Server, Http::Server::Name);
     }
 
     if (!bodyForbidden) {
         appendHeader(output, "Content-Length", std::to_string(body.size()));
     }
-    output.append("\r\n");
+    output.append(Http::Syntax::CRLF);
 
     if (!headersOnly && !bodyForbidden) {
         output.append(body);
