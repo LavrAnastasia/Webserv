@@ -17,7 +17,9 @@ namespace {
 
         char buffer[64]{};
 
-        const std::size_t size = std::strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", &time);
+        const std::size_t size = std::strftime(
+            buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", &time
+        ); //TOD0: replace with fixed RFC 7231 day/month tables
 
         if (size == 0) {
             throw std::runtime_error("failed to format HTTP date");
@@ -26,8 +28,11 @@ namespace {
         return std::string(buffer, size);
     }
 
-    bool statusForbidsBody(int statusCode) {
-        return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304;
+    bool statusForbidsBody(HttpStatus status) {
+        const int statusCode = static_cast<int>(status);
+
+        return (statusCode >= 100 && statusCode < 200) || status == HttpStatus::NoContent ||
+            status == HttpStatus::NotModified;
     }
 
     void appendHeader(std::string& output, const std::string& name, const std::string& value) {
@@ -43,7 +48,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
     const int statusCode = static_cast<int>(response.status);
     const std::string& body = response.body;
 
-    const bool bodyForbidden = statusForbidsBody(statusCode);
+    const bool bodyForbidden = statusForbidsBody(response.status);
 
     if (bodyForbidden && !body.empty()) {
         throw std::invalid_argument("response status does not permit a body");
