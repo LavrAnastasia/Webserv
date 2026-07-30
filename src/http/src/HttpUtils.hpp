@@ -9,10 +9,6 @@ namespace Http::Ascii {
     std::string trim(const std::string& value);
 } // namespace Http::Ascii
 
-namespace Http::Header {
-    bool isValidName(const std::string& name);
-    bool isValidValue(const std::string& value);
-} // namespace Http::Header
 namespace Http::TransferCoding {
     constexpr std::string_view Chunked = "chunked";
 } // namespace Http::TransferCoding
@@ -24,3 +20,9 @@ namespace Http::ContentType {
 namespace Http::Server {
     constexpr std::string_view Name = "webserv";
 } // namespace Http::Server
+
+namespace Http::Protocol {
+    constexpr std::string_view Name = "HTTP";
+    constexpr char VersionSeparator = '/';
+    constexpr std::string_view Version = "1.1";
+} // namespace Http::Protocol

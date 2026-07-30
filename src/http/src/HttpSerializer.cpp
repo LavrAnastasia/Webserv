@@ -46,7 +46,10 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
     std::string output;
     output.reserve(256 + body.size());
 
-    output.append("HTTP/1.1 ")
+    output.append(Http::Protocol::Name)
+        .append(1, Http::Protocol::VersionSeparator)
+        .append(Http::Protocol::Version)
+        .append(1, Http::Syntax::SP)
         .append(std::to_string(statusCode))
         .append(1, Http::Syntax::SP)
         .append(Http::Status::toString(response.status))

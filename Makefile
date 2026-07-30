@@ -36,6 +36,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	HttpResponseFactory.cpp \
 	HttpStatusUtils.cpp \
 	HttpSerializer.cpp \
+	HttpHeadersUtils.cpp \
 )
 
 NET_SRC := \
