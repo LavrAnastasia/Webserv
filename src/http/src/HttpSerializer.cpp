@@ -2,7 +2,6 @@
 #include <stdexcept>
 
 #include "HttpStatusUtils.hpp"
-#include "HttpUtils.hpp"
 #include "http/HttpSerializer.hpp"
 
 namespace {
@@ -36,10 +35,6 @@ namespace {
     }
 
     void appendHeader(std::string& output, const std::string& name, const std::string& value) {
-        if (!Http::Header::isValidName(name) || !Http::Header::isValidValue(value)) {
-            throw std::invalid_argument("invalid HTTP response header");
-        }
-
         output.append(name).append(": ").append(value).append("\r\n");
     }
 } // namespace
