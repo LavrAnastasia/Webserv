@@ -30,13 +30,6 @@ namespace {
         return std::string(buffer, size);
     }
 
-    bool statusForbidsBody(HttpStatus status) {
-        const int statusCode = static_cast<int>(status);
-
-        return (statusCode >= 100 && statusCode < 200) || status == HttpStatus::NoContent ||
-            status == HttpStatus::NotModified;
-    }
-
     void appendHeader(std::string& output, std::string_view name, std::string_view value) {
         output.append(name)
             .append(1, Http::Syntax::HeaderKeyEnd)
@@ -50,12 +43,6 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
     const int statusCode = static_cast<int>(response.status);
     const std::string& body = response.body;
 
-    const bool bodyForbidden = statusForbidsBody(response.status);
-
-    if (bodyForbidden && !body.empty()) {
-        throw std::invalid_argument("response status does not permit a body");
-    }
-
     std::string output;
     output.reserve(256 + body.size());
 
@@ -66,11 +53,11 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         .append(Http::Syntax::CRLF);
 
     for (const auto& [name, value] : response.headers) {
-        if (HttpHeaders::equals(name, "Content-Length")) {
+        if (HttpHeaders::equals(name, Http::Headers::ContentLength)) {
             continue;
         }
 
-        if (HttpHeaders::equals(name, "Transfer-Encoding")) {
+        if (HttpHeaders::equals(name, Http::Headers::TransferEncoding)) {
             throw std::invalid_argument("transfer encoding is not supported");
         }
 
@@ -85,12 +72,11 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         appendHeader(output, Http::Headers::Server, Http::Server::Name);
     }
 
-    if (!bodyForbidden) {
-        appendHeader(output, "Content-Length", std::to_string(body.size()));
-    }
+    appendHeader(output, Http::Headers::ContentLength, std::to_string(body.size()));
+
     output.append(Http::Syntax::CRLF);
 
-    if (!headersOnly && !bodyForbidden) {
+    if (!headersOnly) {
         output.append(body);
     }
 
