@@ -55,6 +55,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         // Parsing complete -> build response from HttpRequest
         if (result.status == ParseStatus::Complete) {
             // TODO: WEB-28 RequestHandler integration
+            // TODO: WEB-17 HttpSerializer integration
             //PLACEHOLDER RESPONSE: get path from parsed request
             std::string path = result.request->path;
             //PLACEHOLDER RESPONSE: create body
