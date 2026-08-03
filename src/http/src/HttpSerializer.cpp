@@ -30,6 +30,13 @@ namespace {
         return std::string(buffer, size);
     }
 
+    bool statusForbidsBody(HttpStatus status) {
+        const int statusCode = static_cast<int>(status);
+
+        return (statusCode >= 100 && statusCode < 200) || status == HttpStatus::NoContent ||
+            status == HttpStatus::NotModified;
+    }
+
     void appendHeader(std::string& output, std::string_view name, std::string_view value) {
         output.append(name)
             .append(1, Http::Syntax::HeaderKeyEnd)
@@ -42,6 +49,7 @@ namespace {
 std::string HttpSerializer::serialize(const HttpResponse& response, bool headersOnly) {
     const int statusCode = static_cast<int>(response.status);
     const std::string& body = response.body;
+    const bool bodyForbidden = statusForbidsBody(response.status);
 
     std::string output;
     output.reserve(256 + body.size());
@@ -75,11 +83,13 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         appendHeader(output, Http::Headers::Server, Http::Server::Name);
     }
 
-    appendHeader(output, Http::Headers::ContentLength, std::to_string(body.size()));
+    if (!bodyForbidden) {
+        appendHeader(output, Http::Headers::ContentLength, std::to_string(body.size()));
+    }
 
     output.append(Http::Syntax::CRLF);
 
-    if (!headersOnly) {
+    if (!headersOnly && !bodyForbidden) {
         output.append(body);
     }
 
