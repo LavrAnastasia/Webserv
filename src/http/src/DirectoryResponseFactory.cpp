@@ -32,7 +32,6 @@ namespace {
             result += hex[character >> 4];
             result += hex[character & 0x0F];
         }
-
         return result;
     }
 
@@ -98,6 +97,5 @@ HttpResponse DirectoryResponseFactory::create(
     if (route.autoindex) {
         return AutoindexResponseFactory::create(directoryPath, request, route);
     }
-
     return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
 }
