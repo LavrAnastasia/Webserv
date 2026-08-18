@@ -3,6 +3,10 @@
 #include <string>
 #include <string_view>
 
+#include "http/HttpStatus.hpp"
+#include <filesystem>
+#include <system_error>
+
 namespace Http::Ascii {
     char tolower(char c);
     std::string tolower(const std::string& value);
@@ -26,3 +30,11 @@ namespace Http::Protocol {
     constexpr char VersionSeparator = '/';
     constexpr std::string_view Version = "1.1";
 } // namespace Http::Protocol
+
+namespace Http {
+    bool isNotFoundError(const std::error_code& error);
+
+    HttpStatus statusFromError(const std::error_code& error);
+
+    bool isWithinRoot(const std::filesystem::path& path, const std::filesystem::path& root);
+} // namespace Http
