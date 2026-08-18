@@ -11,7 +11,6 @@ namespace {
         if (errorNumber == 0) {
             return HttpStatus::InternalServerError;
         }
-
         return Http::statusFromError(std::error_code(errorNumber, std::generic_category()));
     }
 
@@ -44,7 +43,6 @@ namespace {
                 return std::string(contentType);
             }
         }
-
         return "application/octet-stream";
     }
 } // namespace
@@ -89,6 +87,5 @@ HttpResponse RegularResponseFactory::create(const fs::path& path, const Resolved
     } catch (const std::ios_base::failure&) {
         return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
     }
-
     return HttpResponseFactory::create(HttpStatus::OK, std::move(body), getContentType(path));
 }

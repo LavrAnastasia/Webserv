@@ -52,6 +52,5 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
     if (!fs::is_regular_file(fileStatus)) {
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
-
     return RegularResponseFactory::create(filePath, route);
 }

@@ -50,7 +50,6 @@ namespace {
         response.status = HttpStatus::MovedPermanently;
         response.headers.set("Location", location);
         response.headers.set("Content-Length", "0");
-
         return response;
     }
 } // namespace

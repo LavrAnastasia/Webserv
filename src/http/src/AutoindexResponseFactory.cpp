@@ -38,7 +38,6 @@ namespace {
             result += hex[character >> 4];
             result += hex[character & 0x0F];
         }
-
         return result;
     }
 
@@ -72,7 +71,6 @@ namespace {
                     break;
             }
         }
-
         return result;
     }
 } // namespace
@@ -123,7 +121,6 @@ HttpResponse AutoindexResponseFactory::create(
         if (left.isDirectory != right.isDirectory) {
             return left.isDirectory;
         }
-
         return left.name < right.name;
     });
 
@@ -158,13 +155,11 @@ HttpResponse AutoindexResponseFactory::create(
         if (item.isDirectory) {
             body += '/';
         }
-
         body += "</a></li>\n";
     }
 
     body += "    </ul>\n";
     body += "</body>\n";
     body += "</html>\n";
-
     return HttpResponseFactory::create(HttpStatus::OK, std::move(body), "text/html; charset=utf-8");
 }
