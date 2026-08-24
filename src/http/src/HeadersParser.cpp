@@ -1,10 +1,7 @@
-#include <algorithm>
-
 #include "HeadersParser.hpp"
 #include "HttpHeadersUtils.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
-#include "http/HttpHeaders.hpp"
 
 HeadersParser::HeadersParser(const std::string& headersBlock) : headersBlock_(headersBlock), headers_() {
 }
@@ -14,29 +11,6 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 }
 
 namespace {
-    bool isValidHeaderName(const std::string& name) {
-        return !name.empty() && std::ranges::all_of(name, [](char c) {
-            unsigned char uc = static_cast<unsigned char>(c);
-
-            return uc > 32 && uc != 127 && std::string_view(":()<>@,;\\\"/[]?={}").find(c) == std::string_view::npos;
-        });
-    }
-
-    bool isValidHeaderValue(const std::string& value) {
-        std::size_t index = 0;
-
-        while (index < value.size()) {
-            char c = value[index];
-            unsigned char uc = static_cast<unsigned char>(c);
-
-            if ((uc < 32 && c != Http::Syntax::HTAB) || uc == 127)
-                return false;
-
-            ++index;
-        }
-
-        return true;
-    }
 
     bool canStoreHeader(const HttpHeaders& headers, const std::string& name) {
         if (headers.has(name))
@@ -66,10 +40,10 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
     std::string key = line.substr(0, colon);
     std::string value = Http::Ascii::trim(line.substr(colon + 1));
 
-    if (!isValidHeaderName(key))
+    if (!Http::Header::isValidName(key))
         return false;
 
-    if (!isValidHeaderValue(value))
+    if (!Http::Header::isValidValue(value))
         return false;
 
     if (!canStoreHeader(headers_, key))
