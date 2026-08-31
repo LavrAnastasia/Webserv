@@ -12,12 +12,11 @@ bool HttpHeaders::equals(std::string_view a, std::string_view b) {
 bool HttpHeaders::set(const std::string& name, const std::string& value) {
     const std::string key = Http::Ascii::tolower(name);
 
-    _headers.emplace(key, value);
-    return true;
+    return _headers.emplace(key, value).second;
 }
 
-bool HttpHeaders::has(const std::string& name) const {
-    const std::string key = Http::Ascii::tolower(name);
+bool HttpHeaders::has(std::string_view name) const {
+    const std::string key = Http::Ascii::tolower(std::string(name));
     return _headers.find(key) != _headers.end();
 }
 

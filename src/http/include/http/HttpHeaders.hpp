@@ -13,6 +13,9 @@ public:
     static bool equals(std::string_view a, std::string_view b);
 
     bool set(const std::string& name, const std::string& value);
-    bool has(const std::string& name) const;
+    bool has(std::string_view name) const;
     std::optional<std::string> get(const std::string& name) const;
+    auto begin() const noexcept { return _headers.begin(); }
+
+    auto end() const noexcept { return _headers.end(); }
 };

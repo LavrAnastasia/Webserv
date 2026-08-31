@@ -16,3 +16,13 @@ namespace Http::TransferCoding {
 namespace Http::ContentType {
     constexpr std::string_view Html = "text/html";
 }
+
+namespace Http::Server {
+    constexpr std::string_view Name = "webserv";
+} // namespace Http::Server
+
+namespace Http::Protocol {
+    constexpr std::string_view Name = "HTTP";
+    constexpr char VersionSeparator = '/';
+    constexpr std::string_view Version = "1.1";
+} // namespace Http::Protocol
