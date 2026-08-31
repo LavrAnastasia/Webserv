@@ -33,7 +33,7 @@ public:
 
     void setShouldClose(bool state) { shouldClose_ = state; }
     bool shouldClose() const { return shouldClose_; }
-    void resetParser() { parser_ = HttpParser(); }
+    void resetParser() { parser_.reset(); }
 
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN
     bool isSendComplete() const { return sendBuffer_.empty(); }
