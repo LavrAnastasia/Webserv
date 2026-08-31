@@ -10,6 +10,7 @@ enum class ParseStatus {
     NeedMoreData,
     Complete,
     BadRequest,
+    ConnectionClosed,
 };
 
 enum class ParserState {
