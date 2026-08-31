@@ -252,3 +252,10 @@ bool HttpParser::loadContentLength() {
     _contentLength = *contentLength;
     return true;
 }
+
+void HttpParser::reset() {
+    _state = ParserState::StartLine;
+    _request = HttpRequest();
+    _contentLength = 0;
+    _currentChunkSize = 0;
+}
