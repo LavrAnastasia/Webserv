@@ -57,6 +57,20 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         if (result.status == ParseStatus::Complete) {
             // TODO: WEB-28 RequestHandler integration
             // TODO: WEB-17 HttpSerializer integration
+
+            std::optional<std::string> connHeader = result.request->headers.get("connection");
+
+            if (connHeader.has_value()) {
+                if (HttpHeaders::equals(connHeader.value(), "close")) {
+                    connection->setShouldClose(true);
+                } else {
+                    connection->setShouldClose(false);
+                }
+            } else {
+                // default to keep-alive
+                connection->setShouldClose(false);
+            }
+
             //PLACEHOLDER RESPONSE: get path from parsed request
             std::string path = result.request->path;
             //PLACEHOLDER RESPONSE: create body
