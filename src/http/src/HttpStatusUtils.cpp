@@ -50,6 +50,9 @@ namespace Http::Status {
 
             case HttpStatus::HttpVersionNotSupported:
                 return "HTTP Version Not Supported";
+
+            case HttpStatus::NotModified:
+                return "Not Modified";
         }
 
         return "Unknown Status";
