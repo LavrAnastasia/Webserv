@@ -12,13 +12,6 @@
 namespace {
     namespace fs = std::filesystem;
 
-    HttpStatus statusFromOpenError(int errorNumber) {
-        if (errorNumber == 0) {
-            return HttpStatus::InternalServerError;
-        }
-        return Http::Status::from(std::error_code(errorNumber, std::generic_category()));
-    }
-
     std::string getContentType(const fs::path& path) {
         using MimeEntry = std::pair<std::string_view, std::string_view>;
 
@@ -61,7 +54,8 @@ HttpResponse RegularResponseFactory::create(const fs::path& path, const Resolved
     const int openError = errno;
 
     if (!file.is_open()) {
-        return ErrorResponseFactory::create(statusFromOpenError(openError), route);
+        const std::error_code error(openError, std::generic_category());
+        return ErrorResponseFactory::create(Http::Status::from(error), route);
     }
 
     std::string body;
