@@ -46,6 +46,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	RegularResponseFactory.cpp \
 	DirectoryResponseFactory.cpp \
 	AutoindexResponseFactory.cpp \
+	UrlCodec.cpp \
 )
 
 NET_SRC := \

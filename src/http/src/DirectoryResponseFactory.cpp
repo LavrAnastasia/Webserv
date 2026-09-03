@@ -7,38 +7,15 @@
 #include "ErrorResponseFactory.hpp"
 #include "HttpSyntax.hpp"
 #include "RegularResponseFactory.hpp"
+#include "UrlCodec.hpp"
 
 #include "fs/PathUtils.hpp"
 
 namespace {
     namespace fs = std::filesystem;
 
-    bool isUrlUnreserved(unsigned char character) {
-        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
-            (character >= '0' && character <= '9') || character == '-' || character == '.' || character == '_' ||
-            character == '~';
-    }
-
-    std::string encodeUrlPath(const std::string& path) {
-        constexpr char hex[] = "0123456789ABCDEF";
-
-        std::string result;
-
-        for (const unsigned char character : path) {
-            if (character == '/' || isUrlUnreserved(character)) {
-                result += static_cast<char>(character);
-                continue;
-            }
-
-            result += '%';
-            result += hex[character >> 4];
-            result += hex[character & 0x0F];
-        }
-        return result;
-    }
-
     HttpResponse createRedirectResponse(const HttpRequest& request) {
-        std::string location = encodeUrlPath(request.path);
+        std::string location = Http::Url::encodePath(request.path);
 
         location += Http::Syntax::PathPrefix;
 

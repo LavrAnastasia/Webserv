@@ -7,6 +7,7 @@
 #include "ErrorResponseFactory.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
+#include "UrlCodec.hpp"
 
 namespace {
     namespace fs = std::filesystem;
@@ -16,30 +17,6 @@ namespace {
         std::string href;
         bool isDirectory;
     };
-
-    bool isUrlUnreserved(unsigned char character) {
-        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
-            (character >= '0' && character <= '9') || character == '-' || character == '.' || character == '_' ||
-            character == '~';
-    }
-
-    std::string encodeUrlSegment(const std::string& value) {
-        constexpr char hex[] = "0123456789ABCDEF";
-
-        std::string result;
-
-        for (const unsigned char character : value) {
-            if (isUrlUnreserved(character)) {
-                result += static_cast<char>(character);
-                continue;
-            }
-
-            result += '%';
-            result += hex[character >> 4];
-            result += hex[character & 0x0F];
-        }
-        return result;
-    }
 
     std::string escapeHtml(const std::string& value) {
         std::string result;
@@ -102,7 +79,7 @@ HttpResponse AutoindexResponseFactory::create(
 
         item.name = entry.path().filename().string();
         item.isDirectory = fs::is_directory(status);
-        item.href = encodeUrlSegment(item.name);
+        item.href = Http::Url::encodeSegment(item.name);
 
         if (item.isDirectory) {
             item.href += '/';
