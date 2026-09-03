@@ -4,10 +4,11 @@
 #include "HttpHeadersUtils.hpp"
 #include "HttpStatusUtils.hpp"
 #include "HttpSyntax.hpp"
-#include "HttpUtils.hpp"
 #include "http/HttpSerializer.hpp"
 
 namespace {
+    constexpr std::string_view serverName = "webserv";
+
     std::string httpDate() {
         const std::time_t now = std::time(nullptr);
 
@@ -80,7 +81,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
     }
 
     if (!response.headers.has(Http::Headers::Server)) {
-        appendHeader(output, Http::Headers::Server, Http::Server::Name);
+        appendHeader(output, Http::Headers::Server, serverName);
     }
 
     if (!bodyForbidden) {

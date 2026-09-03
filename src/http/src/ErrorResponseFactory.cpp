@@ -6,29 +6,19 @@
 #include <string>
 #include <utility>
 
+#include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
-#include "HttpUtils.hpp"
+#include "MimeTypes.hpp"
 
 namespace {
     std::string buildHtml(HttpStatus status) {
         const int statusCode = static_cast<int>(status);
         const std::string reason = Http::Status::toString(status);
 
-        return "<!DOCTYPE html>\n"
-               "<html lang=\"en\">\n"
-               "<head>\n"
-               "    <meta charset=\"UTF-8\">\n"
-               "    <title>" +
-            std::to_string(statusCode) + " " + reason +
-            "</title>\n"
-            "</head>\n"
-            "<body>\n"
-            "    <h1>" +
-            std::to_string(statusCode) + " " + reason +
-            "</h1>\n"
-            "</body>\n"
-            "</html>\n";
+        const std::string title = std::to_string(statusCode) + " " + reason;
+
+        return Http::Html::buildPage(title, title);
     }
 
     std::optional<std::string> readBody(const std::filesystem::path& path) {
@@ -54,7 +44,7 @@ namespace {
 } // namespace
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status) {
-    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::ContentType::Html));
+    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
 }
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute& route) {
@@ -70,5 +60,5 @@ HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute
         return create(status);
     }
 
-    return HttpResponseFactory::create(status, std::move(*body), std::string(Http::ContentType::Html));
+    return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
 }
