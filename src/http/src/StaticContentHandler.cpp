@@ -33,7 +33,7 @@ namespace {
         return response;
     }
 
-    HttpResponse directoryResponse(
+    HttpResponse createDirectoryResponse(
         const fs::path& directoryPath, const fs::path& root, const HttpRequest& request, const ResolvedRoute& route
     ) {
         if (request.path.back() != Http::Syntax::PathPrefix) {
@@ -92,7 +92,7 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
         }
 
         if (fs::is_directory(fileStatus)) {
-            return directoryResponse(filePath, root, request, route);
+            return createDirectoryResponse(filePath, root, request, route);
         }
 
         if (!fs::is_regular_file(fileStatus)) {
