@@ -103,7 +103,7 @@ namespace {
         }
 
         if (route.autoindex) {
-            return AutoindexResponseFactory::create(directoryPath, request, route);
+            return AutoindexResponseFactory::create(directoryPath, request);
         }
 
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);

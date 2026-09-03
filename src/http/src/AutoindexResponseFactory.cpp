@@ -4,9 +4,7 @@
 #include <utility>
 #include <vector>
 
-#include "ErrorResponseFactory.hpp"
 #include "HttpResponseFactory.hpp"
-#include "HttpStatusUtils.hpp"
 #include "UrlCodec.hpp"
 
 namespace {
@@ -50,49 +48,33 @@ namespace {
         }
         return result;
     }
+
+    std::vector<DirectoryItem> getDirectoryItems(const fs::path& directoryPath) {
+        std::vector<DirectoryItem> items;
+
+        for (const fs::directory_entry& entry : fs::directory_iterator(directoryPath)) {
+            const fs::file_status status = entry.symlink_status();
+
+            DirectoryItem item;
+
+            item.name = entry.path().filename().string();
+            item.isDirectory = fs::is_directory(status);
+            item.href = Http::Url::encodeSegment(item.name);
+
+            if (item.isDirectory) {
+                item.href += '/';
+            }
+
+            items.push_back(std::move(item));
+        }
+
+        return items;
+    }
+
 } // namespace
 
-HttpResponse AutoindexResponseFactory::create(
-    const fs::path& directoryPath, const HttpRequest& request, const ResolvedRoute& route
-) {
-    std::error_code error;
-
-    fs::directory_iterator iterator(directoryPath, error);
-    const fs::directory_iterator end;
-
-    if (error) {
-        return ErrorResponseFactory::create(Http::Status::from(error), route);
-    }
-
-    std::vector<DirectoryItem> items;
-
-    while (iterator != end) {
-        const fs::directory_entry& entry = *iterator;
-
-        const fs::file_status status = entry.symlink_status(error);
-
-        if (error) {
-            return ErrorResponseFactory::create(Http::Status::from(error), route);
-        }
-
-        DirectoryItem item;
-
-        item.name = entry.path().filename().string();
-        item.isDirectory = fs::is_directory(status);
-        item.href = Http::Url::encodeSegment(item.name);
-
-        if (item.isDirectory) {
-            item.href += '/';
-        }
-
-        items.push_back(std::move(item));
-
-        iterator.increment(error);
-
-        if (error) {
-            return ErrorResponseFactory::create(Http::Status::from(error), route);
-        }
-    }
+HttpResponse AutoindexResponseFactory::create(const fs::path& directoryPath, const HttpRequest& request) {
+    std::vector<DirectoryItem> items = getDirectoryItems(directoryPath);
 
     std::sort(items.begin(), items.end(), [](const DirectoryItem& left, const DirectoryItem& right) {
         if (left.isDirectory != right.isDirectory) {
