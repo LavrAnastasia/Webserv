@@ -4,39 +4,12 @@
 #include <utility>
 #include <vector>
 
+#include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "UrlCodec.hpp"
 
 namespace {
     namespace fs = std::filesystem;
-
-    std::string escapeHtml(const std::string& value) {
-        std::string result;
-
-        for (const char character : value) {
-            switch (character) {
-                case '&':
-                    result += "&amp;";
-                    break;
-                case '<':
-                    result += "&lt;";
-                    break;
-                case '>':
-                    result += "&gt;";
-                    break;
-                case '"':
-                    result += "&quot;";
-                    break;
-                case '\'':
-                    result += "&#39;";
-                    break;
-                default:
-                    result += character;
-                    break;
-            }
-        }
-        return result;
-    }
 
     std::string buildDirectoryList(const std::vector<fs::directory_entry>& entries, const std::string& requestPath) {
         std::string body;
@@ -60,7 +33,7 @@ namespace {
             body += "<li><a href=\"";
             body += href;
             body += "\">";
-            body += escapeHtml(name);
+            body += Http::Html::escape(name);
 
             if (isDirectory) {
                 body += '/';
@@ -100,24 +73,10 @@ HttpResponse AutoindexResponseFactory::create(const fs::path& directoryPath, con
         return left.path().filename().string() < right.path().filename().string();
     });
 
-    const std::string escapedPath = escapeHtml(request.path);
+    const std::string escapedPath = Http::Html::escape(request.path);
+    const std::string title = "Index of " + escapedPath;
+    const std::string content = buildDirectoryList(entries, request.path);
 
-    std::string body;
-
-    body += "<!DOCTYPE html>\n";
-    body += "<html lang=\"en\">\n";
-    body += "<head>\n";
-    body += "<meta charset=\"UTF-8\">\n";
-    body += "<title>Index of ";
-    body += escapedPath;
-    body += "</title>\n";
-    body += "</head>\n";
-    body += "<body>\n";
-    body += "<h1>Index of ";
-    body += escapedPath;
-    body += "</h1>\n";
-    body += buildDirectoryList(entries, request.path);
-    body += "</body>\n";
-    body += "</html>\n";
+    std::string body = Http::Html::buildPage(title, title, content);
     return HttpResponseFactory::create(HttpStatus::OK, std::move(body), "text/html; charset=utf-8");
 }

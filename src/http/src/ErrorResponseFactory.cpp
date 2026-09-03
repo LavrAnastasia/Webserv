@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
 #include "HttpSyntax.hpp"
@@ -15,20 +16,9 @@ namespace {
         const int statusCode = static_cast<int>(status);
         const std::string reason = Http::Status::toString(status);
 
-        return "<!DOCTYPE html>\n"
-               "<html lang=\"en\">\n"
-               "<head>\n"
-               "<meta charset=\"UTF-8\">\n"
-               "<title>" +
-            std::to_string(statusCode) + " " + reason +
-            "</title>\n"
-            "</head>\n"
-            "<body>\n"
-            "<h1>" +
-            std::to_string(statusCode) + " " + reason +
-            "</h1>\n"
-            "</body>\n"
-            "</html>\n";
+        const std::string title = std::to_string(statusCode) + " " + reason;
+
+        return Http::Html::buildPage(title, title);
     }
 
     std::optional<std::string> readBody(const std::filesystem::path& path) {
