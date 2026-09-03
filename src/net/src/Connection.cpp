@@ -4,19 +4,9 @@
 
 
 Connection::Connection(int fd, const std::string& ip, const ServerConfig& config)
-    : clientIp_(ip), serverConfig_(config), lastActivity_(std::chrono::steady_clock::now()) {
+    : clientIp_(ip), serverConfig_(config), lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
     setFd(fd);
     setNonBlocking();
-}
-
-
-/*
-    -called by server, consumes number of bytes parsed by http parser (starting at index 0)
-    -erase automatically manages memory to shift remaining bytes (to start at index 0
-    in this case)
-*/
-void Connection::consumeReceiveBuffer(size_t bytes) {
-    receiveBuffer_.erase(0, bytes);
 }
 
 // called by server, appends HTTP response string to sendBuffer_ and updates state
@@ -25,28 +15,34 @@ void Connection::appendResponse(const std::string& response) {
 }
 
 /*
-    called by server when status == POLLIN, calls recv() and appends to receiveBuffer_
+    called by server when status == POLLIN, calls recv() and appends to parser_'s
+    internal buffer
+
     recv function signature: ssize_t recv(int sockfd, void *buf, size_t len, int flags);
     0 for flags is the default
+
+    NOTE: Aggregate Initialization syntax:
+    return { ParseStatus::NeedMoreData, std::nullopt }; creates and initializes
+    a struct of the return type, with the arguments given
 */
-bool Connection::receiveRequest() {
+ParseResult Connection::receiveRequest() {
     char buffer[4096];
     ssize_t bytesReceived = recv(getFd(), buffer, sizeof(buffer), 0);
 
     // treat all negative returns as no data, try again next loop
     if (bytesReceived < 0) {
-        return true;
+        return {ParseStatus::NeedMoreData, std::nullopt};
     }
 
-    // return false for graceful close (EOF), EventLoop handles cleanup
+    // host disconnected, return status that triggers cleanup
     if (bytesReceived == 0) {
-        return false;
+        return {ParseStatus::ConnectionClosed, std::nullopt};
     }
+
+    lastActivity_ = std::chrono::steady_clock::now(); // update timeout timer
 
     // recv return > 0 indicates number of bytes successfully received
-    receiveBuffer_.append(buffer, bytesReceived);
-    lastActivity_ = std::chrono::steady_clock::now(); // update timeout timer
-    return true;
+    return parser_.append(buffer, bytesReceived);
 }
 
 /*
