@@ -17,7 +17,8 @@
 namespace {
     namespace fs = std::filesystem;
 
-    HttpResponse createFileResponse(const std::filesystem::path& path, const ResolvedRoute& route) {
+    // TODO: Do not load the whole file into memory
+    HttpResponse handleFileRequest(const std::filesystem::path& path, const ResolvedRoute& route) {
         std::ifstream file;
 
         errno = 0;
@@ -33,36 +34,32 @@ namespace {
         std::string body;
         std::array<char, 64 * 1024> buffer{};
 
-        try {
-            while (true) {
-                file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        while (true) {
+            file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
 
-                const std::streamsize bytesRead = file.gcount();
+            const std::streamsize bytesRead = file.gcount();
 
-                if (bytesRead > 0) {
-                    body.append(buffer.data(), static_cast<std::size_t>(bytesRead));
-                }
-
-                if (file.bad()) {
-                    return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
-                }
-
-                if (file.eof()) {
-                    break;
-                }
-
-                if (file.fail()) {
-                    return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
-                }
+            if (bytesRead > 0) {
+                body.append(buffer.data(), static_cast<std::size_t>(bytesRead));
             }
-        } catch (const std::ios_base::failure&) {
-            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+
+            if (file.bad()) {
+                return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+            }
+
+            if (file.eof()) {
+                break;
+            }
+
+            if (file.fail()) {
+                return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+            }
         }
 
         return HttpResponseFactory::create(HttpStatus::OK, std::move(body), Http::Mime::from(path));
     }
 
-    HttpResponse createRedirectResponse(const HttpRequest& request) {
+    HttpResponse handleRedirectRequest(const HttpRequest& request) {
         std::string location = Http::Url::encodePath(request.path);
 
         location += Http::Syntax::PathPrefix;
@@ -80,34 +77,28 @@ namespace {
         return response;
     }
 
-    HttpResponse createDirectoryResponse(
+    HttpResponse handleDirectoryRequest(
         const fs::path& directoryPath, const fs::path& root, const HttpRequest& request, const ResolvedRoute& route
     ) {
         if (request.path.back() != Http::Syntax::PathPrefix) {
-            return createRedirectResponse(request);
+            return handleRedirectRequest(request);
         }
 
         if (!route.index.empty()) {
-            try {
-                const fs::path indexPath = fs::weakly_canonical(directoryPath / route.index);
+            const fs::path indexPath = fs::weakly_canonical(directoryPath / route.index);
 
-                if (!Fs::isPrefixOf(root, indexPath)) {
-                    return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
-                }
+            if (!Fs::isPrefixOf(root, indexPath)) {
+                return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+            }
 
-                const fs::file_status indexStatus = fs::status(indexPath);
+            const fs::file_status indexStatus = fs::status(indexPath);
 
-                if (fs::is_regular_file(indexStatus)) {
-                    return createFileResponse(indexPath, route);
-                }
+            if (fs::is_regular_file(indexStatus)) {
+                return handleFileRequest(indexPath, route);
+            }
 
-                if (fs::exists(indexStatus)) {
-                    return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
-                }
-            } catch (const fs::filesystem_error& error) {
-                if (Http::Status::from(error.code()) != HttpStatus::NotFound) {
-                    throw;
-                }
+            if (fs::exists(indexStatus)) {
+                return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
             }
         }
 
@@ -139,13 +130,13 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
         }
 
         if (fs::is_directory(fileStatus)) {
-            return createDirectoryResponse(filePath, root, request, route);
+            return handleDirectoryRequest(filePath, root, request, route);
         }
 
         if (!fs::is_regular_file(fileStatus)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
-        return createFileResponse(filePath, route);
+        return handleFileRequest(filePath, route);
     } catch (const fs::filesystem_error& error) {
         return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
     }
