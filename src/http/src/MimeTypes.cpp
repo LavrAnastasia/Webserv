@@ -12,8 +12,8 @@ namespace {
     };
 
     constexpr auto mimeTypes = std::to_array<MimeEntry>({
-        {".html", "text/html; charset=utf-8"},
-        {".htm", "text/html; charset=utf-8"},
+        {".html", Http::Mime::Html},
+        {".htm", Http::Mime::Html},
         {".css", "text/css; charset=utf-8"},
         {".js", "application/javascript"},
         {".json", "application/json"},

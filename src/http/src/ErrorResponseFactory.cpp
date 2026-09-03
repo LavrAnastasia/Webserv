@@ -9,7 +9,7 @@
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
-#include "HttpSyntax.hpp"
+#include "MimeTypes.hpp"
 
 namespace {
     std::string buildHtml(HttpStatus status) {
@@ -44,7 +44,7 @@ namespace {
 } // namespace
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status) {
-    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::ContentType::Html));
+    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
 }
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute& route) {
@@ -60,5 +60,5 @@ HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute
         return create(status);
     }
 
-    return HttpResponseFactory::create(status, std::move(*body), std::string(Http::ContentType::Html));
+    return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
 }

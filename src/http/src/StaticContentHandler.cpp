@@ -81,7 +81,7 @@ namespace {
         const std::string content = buildDirectoryList(entries, request.path);
 
         std::string body = Http::Html::buildPage(title, title, content);
-        return HttpResponseFactory::create(HttpStatus::OK, std::move(body), "text/html; charset=utf-8");
+        return HttpResponseFactory::create(HttpStatus::OK, std::move(body), std::string(Http::Mime::Html));
     }
 
     // TODO: Do not load the whole file into memory
