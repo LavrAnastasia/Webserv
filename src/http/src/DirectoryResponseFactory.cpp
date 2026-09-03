@@ -1,12 +1,14 @@
 #include "DirectoryResponseFactory.hpp"
 
+#include "HttpHeadersUtils.hpp"
 #include "HttpStatusUtils.hpp"
-#include "fs/PathUtils.hpp"
 
 #include "AutoindexResponseFactory.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "HttpSyntax.hpp"
 #include "RegularResponseFactory.hpp"
+
+#include "fs/PathUtils.hpp"
 
 namespace {
     namespace fs = std::filesystem;
@@ -48,8 +50,8 @@ namespace {
         HttpResponse response{};
 
         response.status = HttpStatus::MovedPermanently;
-        response.headers.set("Location", location);
-        response.headers.set("Content-Length", "0");
+        response.headers.set(std::string(Http::Headers::Location), location);
+        response.headers.set(std::string(Http::Headers::ContentLength), "0");
         return response;
     }
 } // namespace

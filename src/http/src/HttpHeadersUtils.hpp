@@ -9,9 +9,9 @@ namespace Http::Headers {
     constexpr std::string_view TransferEncoding = "Transfer-Encoding";
     constexpr std::string_view Host = "Host";
     constexpr std::string_view Date = "Date";
+    constexpr std::string_view Location = "Location";
     constexpr std::string_view Server = "Server";
-} // namespace Http::Headers
-namespace Http::Header {
+
     bool isValidName(const std::string& name);
     bool isValidValue(const std::string& value);
-} // namespace Http::Header
+} // namespace Http::Headers
