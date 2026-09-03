@@ -1,19 +1,66 @@
 #include "StaticContentHandler.hpp"
-
-#include "HttpStatusUtils.hpp"
-
+#include "AutoindexResponseFactory.hpp"
 #include "ErrorResponseFactory.hpp"
-#include "RegularResponseFactory.hpp"
+#include "HttpHeadersUtils.hpp"
+#include "HttpResponseFactory.hpp"
+#include "HttpStatusUtils.hpp"
+#include "HttpSyntax.hpp"
+#include "MimeTypes.hpp"
+#include "UrlCodec.hpp"
 
 #include "fs/PathUtils.hpp"
 
-#include "AutoindexResponseFactory.hpp"
-#include "HttpHeadersUtils.hpp"
-#include "HttpSyntax.hpp"
-#include "UrlCodec.hpp"
+#include <array>
+#include <cerrno>
+#include <fstream>
 
 namespace {
     namespace fs = std::filesystem;
+
+    HttpResponse createFileResponse(const std::filesystem::path& path, const ResolvedRoute& route) {
+        std::ifstream file;
+
+        errno = 0;
+        file.open(path, std::ios::binary);
+
+        const int openError = errno;
+
+        if (!file.is_open()) {
+            const std::error_code error(openError, std::generic_category());
+            return ErrorResponseFactory::create(Http::Status::from(error), route);
+        }
+
+        std::string body;
+        std::array<char, 64 * 1024> buffer{};
+
+        try {
+            while (true) {
+                file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+
+                const std::streamsize bytesRead = file.gcount();
+
+                if (bytesRead > 0) {
+                    body.append(buffer.data(), static_cast<std::size_t>(bytesRead));
+                }
+
+                if (file.bad()) {
+                    return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+                }
+
+                if (file.eof()) {
+                    break;
+                }
+
+                if (file.fail()) {
+                    return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+                }
+            }
+        } catch (const std::ios_base::failure&) {
+            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+        }
+
+        return HttpResponseFactory::create(HttpStatus::OK, std::move(body), Http::Mime::from(path));
+    }
 
     HttpResponse createRedirectResponse(const HttpRequest& request) {
         std::string location = Http::Url::encodePath(request.path);
@@ -51,7 +98,7 @@ namespace {
                 const fs::file_status indexStatus = fs::status(indexPath);
 
                 if (fs::is_regular_file(indexStatus)) {
-                    return RegularResponseFactory::create(indexPath, route);
+                    return createFileResponse(indexPath, route);
                 }
 
                 if (fs::exists(indexStatus)) {
@@ -98,7 +145,7 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
         if (!fs::is_regular_file(fileStatus)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
-        return RegularResponseFactory::create(filePath, route);
+        return createFileResponse(filePath, route);
     } catch (const fs::filesystem_error& error) {
         return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
     }
