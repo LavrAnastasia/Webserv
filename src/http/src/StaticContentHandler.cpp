@@ -11,9 +11,11 @@
 
 #include "fs/PathUtils.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <fstream>
+#include <vector>
 
 
 namespace {
