@@ -44,7 +44,6 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	HttpHeadersUtils.cpp \
 	StaticContentHandler.cpp \
 	RegularResponseFactory.cpp \
-	DirectoryResponseFactory.cpp \
 	AutoindexResponseFactory.cpp \
 	UrlCodec.cpp \
 	MimeTypes.cpp \
