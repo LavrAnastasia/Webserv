@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cerrno>
-
 #include "ResolvedRoute.hpp"
 #include "http/HttpResponse.hpp"
 

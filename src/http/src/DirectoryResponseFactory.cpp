@@ -76,7 +76,7 @@ HttpResponse DirectoryResponseFactory::create(
                 return ErrorResponseFactory::create(status, route);
             }
         } else {
-            if (!Fs::contains(root, indexPath)) {
+            if (!Fs::isPrefixOf(root, indexPath)) {
                 return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
             }
 

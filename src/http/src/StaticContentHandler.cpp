@@ -33,7 +33,7 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
         return ErrorResponseFactory::create(Http::Status::from(error), route);
     }
 
-    if (!Fs::contains(root, filePath)) {
+    if (!Fs::isPrefixOf(root, filePath)) {
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
 

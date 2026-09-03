@@ -5,6 +5,8 @@
 #include "HttpStatusUtils.hpp"
 #include "HttpUtils.hpp"
 
+#include <array>
+#include <cerrno>
 #include <fstream>
 
 namespace {
