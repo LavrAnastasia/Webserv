@@ -84,7 +84,7 @@ namespace {
         return HttpResponseFactory::create(HttpStatus::OK, std::move(body), std::string(Http::Mime::Html));
     }
 
-    // TODO: Do not load the whole file into memory
+    // TODO: WEB-34 Do not load the whole file into memory
     HttpResponse handleFileRequest(const fs::path& path, const ResolvedRoute& route) {
         std::ifstream file;
 
