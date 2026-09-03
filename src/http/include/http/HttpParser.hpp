@@ -10,6 +10,7 @@ enum class ParseStatus {
     NeedMoreData,
     Complete,
     BadRequest,
+    ConnectionClosed,
 };
 
 enum class ParserState {
@@ -45,4 +46,5 @@ private:
 public:
     HttpParser();
     ParseResult append(const char* data, std::size_t size);
+    void reset();
 };

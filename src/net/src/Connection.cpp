@@ -36,7 +36,7 @@ ParseResult Connection::receiveRequest() {
 
     // host disconnected, return status that triggers cleanup
     if (bytesReceived == 0) {
-        return {ParseStatus::BadRequest, std::nullopt};
+        return {ParseStatus::ConnectionClosed, std::nullopt};
     }
 
     lastActivity_ = std::chrono::steady_clock::now(); // update timeout timer

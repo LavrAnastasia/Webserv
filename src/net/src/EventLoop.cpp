@@ -80,10 +80,29 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     if (events & POLLIN) {
         //feed bytes from OS kernel's socket buffer into parser and receive status
         ParseResult result = connection->receiveRequest();
+
         // Parsing complete -> build response from HttpRequest
         if (result.status == ParseStatus::Complete) {
             // TODO: WEB-28 RequestHandler integration
             // TODO: WEB-17 HttpSerializer integration
+
+            /*
+                TODO: Replace raw strings "connection" & "close" with constants
+                from Http::Headers once available
+            */
+            std::optional<std::string> connHeader = result.request->headers.get("connection");
+
+            if (connHeader.has_value()) {
+                if (HttpHeaders::equals(connHeader.value(), "close")) {
+                    connection->setShouldClose(true);
+                } else {
+                    connection->setShouldClose(false);
+                }
+            } else {
+                // default to keep-alive
+                connection->setShouldClose(false);
+            }
+
             //PLACEHOLDER RESPONSE: get path from parsed request
             std::string path = result.request->path;
             //PLACEHOLDER RESPONSE: create body
@@ -99,9 +118,17 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             connection->appendResponse(response);
             poller_.modifySocket(clientFd, POLLOUT);
         }
+
+        // Client disconnected -> clean up immediately
+        else if (result.status == ParseStatus::ConnectionClosed) {
+            poller_.removeSocket(clientFd);
+            connectionRegistry_.removeConnection(clientFd);
+            return;
+        }
+
         /*
-        fail case: unable to parse client request, or client disconnected (recv == 0)
-        -> build error response and close connection after sending!
+        fail case: unable to parse client request -> build error response and
+        close connection after sending!
         */
         else if (result.status == ParseStatus::BadRequest) {
             // TODO: WEB-29 ErrorResponseFactory integration
@@ -129,6 +156,13 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
                 connectionRegistry_.removeConnection(clientFd);
             } else {
                 connection->resetParser();
+                /*
+                    TODO: HTTP pipelining support:
+                    If client has sent multiple requests and parser buffer still
+                    has data in it after reset, parser should be re-run immediately.
+                    Requests already in buffer need to be processed before setting
+                    sockete to POLLIN.
+                */
                 poller_.modifySocket(clientFd, POLLIN);
             }
         }
