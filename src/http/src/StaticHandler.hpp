@@ -4,7 +4,7 @@
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 
-class StaticContentHandler {
+class StaticHandler {
 public:
     static HttpResponse handle(const HttpRequest& request, const ResolvedRoute& route);
 };

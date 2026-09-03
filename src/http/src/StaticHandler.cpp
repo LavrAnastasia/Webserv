@@ -1,4 +1,4 @@
-#include "StaticContentHandler.hpp"
+#include "StaticHandler.hpp"
 
 #include "ErrorResponseFactory.hpp"
 #include "HttpHeadersUtils.hpp"
@@ -177,7 +177,7 @@ namespace {
     }
 } // namespace
 
-HttpResponse StaticContentHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
+HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
     if (request.path.empty() || request.path.front() != '/') {
         return ErrorResponseFactory::create(HttpStatus::BadRequest, route);
     }
