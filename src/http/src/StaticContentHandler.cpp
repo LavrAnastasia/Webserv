@@ -1,10 +1,12 @@
 #include "StaticContentHandler.hpp"
 
-#include "HttpUtils.hpp"
+#include "HttpStatusUtils.hpp"
 
 #include "DirectoryResponseFactory.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "RegularResponseFactory.hpp"
+
+#include "fs/PathUtils.hpp"
 
 namespace {
     namespace fs = std::filesystem;
@@ -20,7 +22,7 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
     const fs::path root = fs::weakly_canonical(route.root, error);
 
     if (error) {
-        return ErrorResponseFactory::create(Http::statusFromError(error), route);
+        return ErrorResponseFactory::create(Http::Status::from(error), route);
     }
 
     const fs::path relativePath = fs::path(request.path).relative_path();
@@ -28,17 +30,17 @@ HttpResponse StaticContentHandler::handle(const HttpRequest& request, const Reso
     const fs::path filePath = fs::weakly_canonical(root / relativePath, error);
 
     if (error) {
-        return ErrorResponseFactory::create(Http::statusFromError(error), route);
+        return ErrorResponseFactory::create(Http::Status::from(error), route);
     }
 
-    if (!Http::isWithinRoot(filePath, root)) {
+    if (!Fs::contains(root, filePath)) {
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
 
     const fs::file_status fileStatus = fs::status(filePath, error);
 
     if (error) {
-        return ErrorResponseFactory::create(Http::statusFromError(error), route);
+        return ErrorResponseFactory::create(Http::Status::from(error), route);
     }
 
     if (!fs::exists(fileStatus)) {

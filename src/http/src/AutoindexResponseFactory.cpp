@@ -6,7 +6,7 @@
 
 #include "ErrorResponseFactory.hpp"
 #include "HttpResponseFactory.hpp"
-#include "HttpUtils.hpp"
+#include "HttpStatusUtils.hpp"
 
 namespace {
     namespace fs = std::filesystem;
@@ -84,7 +84,7 @@ HttpResponse AutoindexResponseFactory::create(
     const fs::directory_iterator end;
 
     if (error) {
-        return ErrorResponseFactory::create(Http::statusFromError(error), route);
+        return ErrorResponseFactory::create(Http::Status::from(error), route);
     }
 
     std::vector<DirectoryItem> items;
@@ -95,7 +95,7 @@ HttpResponse AutoindexResponseFactory::create(
         const fs::file_status status = entry.symlink_status(error);
 
         if (error) {
-            return ErrorResponseFactory::create(Http::statusFromError(error), route);
+            return ErrorResponseFactory::create(Http::Status::from(error), route);
         }
 
         DirectoryItem item;
@@ -113,7 +113,7 @@ HttpResponse AutoindexResponseFactory::create(
         iterator.increment(error);
 
         if (error) {
-            return ErrorResponseFactory::create(Http::statusFromError(error), route);
+            return ErrorResponseFactory::create(Http::Status::from(error), route);
         }
     }
 

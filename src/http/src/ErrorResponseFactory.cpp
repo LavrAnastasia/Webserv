@@ -8,7 +8,7 @@
 
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
-#include "HttpUtils.hpp"
+#include "HttpSyntax.hpp"
 
 namespace {
     std::string buildHtml(HttpStatus status) {

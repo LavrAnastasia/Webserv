@@ -16,3 +16,17 @@ namespace Http::Syntax {
     constexpr char PathPrefix = '/';
 
 } // namespace Http::Syntax
+
+namespace Http::TransferCoding {
+    constexpr std::string_view Chunked = "chunked";
+} // namespace Http::TransferCoding
+
+namespace Http::ContentType {
+    constexpr std::string_view Html = "text/html";
+}
+
+namespace Http::Protocol {
+    constexpr std::string_view Name = "HTTP";
+    constexpr char VersionSeparator = '/';
+    constexpr std::string_view Version = "1.1";
+} // namespace Http::Protocol

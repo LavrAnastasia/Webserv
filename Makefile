@@ -5,7 +5,8 @@ CXXFLAGS := -std=c++20 -Wall -Wextra -Werror
 INCLUDES := \
 	-Isrc/http/include \
 	-Isrc/config/include \
-	-Isrc/net/include
+	-Isrc/net/include \
+	-Isrc/fs/include
 
 DEPFLAGS := -MMD -MP
 
@@ -22,6 +23,10 @@ CONFIG_SRC := $(addprefix src/config/src/, \
 	ConfigError.cpp \
 	ConfigReadError.cpp \
 	ConfigSyntaxError.cpp \
+)
+
+FS_SRC := $(addprefix src/fs/src/, \
+	PathUtils.cpp \
 )
 
 HTTP_SRC := $(addprefix src/http/src/, \
@@ -57,7 +62,8 @@ SRC := \
 	app/main.cpp \
 	${CONFIG_SRC} \
 	${HTTP_SRC} \
-	${NET_SRC}
+	${NET_SRC} \
+	${FS_SRC}
 
 BUILD_DIR := build
 

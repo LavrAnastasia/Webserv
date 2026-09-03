@@ -2,7 +2,10 @@
 
 #include "ErrorResponseFactory.hpp"
 #include "HttpResponseFactory.hpp"
+#include "HttpStatusUtils.hpp"
 #include "HttpUtils.hpp"
+
+#include <fstream>
 
 namespace {
     namespace fs = std::filesystem;
@@ -11,7 +14,7 @@ namespace {
         if (errorNumber == 0) {
             return HttpStatus::InternalServerError;
         }
-        return Http::statusFromError(std::error_code(errorNumber, std::generic_category()));
+        return Http::Status::from(std::error_code(errorNumber, std::generic_category()));
     }
 
     std::string getContentType(const fs::path& path) {

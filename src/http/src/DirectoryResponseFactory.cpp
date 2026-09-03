@@ -1,7 +1,7 @@
 #include "DirectoryResponseFactory.hpp"
 
-
-#include "HttpUtils.hpp"
+#include "HttpStatusUtils.hpp"
+#include "fs/PathUtils.hpp"
 
 #include "AutoindexResponseFactory.hpp"
 #include "ErrorResponseFactory.hpp"
@@ -71,19 +71,21 @@ HttpResponse DirectoryResponseFactory::create(
         const fs::path indexPath = fs::weakly_canonical(directoryPath / route.index, error);
 
         if (error) {
-            if (!Http::isNotFoundError(error)) {
-                return ErrorResponseFactory::create(Http::statusFromError(error), route);
+            const HttpStatus status = Http::Status::from(error);
+            if (status != HttpStatus::NotFound) {
+                return ErrorResponseFactory::create(status, route);
             }
         } else {
-            if (!Http::isWithinRoot(indexPath, root)) {
+            if (!Fs::contains(root, indexPath)) {
                 return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
             }
 
             const fs::file_status indexStatus = fs::status(indexPath, error);
 
             if (error) {
-                if (!Http::isNotFoundError(error)) {
-                    return ErrorResponseFactory::create(Http::statusFromError(error), route);
+                const HttpStatus status = Http::Status::from(error);
+                if (status != HttpStatus::NotFound) {
+                    return ErrorResponseFactory::create(status, route);
                 }
             } else if (fs::is_regular_file(indexStatus)) {
                 return RegularResponseFactory::create(indexPath, route);
