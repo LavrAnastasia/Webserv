@@ -58,6 +58,10 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             // TODO: WEB-28 RequestHandler integration
             // TODO: WEB-17 HttpSerializer integration
 
+            /*
+                TODO: Replace raw strings "connection" & "close" with constants
+                from Http::Headers once available
+            */
             std::optional<std::string> connHeader = result.request->headers.get("connection");
 
             if (connHeader.has_value()) {
@@ -124,6 +128,13 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
                 connectionRegistry_.removeConnection(clientFd);
             } else {
                 connection->resetParser();
+                /*
+                    TODO: HTTP pipelining support:
+                    If client has sent multiple requests and parser buffer still
+                    has data in it after reset, parser should be re-run immediately.
+                    Requests already in buffer need to be processed before setting
+                    sockete to POLLIN.
+                */
                 poller_.modifySocket(clientFd, POLLIN);
             }
         }
