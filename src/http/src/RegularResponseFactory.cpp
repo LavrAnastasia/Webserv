@@ -3,49 +3,13 @@
 #include "ErrorResponseFactory.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
-#include "HttpUtils.hpp"
+#include "MimeTypes.hpp"
 
 #include <array>
 #include <cerrno>
 #include <fstream>
 
-namespace {
-    namespace fs = std::filesystem;
-
-    std::string getContentType(const fs::path& path) {
-        using MimeEntry = std::pair<std::string_view, std::string_view>;
-
-        static constexpr std::array<MimeEntry, 16> mimeTypes = {{
-            {".html", "text/html; charset=utf-8"},
-            {".htm", "text/html; charset=utf-8"},
-            {".css", "text/css; charset=utf-8"},
-            {".js", "application/javascript"},
-            {".json", "application/json"},
-            {".txt", "text/plain; charset=utf-8"},
-            {".xml", "application/xml"},
-            {".png", "image/png"},
-            {".jpg", "image/jpeg"},
-            {".jpeg", "image/jpeg"},
-            {".gif", "image/gif"},
-            {".webp", "image/webp"},
-            {".svg", "image/svg+xml"},
-            {".ico", "image/x-icon"},
-            {".pdf", "application/pdf"},
-            {".wasm", "application/wasm"},
-        }};
-
-        const std::string extension = Http::Ascii::tolower(path.extension().string());
-
-        for (const auto& [candidate, contentType] : mimeTypes) {
-            if (extension == candidate) {
-                return std::string(contentType);
-            }
-        }
-        return "application/octet-stream";
-    }
-} // namespace
-
-HttpResponse RegularResponseFactory::create(const fs::path& path, const ResolvedRoute& route) {
+HttpResponse RegularResponseFactory::create(const std::filesystem::path& path, const ResolvedRoute& route) {
     std::ifstream file;
 
     errno = 0;
@@ -86,5 +50,6 @@ HttpResponse RegularResponseFactory::create(const fs::path& path, const Resolved
     } catch (const std::ios_base::failure&) {
         return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
     }
-    return HttpResponseFactory::create(HttpStatus::OK, std::move(body), getContentType(path));
+
+    return HttpResponseFactory::create(HttpStatus::OK, std::move(body), Http::Mime::from(path));
 }
