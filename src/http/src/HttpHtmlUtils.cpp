@@ -1,7 +1,6 @@
 #include "HttpHtmlUtils.hpp"
 
-namespace Http::Html {
-
+namespace {
     std::string escape(const std::string& value) {
         std::string result;
 
@@ -29,6 +28,13 @@ namespace Http::Html {
         }
         return result;
     }
+} // namespace
+
+namespace Http::Html {
+
+    std::string link(const std::string& href, const std::string& text) {
+        return "<a href=\"" + escape(href) + "\">" + escape(text) + "</a>";
+    }
 
     std::string buildPage(const std::string& title, const std::string& heading, const std::string& content) {
         std::string body;
@@ -38,12 +44,12 @@ namespace Http::Html {
         body += "<head>\n";
         body += "<meta charset=\"UTF-8\">\n";
         body += "<title>";
-        body += title;
+        body += escape(title);
         body += "</title>\n";
         body += "</head>\n";
         body += "<body>\n";
         body += "<h1>";
-        body += heading;
+        body += escape(heading);
         body += "</h1>\n";
         body += content;
         body += "</body>\n";

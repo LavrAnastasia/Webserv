@@ -38,16 +38,12 @@ namespace {
                 href += '/';
             }
 
-            body += "<li><a href=\"";
-            body += href;
-            body += "\">";
-            body += Http::Html::escape(name);
+            std::string label = name;
 
             if (isDirectory) {
-                body += '/';
+                label += '/';
             }
-
-            body += "</a></li>\n";
+            body += "<li>" + Http::Html::link(href, label) + "</li>\n";
         }
 
         body += "</ul>\n";
@@ -64,10 +60,8 @@ namespace {
 
         return entries;
     }
-} // namespace
 
-namespace {
-    HttpResponse handleAutoIndex(const fs::path& directoryPath, const HttpRequest& request) {
+    HttpResponse handleAutoindex(const fs::path& directoryPath, const HttpRequest& request) {
         std::vector<fs::directory_entry> entries = getDirectoryEntries(directoryPath);
 
         std::sort(
@@ -83,8 +77,7 @@ namespace {
             }
         );
 
-        const std::string escapedPath = Http::Html::escape(request.path);
-        const std::string title = "Index of " + escapedPath;
+        const std::string title = "Index of " + request.path;
         const std::string content = buildDirectoryList(entries, request.path);
 
         std::string body = Http::Html::buildPage(title, title, content);
@@ -177,7 +170,7 @@ namespace {
         }
 
         if (route.autoindex) {
-            return handleAutoIndex(directoryPath, request);
+            return handleAutoindex(directoryPath, request);
         }
 
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
