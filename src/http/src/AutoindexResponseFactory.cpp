@@ -90,23 +90,23 @@ HttpResponse AutoindexResponseFactory::create(const fs::path& directoryPath, con
     body += "<!DOCTYPE html>\n";
     body += "<html lang=\"en\">\n";
     body += "<head>\n";
-    body += "    <meta charset=\"UTF-8\">\n";
-    body += "    <title>Index of ";
+    body += "<meta charset=\"UTF-8\">\n";
+    body += "<title>Index of ";
     body += escapedPath;
     body += "</title>\n";
     body += "</head>\n";
     body += "<body>\n";
-    body += "    <h1>Index of ";
+    body += "<h1>Index of ";
     body += escapedPath;
     body += "</h1>\n";
-    body += "    <ul>\n";
+    body += "<ul>\n";
 
     if (request.path != "/") {
-        body += "        <li><a href=\"../\">../</a></li>\n";
+        body += "<li><a href=\"../\">../</a></li>\n";
     }
 
     for (const DirectoryItem& item : items) {
-        body += "        <li><a href=\"";
+        body += "<li><a href=\"";
         body += item.href;
         body += "\">";
         body += escapeHtml(item.name);
@@ -117,7 +117,7 @@ HttpResponse AutoindexResponseFactory::create(const fs::path& directoryPath, con
         body += "</a></li>\n";
     }
 
-    body += "    </ul>\n";
+    body += "</ul>\n";
     body += "</body>\n";
     body += "</html>\n";
     return HttpResponseFactory::create(HttpStatus::OK, std::move(body), "text/html; charset=utf-8");

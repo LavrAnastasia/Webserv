@@ -18,13 +18,13 @@ namespace {
         return "<!DOCTYPE html>\n"
                "<html lang=\"en\">\n"
                "<head>\n"
-               "    <meta charset=\"UTF-8\">\n"
-               "    <title>" +
+               "<meta charset=\"UTF-8\">\n"
+               "<title>" +
             std::to_string(statusCode) + " " + reason +
             "</title>\n"
             "</head>\n"
             "<body>\n"
-            "    <h1>" +
+            "<h1>" +
             std::to_string(statusCode) + " " + reason +
             "</h1>\n"
             "</body>\n"
