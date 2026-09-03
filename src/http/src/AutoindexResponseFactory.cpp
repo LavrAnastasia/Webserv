@@ -10,12 +10,6 @@
 namespace {
     namespace fs = std::filesystem;
 
-    struct DirectoryItem {
-        std::string name;
-        std::string href;
-        bool isDirectory;
-    };
-
     std::string escapeHtml(const std::string& value) {
         std::string result;
 
@@ -24,23 +18,18 @@ namespace {
                 case '&':
                     result += "&amp;";
                     break;
-
                 case '<':
                     result += "&lt;";
                     break;
-
                 case '>':
                     result += "&gt;";
                     break;
-
                 case '"':
                     result += "&quot;";
                     break;
-
                 case '\'':
                     result += "&#39;";
                     break;
-
                 default:
                     result += character;
                     break;
@@ -49,38 +38,66 @@ namespace {
         return result;
     }
 
-    std::vector<DirectoryItem> getDirectoryItems(const fs::path& directoryPath) {
-        std::vector<DirectoryItem> items;
+    std::string buildDirectoryList(const std::vector<fs::directory_entry>& entries, const std::string& requestPath) {
+        std::string body;
 
-        for (const fs::directory_entry& entry : fs::directory_iterator(directoryPath)) {
-            const fs::file_status status = entry.symlink_status();
+        body += "<ul>\n";
 
-            DirectoryItem item;
-
-            item.name = entry.path().filename().string();
-            item.isDirectory = fs::is_directory(status);
-            item.href = Http::Url::encodeSegment(item.name);
-
-            if (item.isDirectory) {
-                item.href += '/';
-            }
-
-            items.push_back(std::move(item));
+        if (requestPath != "/") {
+            body += "<li><a href=\"../\">../</a></li>\n";
         }
 
-        return items;
+        for (const fs::directory_entry& entry : entries) {
+            const std::string name = entry.path().filename().string();
+            const bool isDirectory = entry.is_directory();
+
+            std::string href = Http::Url::encodeSegment(name);
+
+            if (isDirectory) {
+                href += '/';
+            }
+
+            body += "<li><a href=\"";
+            body += href;
+            body += "\">";
+            body += escapeHtml(name);
+
+            if (isDirectory) {
+                body += '/';
+            }
+
+            body += "</a></li>\n";
+        }
+
+        body += "</ul>\n";
+
+        return body;
+    }
+
+    std::vector<fs::directory_entry> getDirectoryEntries(const fs::path& directoryPath) {
+        std::vector<fs::directory_entry> entries;
+
+        for (const fs::directory_entry& entry : fs::directory_iterator(directoryPath)) {
+            entries.push_back(entry);
+        }
+
+        return entries;
     }
 
 } // namespace
 
 HttpResponse AutoindexResponseFactory::create(const fs::path& directoryPath, const HttpRequest& request) {
-    std::vector<DirectoryItem> items = getDirectoryItems(directoryPath);
+    std::vector<fs::directory_entry> entries = getDirectoryEntries(directoryPath);
 
-    std::sort(items.begin(), items.end(), [](const DirectoryItem& left, const DirectoryItem& right) {
-        if (left.isDirectory != right.isDirectory) {
-            return left.isDirectory;
+    std::sort(entries.begin(), entries.end(), [](const fs::directory_entry& left, const fs::directory_entry& right) {
+        const bool leftDirectory = left.is_directory();
+        const bool rightDirectory = right.is_directory();
+
+        if (leftDirectory != rightDirectory) {
+            return leftDirectory;
         }
-        return left.name < right.name;
+
+        return left.path().filename().string() < right.path().filename().string();
     });
 
     const std::string escapedPath = escapeHtml(request.path);
@@ -99,25 +116,7 @@ HttpResponse AutoindexResponseFactory::create(const fs::path& directoryPath, con
     body += "<h1>Index of ";
     body += escapedPath;
     body += "</h1>\n";
-    body += "<ul>\n";
-
-    if (request.path != "/") {
-        body += "<li><a href=\"../\">../</a></li>\n";
-    }
-
-    for (const DirectoryItem& item : items) {
-        body += "<li><a href=\"";
-        body += item.href;
-        body += "\">";
-        body += escapeHtml(item.name);
-
-        if (item.isDirectory) {
-            body += '/';
-        }
-        body += "</a></li>\n";
-    }
-
-    body += "</ul>\n";
+    body += buildDirectoryList(entries, request.path);
     body += "</body>\n";
     body += "</html>\n";
     return HttpResponseFactory::create(HttpStatus::OK, std::move(body), "text/html; charset=utf-8");
