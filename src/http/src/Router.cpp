@@ -51,7 +51,7 @@ namespace {
     }
 } // namespace
 
-std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const ServerConfig& server) const {
+std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const ServerConfig& server) {
     if (request.path.empty() || request.path.front() != Http::Syntax::PathPrefix) {
         return std::nullopt;
     }
