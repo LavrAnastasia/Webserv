@@ -6,6 +6,9 @@
 #include <string>
 #include <utility>
 
+#include "http/HttpMethodUtils.hpp"
+
+#include "HttpHeadersUtils.hpp"
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
@@ -41,6 +44,22 @@ namespace {
 
         return body;
     }
+
+    HttpResponse buildResponse(HttpStatus status, const ResolvedRoute& route) {
+        const auto it = route.errorPages.find(static_cast<int>(status));
+
+        if (it == route.errorPages.end()) {
+            return ErrorResponseFactory::create(status);
+        }
+
+        std::optional<std::string> body = readBody(it->second);
+
+        if (!body.has_value()) {
+            return ErrorResponseFactory::create(status);
+        }
+
+        return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
+    }
 } // namespace
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status) {
@@ -48,17 +67,11 @@ HttpResponse ErrorResponseFactory::create(HttpStatus status) {
 }
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute& route) {
-    const auto it = route.errorPages.find(static_cast<int>(status));
+    HttpResponse response = buildResponse(status, route);
 
-    if (it == route.errorPages.end()) {
-        return create(status);
+    if (status == HttpStatus::MethodNotAllowed) {
+        response.headers.set(std::string(Http::Headers::Allow), Http::Method::toString(route.allowedMethods));
     }
 
-    std::optional<std::string> body = readBody(it->second);
-
-    if (!body.has_value()) {
-        return create(status);
-    }
-
-    return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
+    return response;
 }

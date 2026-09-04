@@ -203,6 +203,8 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
         if (!fs::is_regular_file(fileStatus)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
+
+        // TODO: WEB-35 Support DELETE
         return handleFileRequest(filePath, route);
     } catch (const fs::filesystem_error& error) {
         return ErrorResponseFactory::create(Http::Status::from(error.code()), route);

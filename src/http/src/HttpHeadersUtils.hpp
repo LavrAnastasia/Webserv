@@ -9,6 +9,7 @@ namespace Http::Headers {
     constexpr std::string_view TransferEncoding = "Transfer-Encoding";
     constexpr std::string_view Host = "Host";
     constexpr std::string_view Date = "Date";
+    constexpr std::string_view Allow = "Allow";
     constexpr std::string_view Location = "Location";
     constexpr std::string_view Server = "Server";
 
