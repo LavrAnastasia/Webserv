@@ -92,6 +92,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         fail case: unable to parse client request -> build error response and
         close connection after sending!
         */
+        // TODO: WEB-26 Every failure collapses into BadRequest, so 501/505/413/431/414 are lost
         else if (result.status == ParseStatus::BadRequest) {
             connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(HttpStatus::BadRequest)));
             connection->setShouldClose(true);
