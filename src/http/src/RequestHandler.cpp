@@ -29,9 +29,13 @@ HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConf
     }
 
     if (route->upload) {
-        // TODO: WEB-37 Upload
+        // TODO: WEB-37 Upload Handler
         return ErrorResponseFactory::create(HttpStatus::NotImplemented, *route);
     }
 
     return StaticHandler::handle(request, *route);
+}
+
+HttpResponse RequestHandler::reject(HttpStatus status) {
+    return ErrorResponseFactory::create(status);
 }

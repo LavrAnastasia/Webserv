@@ -1,10 +1,14 @@
 #include "net/EventLoop.hpp"
+#include "http/HttpSerializer.hpp"
+#include "http/RequestHandler.hpp"
 #include "net/TcpServer.hpp"
+
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <exception>
 #include <iostream>
-#include <unistd.h> //for close()
+#include <unistd.h>
 #include <vector>
 
 void EventLoop::handleNewConnection(int listenFd) {
@@ -55,9 +59,6 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
         // Parsing complete -> build response from HttpRequest
         if (result.status == ParseStatus::Complete) {
-            // TODO: WEB-28 RequestHandler integration
-            // TODO: WEB-17 HttpSerializer integration
-
             /*
                 TODO: Replace raw strings "connection" & "close" with constants
                 from Http::Headers once available
@@ -75,19 +76,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
                 connection->setShouldClose(false);
             }
 
-            //PLACEHOLDER RESPONSE: get path from parsed request
-            std::string path = result.request->path;
-            //PLACEHOLDER RESPONSE: create body
-            std::string body = "<html><body><h1>:)</h1><p>Requested: " + path + "</p></body></html>";
-            //PLACEHOLDER RESPONSE: create full response
-            std::string response = "HTTP/1.1 200 OK\r\n"
-                                   "Content-Length: " +
-                std::to_string(body.length()) +
-                "\r\n"
-                "Content-Type: text/html\r\n"
-                "\r\n" +
-                body;
-            connection->appendResponse(response);
+            HttpResponse response = RequestHandler::handle(*result.request, connection->getServerConfig());
+            connection->appendResponse(HttpSerializer::serialize(response));
             poller_.modifySocket(clientFd, POLLOUT);
         }
 
@@ -103,8 +93,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         close connection after sending!
         */
         else if (result.status == ParseStatus::BadRequest) {
-            // TODO: WEB-29 ErrorResponseFactory integration
-            connection->appendResponse("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n");
+            connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(HttpStatus::BadRequest)));
             connection->setShouldClose(true);
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
@@ -142,6 +131,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 }
 
 void EventLoop::initialize() {
+    std::signal(SIGPIPE, SIG_IGN);
+
     listeningFds_ = tcpServer_.getListeningFds();
     for (int fd : listeningFds_) {
         poller_.addSocket(fd);

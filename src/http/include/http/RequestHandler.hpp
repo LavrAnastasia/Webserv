@@ -7,4 +7,5 @@
 class RequestHandler {
 public:
     static HttpResponse handle(const HttpRequest& request, const ServerConfig& server);
+    static HttpResponse reject(HttpStatus status);
 };
