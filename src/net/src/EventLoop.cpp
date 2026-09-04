@@ -59,25 +59,10 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
         // Parsing complete -> build response from HttpRequest
         if (result.status == ParseStatus::Complete) {
-            /*
-                TODO: Replace raw strings "connection" & "close" with constants
-                from Http::Headers once available
-            */
-            std::optional<std::string> connHeader = result.request->headers.get("connection");
-
-            if (connHeader.has_value()) {
-                if (HttpHeaders::equals(connHeader.value(), "close")) {
-                    connection->setShouldClose(true);
-                } else {
-                    connection->setShouldClose(false);
-                }
-            } else {
-                // default to keep-alive
-                connection->setShouldClose(false);
-            }
-
             HttpResponse response = RequestHandler::handle(*result.request, connection->getServerConfig());
+
             connection->appendResponse(HttpSerializer::serialize(response));
+            connection->setShouldClose(!result.request->isPersistent());
             poller_.modifySocket(clientFd, POLLOUT);
         }
 
@@ -92,7 +77,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         fail case: unable to parse client request -> build error response and
         close connection after sending!
         */
-        // TODO: WEB-26 Every failure collapses into BadRequest, so 501/505/413/431/414 are lost
+        // TODO: WEB-26 Every failure (from HttpParser) collapses into BadRequest, so 501/505/413/431/414 are lost
         else if (result.status == ParseStatus::BadRequest) {
             connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(HttpStatus::BadRequest)));
             connection->setShouldClose(true);
