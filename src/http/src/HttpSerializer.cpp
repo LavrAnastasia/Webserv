@@ -2,9 +2,10 @@
 #include <stdexcept>
 
 #include "HttpHeadersUtils.hpp"
-#include "HttpStatusUtils.hpp"
 #include "HttpSyntax.hpp"
+
 #include "http/HttpSerializer.hpp"
+#include "http/HttpStatus.hpp"
 
 namespace {
     constexpr std::string_view serverName = "webserv";

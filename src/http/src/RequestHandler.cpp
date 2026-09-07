@@ -12,7 +12,7 @@ HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConf
     }
 
     if (route->redirect) {
-        return RedirectHandler::handle(*route->redirect);
+        return RedirectHandler::handle(*route->redirect, *route);
     }
 
     if (!route->allowedMethods.contains(request.method)) {

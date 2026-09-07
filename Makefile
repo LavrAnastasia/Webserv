@@ -39,7 +39,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	Router.cpp \
 	ErrorResponseFactory.cpp \
 	HttpResponseFactory.cpp \
-	HttpStatusUtils.cpp \
+	HttpStatus.cpp \
 	HttpSerializer.cpp \
 	HttpHeadersUtils.cpp \
 	StaticHandler.cpp \

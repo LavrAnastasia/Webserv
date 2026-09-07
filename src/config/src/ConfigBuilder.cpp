@@ -42,7 +42,9 @@ LocationConfig ConfigBuilder::buildLocationConfig(const ConfigNode& node) {
                 config.upload = ConfigDecoder::decodeUpload(child.arguments[0]);
                 break;
             case Config::Directive::Return:
-                config.redirect = ConfigDecoder::decodeRedirect(child.arguments[0], child.arguments[1]);
+                config.redirect = child.arguments.size() == 1
+                    ? ConfigDecoder::decodeRedirect(child.arguments[0])
+                    : ConfigDecoder::decodeRedirect(child.arguments[0], child.arguments[1]);
                 break;
             case Config::Directive::Cgi: {
                 const CgiConfig cgi = ConfigDecoder::decodeCgi(child.arguments[0], child.arguments[1]);

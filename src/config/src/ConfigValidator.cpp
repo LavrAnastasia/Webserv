@@ -141,13 +141,13 @@ void ConfigValidator::validateDirectiveDuplication(
 }
 
 void ConfigValidator::validateErrorPages(
-    const std::unordered_map<int, std::filesystem::path>& oldPages,
-    const std::unordered_map<int, std::filesystem::path>& newPages
+    const std::unordered_map<HttpStatus, std::filesystem::path>& oldPages,
+    const std::unordered_map<HttpStatus, std::filesystem::path>& newPages
 ) {
     for (const auto& page : newPages) {
-        const int statusCode = page.first;
+        const HttpStatus status = page.first;
 
-        if (oldPages.contains(statusCode)) {
+        if (oldPages.contains(status)) {
             throw ConfigValidationError(ConfigValidationError::Reason::DuplicateValue, "error page status code");
         }
     }

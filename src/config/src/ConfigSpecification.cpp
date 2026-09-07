@@ -62,7 +62,7 @@ namespace {
         },
         {
             "return",
-            {.directive = Config::Directive::Return, .contexts = {Config::Block::Location}, .argumentCount = {2, 2}},
+            {.directive = Config::Directive::Return, .contexts = {Config::Block::Location}, .argumentCount = {1, 2}},
         },
         {
             "cgi",

@@ -17,7 +17,7 @@ namespace {
         {".css", "text/css; charset=utf-8"},
         {".js", "application/javascript"},
         {".json", "application/json"},
-        {".txt", "text/plain; charset=utf-8"},
+        {".txt", Http::Mime::Text},
         {".xml", "application/xml"},
         {".png", "image/png"},
         {".jpg", "image/jpeg"},
