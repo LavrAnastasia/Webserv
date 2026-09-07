@@ -1,4 +1,4 @@
-#include "http/HttpMethodUtils.hpp"
+#include "http/HttpMethod.hpp"
 
 #include <algorithm>
 #include <array>

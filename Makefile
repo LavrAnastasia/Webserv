@@ -30,7 +30,7 @@ FS_SRC := $(addprefix src/fs/src/, \
 )
 
 HTTP_SRC := $(addprefix src/http/src/, \
-	HttpMethodUtils.cpp \
+	HttpMethod.cpp \
 	RequestLineParser.cpp \
 	HttpParser.cpp \
 	HttpHeaders.cpp \

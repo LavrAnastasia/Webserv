@@ -6,7 +6,7 @@
 #include <string>
 #include <utility>
 
-#include "http/HttpMethodUtils.hpp"
+#include "http/HttpMethod.hpp"
 
 #include "HttpHeadersUtils.hpp"
 #include "HttpHtmlUtils.hpp"

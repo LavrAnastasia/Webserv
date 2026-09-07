@@ -6,7 +6,6 @@
 #include "ConfigDecoder.hpp"
 #include "ConfigDecodingError.hpp"
 #include "http/HttpMethod.hpp"
-#include "http/HttpMethodUtils.hpp"
 #include "http/HttpStatus.hpp"
 
 namespace {
