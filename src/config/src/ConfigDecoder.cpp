@@ -7,6 +7,7 @@
 #include "ConfigDecodingError.hpp"
 #include "http/HttpMethod.hpp"
 #include "http/HttpMethodUtils.hpp"
+#include "http/HttpStatus.hpp"
 
 namespace {
     std::string decodeHost(std::string_view value) {
@@ -192,7 +193,8 @@ RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status, std::strin
 
     const auto [ptr, error] = std::from_chars(status.data(), status.data() + status.size(), statusCode);
 
-    if (error != std::errc{} || ptr != status.data() + status.size() || statusCode < 300 || statusCode > 399) {
+    if (error != std::errc{} || ptr != status.data() + status.size() ||
+        !Http::Status::isRedirect(static_cast<HttpStatus>(statusCode))) {
         throw ConfigDecodingError(
             ConfigDecodingError::Reason::InvalidFormat, "redirect status code: " + std::string(status)
         );

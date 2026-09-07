@@ -25,3 +25,18 @@ enum class HttpStatus {
     GatewayTimeout = 504,
     HttpVersionNotSupported = 505,
 };
+
+namespace Http::Status {
+    constexpr bool isRedirect(HttpStatus status) {
+        switch (status) {
+            case HttpStatus::MovedPermanently:
+            case HttpStatus::Found:
+            case HttpStatus::SeeOther:
+            case HttpStatus::TemporaryRedirect:
+            case HttpStatus::PermanentRedirect:
+                return true;
+            default:
+                return false;
+        }
+    }
+} // namespace Http::Status
