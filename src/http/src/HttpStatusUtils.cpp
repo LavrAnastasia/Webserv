@@ -18,6 +18,15 @@ namespace Http::Status {
             case HttpStatus::Found:
                 return "Found";
 
+            case HttpStatus::SeeOther:
+                return "See Other";
+
+            case HttpStatus::TemporaryRedirect:
+                return "Temporary Redirect";
+
+            case HttpStatus::PermanentRedirect:
+                return "Permanent Redirect";
+
             case HttpStatus::BadRequest:
                 return "Bad Request";
 

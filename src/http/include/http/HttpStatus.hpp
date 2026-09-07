@@ -7,7 +7,10 @@ enum class HttpStatus {
 
     MovedPermanently = 301,
     Found = 302,
+    SeeOther = 303,
     NotModified = 304,
+    TemporaryRedirect = 307,
+    PermanentRedirect = 308,
 
     BadRequest = 400,
     Forbidden = 403,

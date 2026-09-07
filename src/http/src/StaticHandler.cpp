@@ -140,7 +140,6 @@ namespace {
 
         response.status = HttpStatus::MovedPermanently;
         response.headers.set(std::string(Http::Headers::Location), location);
-        response.headers.set(std::string(Http::Headers::ContentLength), "0");
         return response;
     }
 
