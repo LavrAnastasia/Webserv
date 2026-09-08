@@ -8,31 +8,16 @@
 #include <unistd.h> //for close()
 #include <vector>
 
-EventLoop* EventLoop::instance_ = nullptr;
+volatile std::sig_atomic_t EventLoop::stopRequested_ = 0;
 
-/*
-    -registers the functions we want to call when a specific signal
-    is received, with the OS signal system
-    -instance_ is initialized here, so the signal handler can't call
-    stop() on an EventLoop object that hasn't been fully constructed yet;
-*/
-void EventLoop::registerSignalHandler(EventLoop* instance) {
-    instance_ = instance;
-    std::signal(SIGINT, EventLoop::handleSignal); //Ctrl+C
-    std::signal(SIGTERM, EventLoop::handleSignal); //system kill command
+void EventLoop::setupSignals() {
+    std::signal(SIGINT, EventLoop::handleSignal);
+    std::signal(SIGTERM, EventLoop::handleSignal);
 }
 
-/*
-    Static function is "objectless" -it has no 'this' pointer
-    -> this is required so the OS signal system (written in C) can call it
-    -> this also makes the function 'blind', so we need the static pointer
-    to access our loop instance
-*/
 void EventLoop::handleSignal(int sig) {
     (void)sig;
-    if (instance_) {
-        instance_->stop();
-    }
+    stopRequested_ = 1;
 }
 
 void EventLoop::handleNewConnection(int listenFd) {
@@ -177,9 +162,7 @@ void EventLoop::initialize() {
 }
 
 void EventLoop::run() {
-    isRunning_ = true;
-
-    while (isRunning_) {
+    while (stopRequested_ == 0) {
         // poller returns vector<pollfd> of active sockets (incl. *what* activity)
         auto activeSockets = poller_.waitForEvents();
         for (pollfd& event : activeSockets) {
@@ -209,5 +192,5 @@ void EventLoop::cleanupTimedOutConnections() {
 }
 
 void EventLoop::stop() {
-    isRunning_ = false;
+    stopRequested_ = 1;
 }

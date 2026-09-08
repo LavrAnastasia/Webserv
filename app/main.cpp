@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
 
         EventLoop loop(server);
 
-        EventLoop::registerSignalHandler(&loop);
+        EventLoop::setupSignals();
 
         loop.initialize();
 
