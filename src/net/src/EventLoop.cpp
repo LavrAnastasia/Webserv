@@ -11,6 +11,18 @@
 #include <unistd.h>
 #include <vector>
 
+volatile std::sig_atomic_t EventLoop::stopRequested_ = 0;
+
+void EventLoop::setupSignals() {
+    std::signal(SIGINT, EventLoop::handleSignal);
+    std::signal(SIGTERM, EventLoop::handleSignal);
+}
+
+void EventLoop::handleSignal(int sig) {
+    (void)sig;
+    stopRequested_ = 1;
+}
+
 void EventLoop::handleNewConnection(int listenFd) {
     //auto allows nullopt return
     auto clientInfo = tcpServer_.acceptClient(listenFd);
@@ -126,9 +138,7 @@ void EventLoop::initialize() {
 }
 
 void EventLoop::run() {
-    isRunning_ = true;
-
-    while (isRunning_) {
+    while (stopRequested_ == 0) {
         // poller returns vector<pollfd> of active sockets (incl. *what* activity)
         auto activeSockets = poller_.waitForEvents();
         for (pollfd& event : activeSockets) {
@@ -158,5 +168,5 @@ void EventLoop::cleanupTimedOutConnections() {
 }
 
 void EventLoop::stop() {
-    isRunning_ = false;
+    stopRequested_ = 1;
 }
