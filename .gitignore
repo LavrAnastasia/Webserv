@@ -71,3 +71,4 @@ Testing/
 
 # environment settings
 .vscode/
+.DS_Store

@@ -52,6 +52,9 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
             case ParserState::ChunkData:
                 progressed = handleChunkData();
                 break;
+            case ParserState::ChunkEnd:
+                progressed = handleChunkEnd();
+                break;
             case ParserState::Complete:
                 return {ParseStatus::Complete, _request};
             case ParserState::Error:
@@ -201,21 +204,26 @@ bool HttpParser::handleChunkSize() {
     }
 
     if (_currentChunkSize == 0) {
-        if (_buffer.size() < Http::Syntax::CRLF.size()) {
-            return false;
-        }
-
-        if (_buffer.compare(0, Http::Syntax::CRLF.size(), Http::Syntax::CRLF) != 0) {
-            _state = ParserState::Error;
-            return true;
-        }
-
-        _buffer.erase(0, Http::Syntax::CRLF.size());
-        _state = ParserState::Complete;
+        _state = ParserState::ChunkEnd;
         return true;
     }
 
     _state = ParserState::ChunkData;
+    return true;
+}
+
+bool HttpParser::handleChunkEnd() {
+    if (_buffer.size() < Http::Syntax::CRLF.size()) {
+        return false;
+    }
+
+    if (_buffer.compare(0, Http::Syntax::CRLF.size(), Http::Syntax::CRLF) != 0) {
+        _state = ParserState::Error;
+        return true;
+    }
+
+    _buffer.erase(0, Http::Syntax::CRLF.size());
+    _state = ParserState::Complete;
     return true;
 }
 

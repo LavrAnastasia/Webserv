@@ -19,6 +19,7 @@ enum class ParserState {
     Body,
     ChunkSize,
     ChunkData,
+    ChunkEnd,
     Complete,
     Error,
 };
@@ -42,6 +43,7 @@ private:
     bool handleChunkSize();
     bool handleChunkData();
     bool loadContentLength();
+    bool handleChunkEnd();
 
 public:
     HttpParser();

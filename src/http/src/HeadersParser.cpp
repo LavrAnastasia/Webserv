@@ -40,10 +40,10 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
     std::string key = line.substr(0, colon);
     std::string value = Http::Ascii::trim(line.substr(colon + 1));
 
-    if (!Http::Header::isValidName(key))
+    if (!Http::Headers::isValidName(key))
         return false;
 
-    if (!Http::Header::isValidValue(value))
+    if (!Http::Headers::isValidValue(value))
         return false;
 
     if (!canStoreHeader(headers_, key))

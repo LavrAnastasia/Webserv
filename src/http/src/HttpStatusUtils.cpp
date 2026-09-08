@@ -57,4 +57,16 @@ namespace Http::Status {
 
         return "Unknown Status";
     }
+
+    HttpStatus from(const std::error_code& error) {
+        if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted) {
+            return HttpStatus::Forbidden;
+        }
+
+        if (error == std::errc::no_such_file_or_directory || error == std::errc::not_a_directory) {
+            return HttpStatus::NotFound;
+        }
+
+        return HttpStatus::InternalServerError;
+    }
 } // namespace Http::Status

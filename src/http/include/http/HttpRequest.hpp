@@ -15,4 +15,6 @@ struct HttpRequest {
     std::string version;
     HttpHeaders headers;
     std::string body;
+
+    bool isPersistent() const;
 };

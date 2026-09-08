@@ -9,5 +9,5 @@
 
 class Router {
 public:
-    std::optional<ResolvedRoute> resolve(const HttpRequest& request, const ServerConfig& server) const;
+    static std::optional<ResolvedRoute> resolve(const HttpRequest& request, const ServerConfig& server);
 };

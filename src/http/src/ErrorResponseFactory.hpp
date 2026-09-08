@@ -4,7 +4,6 @@
 #include "http/HttpResponse.hpp"
 #include "http/HttpStatus.hpp"
 
-
 class ErrorResponseFactory {
 public:
     static HttpResponse create(HttpStatus status);

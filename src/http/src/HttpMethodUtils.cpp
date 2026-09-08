@@ -34,4 +34,18 @@ namespace Http::Method {
         return std::string(it->name);
     }
 
+    std::string toString(const std::set<HttpMethod>& methods) {
+        std::string result;
+
+        for (const HttpMethod method : methods) {
+            if (!result.empty()) {
+                result += ", ";
+            }
+
+            result += toString(method);
+        }
+
+        return result;
+    }
+
 } // namespace Http::Method

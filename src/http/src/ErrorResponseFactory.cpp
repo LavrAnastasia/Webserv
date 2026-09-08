@@ -6,29 +6,22 @@
 #include <string>
 #include <utility>
 
+#include "http/HttpMethodUtils.hpp"
+
+#include "HttpHeadersUtils.hpp"
+#include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpStatusUtils.hpp"
-#include "HttpUtils.hpp"
+#include "MimeTypes.hpp"
 
 namespace {
     std::string buildHtml(HttpStatus status) {
         const int statusCode = static_cast<int>(status);
         const std::string reason = Http::Status::toString(status);
 
-        return "<!DOCTYPE html>\n"
-               "<html lang=\"en\">\n"
-               "<head>\n"
-               "    <meta charset=\"UTF-8\">\n"
-               "    <title>" +
-            std::to_string(statusCode) + " " + reason +
-            "</title>\n"
-            "</head>\n"
-            "<body>\n"
-            "    <h1>" +
-            std::to_string(statusCode) + " " + reason +
-            "</h1>\n"
-            "</body>\n"
-            "</html>\n";
+        const std::string title = std::to_string(statusCode) + " " + reason;
+
+        return Http::Html::buildPage(title, title);
     }
 
     std::optional<std::string> readBody(const std::filesystem::path& path) {
@@ -51,24 +44,34 @@ namespace {
 
         return body;
     }
+
+    HttpResponse buildResponse(HttpStatus status, const ResolvedRoute& route) {
+        const auto it = route.errorPages.find(static_cast<int>(status));
+
+        if (it == route.errorPages.end()) {
+            return ErrorResponseFactory::create(status);
+        }
+
+        std::optional<std::string> body = readBody(it->second);
+
+        if (!body.has_value()) {
+            return ErrorResponseFactory::create(status);
+        }
+
+        return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
+    }
 } // namespace
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status) {
-    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::ContentType::Html));
+    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
 }
 
 HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute& route) {
-    const auto it = route.errorPages.find(static_cast<int>(status));
+    HttpResponse response = buildResponse(status, route);
 
-    if (it == route.errorPages.end()) {
-        return create(status);
+    if (status == HttpStatus::MethodNotAllowed) {
+        response.headers.set(std::string(Http::Headers::Allow), Http::Method::toString(route.allowedMethods));
     }
 
-    std::optional<std::string> body = readBody(it->second);
-
-    if (!body.has_value()) {
-        return create(status);
-    }
-
-    return HttpResponseFactory::create(status, std::move(*body), std::string(Http::ContentType::Html));
+    return response;
 }

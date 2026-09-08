@@ -3,7 +3,7 @@
 #include "HttpHeadersUtils.hpp"
 #include "HttpSyntax.hpp"
 
-namespace Http::Header {
+namespace Http::Headers {
     bool isValidName(const std::string& name) {
         return !name.empty() && std::ranges::all_of(name, [](char c) {
             const unsigned char uc = static_cast<unsigned char>(c);
@@ -28,4 +28,4 @@ namespace Http::Header {
 
         return true;
     }
-} // namespace Http::Header
+} // namespace Http::Headers

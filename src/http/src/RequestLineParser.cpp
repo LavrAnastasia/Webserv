@@ -46,6 +46,104 @@ namespace {
             std::none_of(target.begin(), target.end(), isControlCharacter);
     }
 
+    int hexValue(char character) {
+        if (character >= '0' && character <= '9') {
+            return character - '0';
+        }
+
+        if (character >= 'a' && character <= 'f') {
+            return character - 'a' + 10;
+        }
+
+        if (character >= 'A' && character <= 'F') {
+            return character - 'A' + 10;
+        }
+
+        return -1;
+    }
+
+    std::optional<std::string> decodeUrlPath(std::string_view encodedPath) {
+        std::string decodedPath;
+        decodedPath.reserve(encodedPath.size());
+
+        for (std::size_t index = 0; index < encodedPath.size(); ++index) {
+            const char character = encodedPath[index];
+
+            if (character != '%') {
+                decodedPath += character;
+                continue;
+            }
+
+            if (index + 2 >= encodedPath.size()) {
+                return std::nullopt;
+            }
+
+            const int high = hexValue(encodedPath[index + 1]);
+            const int low = hexValue(encodedPath[index + 2]);
+
+            if (high < 0 || low < 0) {
+                return std::nullopt;
+            }
+
+            const unsigned char decodedCharacter = static_cast<unsigned char>((high << 4) | low);
+            if (decodedCharacter < 0x20 || decodedCharacter == 0x7F || decodedCharacter == '/' ||
+                decodedCharacter == '\\') {
+                return std::nullopt;
+            }
+
+            decodedPath += static_cast<char>(decodedCharacter);
+            index += 2;
+        }
+
+        return decodedPath;
+    }
+
+    bool hasDotSegments(std::string_view path) {
+        std::size_t begin = 0;
+
+        while (begin <= path.size()) {
+            const std::size_t end = path.find('/', begin);
+
+            const std::size_t length = end == std::string_view::npos ? std::string_view::npos : end - begin;
+
+            const std::string_view segment = path.substr(begin, length);
+
+            if (segment == "." || segment == "..") {
+                return true;
+            }
+
+            if (end == std::string_view::npos) {
+                break;
+            }
+
+            begin = end + 1;
+        }
+        return false;
+    }
+
+    bool decodeAndValidateRequestPath(HttpRequest& request) {
+        std::optional<std::string> decodedPath = decodeUrlPath(request.path);
+
+        if (!decodedPath.has_value()) {
+            return false;
+        }
+
+        if (decodedPath->empty() || decodedPath->front() != Http::Syntax::PathPrefix) {
+            return false;
+        }
+        if (decodedPath->find("//") != std::string::npos) {
+            return false;
+        }
+
+        if (hasDotSegments(*decodedPath)) {
+            return false;
+        }
+
+        request.path = std::move(*decodedPath);
+
+        return true;
+    }
+
     void fillPathAndQuery(HttpRequest& request) {
         std::size_t queryPos;
         queryPos = request.target.find(Http::Syntax::QuerySeparator);
@@ -95,5 +193,10 @@ std::optional<HttpRequest> RequestLineParser::run() {
     request.body = "";
 
     fillPathAndQuery(request);
+
+    if (!decodeAndValidateRequestPath(request)) {
+        return std::nullopt;
+    }
+
     return request;
 }
