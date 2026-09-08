@@ -1,4 +1,8 @@
-#include "HttpStatusUtils.hpp"
+#include "http/HttpStatus.hpp"
+
+namespace {
+    constexpr std::string_view unknownStatus = "Unknown Status";
+}
 
 namespace Http::Status {
     std::string toString(HttpStatus status) {
@@ -17,6 +21,15 @@ namespace Http::Status {
 
             case HttpStatus::Found:
                 return "Found";
+
+            case HttpStatus::SeeOther:
+                return "See Other";
+
+            case HttpStatus::TemporaryRedirect:
+                return "Temporary Redirect";
+
+            case HttpStatus::PermanentRedirect:
+                return "Permanent Redirect";
 
             case HttpStatus::BadRequest:
                 return "Bad Request";
@@ -45,6 +58,9 @@ namespace Http::Status {
             case HttpStatus::BadGateway:
                 return "Bad Gateway";
 
+            case HttpStatus::ServiceUnavailable:
+                return "Service Unavailable";
+
             case HttpStatus::GatewayTimeout:
                 return "Gateway Timeout";
 
@@ -55,18 +71,12 @@ namespace Http::Status {
                 return "Not Modified";
         }
 
-        return "Unknown Status";
+        return std::string(unknownStatus);
     }
 
-    HttpStatus from(const std::error_code& error) {
-        if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted) {
-            return HttpStatus::Forbidden;
-        }
+    std::optional<HttpStatus> fromCode(int code) {
+        const HttpStatus status = static_cast<HttpStatus>(code);
 
-        if (error == std::errc::no_such_file_or_directory || error == std::errc::not_a_directory) {
-            return HttpStatus::NotFound;
-        }
-
-        return HttpStatus::InternalServerError;
+        return toString(status) == unknownStatus ? std::nullopt : std::optional<HttpStatus>(status);
     }
 } // namespace Http::Status

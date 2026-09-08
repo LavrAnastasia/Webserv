@@ -9,21 +9,27 @@ bool HttpHeaders::equals(std::string_view a, std::string_view b) {
     });
 }
 
-bool HttpHeaders::set(const std::string& name, const std::string& value) {
-    const std::string key = Http::Ascii::tolower(name);
+std::map<std::string, std::string>::const_iterator HttpHeaders::find(std::string_view name) const {
+    return std::ranges::find_if(_headers, [name](const auto& entry) { return equals(entry.first, name); });
+}
 
-    return _headers.emplace(key, value).second;
+bool HttpHeaders::set(const std::string& name, const std::string& value) {
+    if (has(name)) {
+        return false;
+    }
+
+    return _headers.emplace(name, value).second;
 }
 
 bool HttpHeaders::has(std::string_view name) const {
-    const std::string key = Http::Ascii::tolower(std::string(name));
-    return _headers.find(key) != _headers.end();
+    return find(name) != _headers.end();
 }
 
 std::optional<std::string> HttpHeaders::get(const std::string& name) const {
-    const std::string key = Http::Ascii::tolower(name);
-    std::map<std::string, std::string>::const_iterator it = _headers.find(key);
-    if (it == _headers.end())
+    const auto it = find(name);
+
+    if (it == _headers.end()) {
         return std::nullopt;
+    }
     return it->second;
 }

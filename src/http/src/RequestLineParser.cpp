@@ -3,7 +3,7 @@
 
 #include "HttpSyntax.hpp"
 #include "RequestLineParser.hpp"
-#include "http/HttpMethodUtils.hpp"
+#include "http/HttpMethod.hpp"
 
 namespace {
     std::optional<std::vector<std::string>> tokenizeRequestLine(const std::string& line) {

@@ -1,5 +1,6 @@
 #include "http/RequestHandler.hpp"
 #include "ErrorResponseFactory.hpp"
+#include "RedirectHandler.hpp"
 #include "Router.hpp"
 #include "StaticHandler.hpp"
 
@@ -11,8 +12,7 @@ HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConf
     }
 
     if (route->redirect) {
-        // TODO: WEB-38 Redirect Handler
-        return ErrorResponseFactory::create(HttpStatus::NotImplemented, *route);
+        return RedirectHandler::handle(*route->redirect, *route);
     }
 
     if (!route->allowedMethods.contains(request.method)) {

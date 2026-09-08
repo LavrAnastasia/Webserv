@@ -1,8 +1,11 @@
 #pragma once
 
+#include "http/HttpStatus.hpp"
+
+#include <optional>
 #include <string>
 
 struct RedirectConfig {
-    int statusCode;
-    std::string target;
+    HttpStatus status;
+    std::optional<std::string> target;
 };

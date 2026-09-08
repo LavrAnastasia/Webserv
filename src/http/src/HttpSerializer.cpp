@@ -2,9 +2,10 @@
 #include <stdexcept>
 
 #include "HttpHeadersUtils.hpp"
-#include "HttpStatusUtils.hpp"
 #include "HttpSyntax.hpp"
+
 #include "http/HttpSerializer.hpp"
+#include "http/HttpStatus.hpp"
 
 namespace {
     constexpr std::string_view serverName = "webserv";
@@ -22,7 +23,7 @@ namespace {
 
         const std::size_t size = std::strftime(
             buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", &time
-        ); //TOD0: replace with fixed RFC 7231 day/month tables
+        ); //TODO: replace with fixed RFC 7231 day/month tables
 
         if (size == 0) {
             throw std::runtime_error("failed to format HTTP date");

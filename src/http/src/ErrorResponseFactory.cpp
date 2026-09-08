@@ -6,12 +6,12 @@
 #include <string>
 #include <utility>
 
-#include "http/HttpMethodUtils.hpp"
+#include "http/HttpMethod.hpp"
+#include "http/HttpStatus.hpp"
 
 #include "HttpHeadersUtils.hpp"
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
-#include "HttpStatusUtils.hpp"
 #include "MimeTypes.hpp"
 
 namespace {
@@ -46,7 +46,7 @@ namespace {
     }
 
     HttpResponse buildResponse(HttpStatus status, const ResolvedRoute& route) {
-        const auto it = route.errorPages.find(static_cast<int>(status));
+        const auto it = route.errorPages.find(status);
 
         if (it == route.errorPages.end()) {
             return ErrorResponseFactory::create(status);

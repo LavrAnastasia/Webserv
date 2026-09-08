@@ -9,6 +9,8 @@ class HttpHeaders {
 private:
     std::map<std::string, std::string> _headers;
 
+    std::map<std::string, std::string>::const_iterator find(std::string_view name) const;
+
 public:
     static bool equals(std::string_view a, std::string_view b);
 

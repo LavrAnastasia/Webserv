@@ -5,6 +5,7 @@
 #include <unordered_set>
 
 #include "config/Configuration.hpp"
+#include "http/HttpStatus.hpp"
 
 #include "ConfigBlock.hpp"
 #include "ConfigDirective.hpp"
@@ -25,8 +26,8 @@ public:
     static void
     validateDirectiveDuplication(const std::unordered_set<Config::Directive>& directives, Config::Directive directive);
     static void validateErrorPages(
-        const std::unordered_map<int, std::filesystem::path>& oldPages,
-        const std::unordered_map<int, std::filesystem::path>& newPages
+        const std::unordered_map<HttpStatus, std::filesystem::path>& oldPages,
+        const std::unordered_map<HttpStatus, std::filesystem::path>& newPages
     );
     static void
     validateCgiDuplication(const std::unordered_map<std::string, CgiConfig>& cgis, const std::string& extension);

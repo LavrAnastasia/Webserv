@@ -5,8 +5,6 @@
 
 #include "ConfigDecoder.hpp"
 #include "ConfigDecodingError.hpp"
-#include "http/HttpMethod.hpp"
-#include "http/HttpMethodUtils.hpp"
 
 namespace {
     std::string decodeHost(std::string_view value) {
@@ -56,6 +54,26 @@ namespace {
 
     bool isRedirectTarget(std::string_view target) {
         return target.starts_with("/") || target.starts_with("http://") || target.starts_with("https://");
+    }
+
+    HttpStatus decodeStatus(std::string_view status, const std::string& context) {
+        int statusCode = 0;
+
+        const auto [ptr, error] = std::from_chars(status.data(), status.data() + status.size(), statusCode);
+
+        if (error != std::errc{} || ptr != status.data() + status.size()) {
+            throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, context + ": " + std::string(status));
+        }
+
+        const std::optional<HttpStatus> knownStatus = Http::Status::fromCode(statusCode);
+
+        if (!knownStatus) {
+            throw ConfigDecodingError(
+                ConfigDecodingError::Reason::UnsupportedValue, context + ": " + std::string(status)
+            );
+        }
+
+        return *knownStatus;
     }
 } // namespace
 
@@ -142,26 +160,27 @@ std::size_t ConfigDecoder::decodeClientMaxBodySize(std::string_view value) {
     return size * multiplier;
 }
 
-std::unordered_map<int, std::filesystem::path> ConfigDecoder::decodeErrorPage(const std::vector<std::string>& values) {
+std::unordered_map<HttpStatus, std::filesystem::path>
+ConfigDecoder::decodeErrorPage(const std::vector<std::string>& values) {
     const std::filesystem::path path{values.back()};
 
     if (path.empty()) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "error page path");
     }
 
-    std::unordered_map<int, std::filesystem::path> pages;
+    std::unordered_map<HttpStatus, std::filesystem::path> pages;
 
     for (std::size_t index = 0; index < values.size() - 1; ++index) {
-        int statusCode = 0;
-
         const std::string& value = values[index];
-        const auto [ptr, error] = std::from_chars(value.data(), value.data() + value.size(), statusCode);
+        const HttpStatus knownStatus = decodeStatus(value, "error page status code");
 
-        if (error != std::errc{} || ptr != value.data() + value.size() || statusCode < 400 || statusCode > 599) {
-            throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "error page status code: " + value);
+        if (!Http::Status::isError(knownStatus)) {
+            throw ConfigDecodingError(
+                ConfigDecodingError::Reason::UnsupportedValue, "error page status code: " + value
+            );
         }
 
-        if (!pages.emplace(statusCode, path).second) {
+        if (!pages.emplace(knownStatus, path).second) {
             throw ConfigDecodingError(ConfigDecodingError::Reason::Duplicate, "error page status code: " + value);
         }
     }
@@ -187,24 +206,26 @@ std::set<HttpMethod> ConfigDecoder::decodeMethods(const std::vector<std::string>
     return methods;
 }
 
-RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status, std::string_view target) {
-    int statusCode = 0;
+RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status) {
+    const HttpStatus knownStatus = decodeStatus(status, "return status code");
 
-    const auto [ptr, error] = std::from_chars(status.data(), status.data() + status.size(), statusCode);
-
-    if (error != std::errc{} || ptr != status.data() + status.size() || statusCode < 300 || statusCode > 399) {
-        throw ConfigDecodingError(
-            ConfigDecodingError::Reason::InvalidFormat, "redirect status code: " + std::string(status)
-        );
+    if (Http::Status::isRedirect(knownStatus)) {
+        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "redirect target");
     }
 
-    if (!isRedirectTarget(target)) {
+    return RedirectConfig{.status = knownStatus, .target = std::nullopt};
+}
+
+RedirectConfig ConfigDecoder::decodeRedirect(std::string_view status, std::string_view target) {
+    const HttpStatus knownStatus = decodeStatus(status, "return status code");
+
+    if (Http::Status::isRedirect(knownStatus) && !isRedirectTarget(target)) {
         throw ConfigDecodingError(
             ConfigDecodingError::Reason::InvalidFormat, "redirect target: " + std::string(target)
         );
     }
 
-    return RedirectConfig{.statusCode = statusCode, .target = std::string(target)};
+    return RedirectConfig{.status = knownStatus, .target = std::string(target)};
 }
 
 UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
