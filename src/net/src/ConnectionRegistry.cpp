@@ -43,25 +43,14 @@ Connection* ConnectionRegistry::getConnection(int fd) {
     return nullptr;
 }
 
-/*
-    deletes timed out connections from activeConnections_ and returns a vector
-    of the pruned fds for the poller to stop tracking
-
-    .erase(it) is an overloaded erase() specifically for loops. It automatically
-    sets it to point to the next valid item *before* destroying the current object
-*/
 std::vector<int>
-ConnectionRegistry::pruneConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime) {
-    std::vector<int> deadFds;
+ConnectionRegistry::getTimedOutConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime) {
+    std::vector<int> timedOutFds;
 
-    for (auto it = activeConnections_.begin(); it != activeConnections_.end();) {
-        if (it->second.hasTimedOut(currentTime, timeoutSeconds)) {
-            deadFds.push_back(it->first);
-            // .erase(it) avoids invalid iterator issue caused by removeConnection(it->first)
-            it = activeConnections_.erase(it);
-        } else {
-            ++it;
+    for (auto& [fd, connection] : activeConnections_) {
+        if (!connection.shouldClose() && connection.hasTimedOut(currentTime, timeoutSeconds)) {
+            timedOutFds.push_back(fd);
         }
     }
-    return deadFds;
+    return timedOutFds;
 }

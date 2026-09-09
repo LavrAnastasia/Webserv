@@ -1,4 +1,5 @@
 #include "net/EventLoop.hpp"
+#include "http/HttpResponse.hpp"
 #include "http/HttpSerializer.hpp"
 #include "http/RequestHandler.hpp"
 #include "net/TcpServer.hpp"
@@ -158,12 +159,23 @@ void EventLoop::run() {
 }
 
 void EventLoop::cleanupTimedOutConnections() {
-    //pruneConnections() removes timed out connections from registry and returns list of their fds
-    std::vector<int> deadFds =
-        connectionRegistry_.pruneConnections(clientTimeoutSeconds_, std::chrono::steady_clock::now());
-    for (int fd : deadFds) {
-        //poller removes them from its own internal list
-        poller_.removeSocket(fd);
+    std::vector<int> timedOutFds =
+        connectionRegistry_.getTimedOutConnections(clientTimeoutSeconds_, std::chrono::steady_clock::now());
+    for (int fd : timedOutFds) {
+        Connection* connection = connectionRegistry_.getConnection(fd);
+        if (!connection)
+            continue;
+        HttpResponse res = RequestHandler::reject(HttpStatus::RequestTimeout);
+        try {
+            connection->appendResponse(HttpSerializer::serialize(res));
+            connection->setShouldClose(true);
+            poller_.modifySocket(fd, POLLOUT);
+            std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
+        } catch (const std::exception& e) {
+            //in case of serializer error, kill connection immediately
+            connectionRegistry_.removeConnection(fd);
+            poller_.removeSocket(fd);
+        }
     }
 }
 
