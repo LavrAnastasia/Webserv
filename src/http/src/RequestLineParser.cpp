@@ -128,27 +128,25 @@ namespace {
         return false;
     }
 
-    bool decodeAndValidateRequestPath(HttpRequest& request) {
-        std::optional<std::string> decodedPath = decodeUrlPath(request.path);
+    std::optional<std::string> decodePath(const std::string& rawPath) {
+        std::optional<std::string> decodedPath = decodeUrlPath(rawPath);
 
         if (!decodedPath.has_value()) {
-            return false;
+            return std::nullopt;
         }
 
         if (decodedPath->empty() || decodedPath->front() != Http::Syntax::PathPrefix) {
-            return false;
+            return std::nullopt;
         }
         if (decodedPath->find("//") != std::string::npos) {
-            return false;
+            return std::nullopt;
         }
 
         if (hasDotSegments(*decodedPath)) {
-            return false;
+            return std::nullopt;
         }
 
-        request.path = std::move(*decodedPath);
-
-        return true;
+        return decodedPath;
     }
 
     void fillPathAndQuery(HttpRequest& request) {
@@ -201,9 +199,12 @@ RequestLineResult RequestLineParser::run() {
 
     fillPathAndQuery(request);
 
-    if (!decodeAndValidateRequestPath(request)) {
+    std::optional<std::string> decodedPath = decodePath(request.path);
+
+    if (!decodedPath) {
         return HttpStatus::BadRequest;
     }
+    request.path = std::move(*decodedPath);
 
     return request;
 }
