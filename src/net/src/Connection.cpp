@@ -20,23 +20,19 @@ void Connection::appendResponse(const std::string& response) {
 
     recv function signature: ssize_t recv(int sockfd, void *buf, size_t len, int flags);
     0 for flags is the default
-
-    NOTE: Aggregate Initialization syntax:
-    return { ParseStatus::NeedMoreData, std::nullopt }; creates and initializes
-    a struct of the return type, with the arguments given
 */
-ParseResult Connection::receiveRequest() {
+std::optional<ParseResult> Connection::receiveRequest() {
     char buffer[4096];
     ssize_t bytesReceived = recv(getFd(), buffer, sizeof(buffer), 0);
 
     // treat all negative returns as no data, try again next loop
     if (bytesReceived < 0) {
-        return {ParseStatus::NeedMoreData, std::nullopt};
+        return ParseResult(ParseStatus::NeedMoreData, std::nullopt);
     }
 
     // host disconnected, return status that triggers cleanup
     if (bytesReceived == 0) {
-        return {ParseStatus::ConnectionClosed, std::nullopt};
+        return std::nullopt;
     }
 
     lastActivity_ = std::chrono::steady_clock::now(); // update timeout timer

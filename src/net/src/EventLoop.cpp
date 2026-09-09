@@ -67,22 +67,22 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     //reading phase (OS kernel receive buffer has data)
     if (events & POLLIN) {
         //feed bytes from OS kernel's socket buffer into parser and receive status
-        ParseResult result = connection->receiveRequest();
-
-        // Parsing complete -> build response from HttpRequest
-        if (result.status == ParseStatus::Complete) {
-            HttpResponse response = RequestHandler::handle(*result.request, connection->getServerConfig());
-
-            connection->appendResponse(HttpSerializer::serialize(response));
-            connection->setShouldClose(!result.request->isPersistent());
-            poller_.modifySocket(clientFd, POLLOUT);
-        }
+        const std::optional<ParseResult> result = connection->receiveRequest();
 
         // Client disconnected -> clean up immediately
-        else if (result.status == ParseStatus::ConnectionClosed) {
+        if (!result) {
             poller_.removeSocket(clientFd);
             connectionRegistry_.removeConnection(clientFd);
             return;
+        }
+
+        // Parsing complete -> build response from HttpRequest
+        if (result->status == ParseStatus::Complete) {
+            HttpResponse response = RequestHandler::handle(*result->request, connection->getServerConfig());
+
+            connection->appendResponse(HttpSerializer::serialize(response));
+            connection->setShouldClose(!result->request->isPersistent());
+            poller_.modifySocket(clientFd, POLLOUT);
         }
 
         /*
@@ -90,7 +90,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         close connection after sending!
         */
         // TODO: WEB-26 Every failure (from HttpParser) collapses into BadRequest, so 501/505/413/431/414 are lost
-        else if (result.status == ParseStatus::BadRequest) {
+        else if (result->status == ParseStatus::BadRequest) {
             connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(HttpStatus::BadRequest)));
             connection->setShouldClose(true);
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
