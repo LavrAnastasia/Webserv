@@ -45,7 +45,7 @@ private:
     Step handleChunkSize();
     Step handleChunkData();
     Step handleChunkEnd();
-    bool loadContentLength();
+    std::optional<std::size_t> parseContentLength() const;
 
 public:
     HttpParser();

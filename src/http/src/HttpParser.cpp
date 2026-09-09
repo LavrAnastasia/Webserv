@@ -143,9 +143,13 @@ HttpParser::Step HttpParser::handleHeaders() {
         }
         return fail(HttpStatus::NotImplemented);
     }
-    if (!loadContentLength()) {
+    const std::optional<std::size_t> contentLength = parseContentLength();
+
+    if (!contentLength) {
         return fail(HttpStatus::BadRequest);
     }
+    _contentLength = *contentLength;
+
     if (_contentLength > MAX_BODY_SIZE) {
         return fail(HttpStatus::PayloadTooLarge);
     }
@@ -241,21 +245,14 @@ HttpParser::Step HttpParser::handleChunkData() {
     return Step::Continue;
 }
 
-bool HttpParser::loadContentLength() {
-    std::optional<std::string> contentLengthValue = _request.headers.get(std::string(Http::Headers::ContentLength));
+std::optional<std::size_t> HttpParser::parseContentLength() const {
+    const std::optional<std::string> value = _request.headers.get(std::string(Http::Headers::ContentLength));
 
-    if (!contentLengthValue) {
-        _contentLength = 0;
-        return true;
+    if (!value) {
+        return 0;
     }
 
-    std::optional<std::size_t> contentLength = parseUnsigned(*contentLengthValue, 10);
-
-    if (!contentLength)
-        return false;
-
-    _contentLength = *contentLength;
-    return true;
+    return parseUnsigned(*value, 10);
 }
 
 void HttpParser::reset() {
