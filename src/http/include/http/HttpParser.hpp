@@ -15,21 +15,21 @@ struct Failed {
     HttpStatus status;
 };
 
-enum class ParserState {
-    StartLine,
-    Headers,
-    Body,
-    ChunkSize,
-    ChunkData,
-    ChunkEnd,
-    Complete,
-};
-
 using ParseResult = std::variant<NeedMoreData, Complete, Failed>;
 
 class HttpParser {
 private:
     enum class Step { Continue, WaitForData };
+
+    enum class ParserState {
+        StartLine,
+        Headers,
+        Body,
+        ChunkSize,
+        ChunkData,
+        ChunkEnd,
+        Complete,
+    };
 
     std::string _buffer;
     ParserState _state;
