@@ -2,14 +2,17 @@
 
 #include <optional>
 #include <string>
-
+#include <variant>
 
 #include "http/HttpRequest.hpp"
+#include "http/HttpStatus.hpp"
 
-enum class ParseStatus {
-    NeedMoreData,
-    Complete,
-    BadRequest,
+struct NeedMoreData {};
+struct Complete {
+    HttpRequest request;
+};
+struct Failed {
+    HttpStatus status;
 };
 
 enum class ParserState {
@@ -20,29 +23,29 @@ enum class ParserState {
     ChunkData,
     ChunkEnd,
     Complete,
-    Error,
 };
 
-struct ParseResult {
-    ParseStatus status;
-    std::optional<HttpRequest> request;
-};
+using ParseResult = std::variant<NeedMoreData, Complete, Failed>;
 
 class HttpParser {
 private:
+    enum class Step { Continue, WaitForData };
+
     std::string _buffer;
     ParserState _state;
+    std::optional<HttpStatus> _failure;
     HttpRequest _request;
     std::size_t _contentLength;
     std::size_t _currentChunkSize;
 
-    bool handleStartLine();
-    bool handleHeaders();
-    bool handleBody();
-    bool handleChunkSize();
-    bool handleChunkData();
+    Step fail(HttpStatus status);
+    Step handleStartLine();
+    Step handleHeaders();
+    Step handleBody();
+    Step handleChunkSize();
+    Step handleChunkData();
+    Step handleChunkEnd();
     bool loadContentLength();
-    bool handleChunkEnd();
 
 public:
     HttpParser();

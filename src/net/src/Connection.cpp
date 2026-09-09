@@ -27,10 +27,10 @@ std::optional<ParseResult> Connection::receiveRequest() {
 
     // treat all negative returns as no data, try again next loop
     if (bytesReceived < 0) {
-        return ParseResult(ParseStatus::NeedMoreData, std::nullopt);
+        return NeedMoreData{};
     }
 
-    // host disconnected, return status that triggers cleanup
+    // host disconnected, so there is nothing to parse
     if (bytesReceived == 0) {
         return std::nullopt;
     }

@@ -67,21 +67,23 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     //reading phase (OS kernel receive buffer has data)
     if (events & POLLIN) {
         //feed bytes from OS kernel's socket buffer into parser and receive status
-        const std::optional<ParseResult> result = connection->receiveRequest();
+        const std::optional<ParseResult> received = connection->receiveRequest();
 
         // Client disconnected -> clean up immediately
-        if (!result) {
+        if (!received) {
             poller_.removeSocket(clientFd);
             connectionRegistry_.removeConnection(clientFd);
             return;
         }
 
+        const ParseResult& result = *received;
+
         // Parsing complete -> build response from HttpRequest
-        if (result->status == ParseStatus::Complete) {
-            HttpResponse response = RequestHandler::handle(*result->request, connection->getServerConfig());
+        if (const Complete* complete = std::get_if<Complete>(&result)) {
+            HttpResponse response = RequestHandler::handle(complete->request, connection->getServerConfig());
 
             connection->appendResponse(HttpSerializer::serialize(response));
-            connection->setShouldClose(!result->request->isPersistent());
+            connection->setShouldClose(!complete->request.isPersistent());
             poller_.modifySocket(clientFd, POLLOUT);
         }
 
@@ -89,9 +91,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         fail case: unable to parse client request -> build error response and
         close connection after sending!
         */
-        // TODO: WEB-26 Every failure (from HttpParser) collapses into BadRequest, so 501/505/413/431/414 are lost
-        else if (result->status == ParseStatus::BadRequest) {
-            connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(HttpStatus::BadRequest)));
+        else if (const Failed* failed = std::get_if<Failed>(&result)) {
+            connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(failed->status)));
             connection->setShouldClose(true);
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
