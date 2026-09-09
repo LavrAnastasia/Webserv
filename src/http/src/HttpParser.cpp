@@ -93,12 +93,13 @@ HttpParser::Step HttpParser::handleStartLine() {
     std::string line = _buffer.substr(0, lineEnd);
     _buffer.erase(0, lineEnd + Http::Syntax::CRLF.size());
 
-    std::optional<HttpRequest> request = RequestLineParser::parse(line);
-    if (!request) {
-        // TODO: WEB-26 RequestLineParser reports no cause, so 501 and 505 collapse into 400
-        return fail(HttpStatus::BadRequest);
+    const RequestLineResult parsed = RequestLineParser::parse(line);
+
+    if (const HttpStatus* status = std::get_if<HttpStatus>(&parsed)) {
+        return fail(*status);
     }
-    _request = *request;
+
+    _request = *std::get_if<HttpRequest>(&parsed);
     _state = ParserState::Headers;
     return Step::Continue;
 }

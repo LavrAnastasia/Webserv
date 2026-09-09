@@ -1,16 +1,20 @@
 #pragma once
-#include <optional>
+
 #include <string>
+#include <variant>
 
 #include "http/HttpRequest.hpp"
+#include "http/HttpStatus.hpp"
+
+using RequestLineResult = std::variant<HttpRequest, HttpStatus>;
 
 class RequestLineParser {
 private:
     explicit RequestLineParser(const std::string& line);
-    std::optional<HttpRequest> run();
+    RequestLineResult run();
 
     const std::string& line_;
 
 public:
-    static std::optional<HttpRequest> parse(const std::string& line);
+    static RequestLineResult parse(const std::string& line);
 };
