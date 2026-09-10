@@ -8,7 +8,7 @@ HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConf
     const std::optional<ResolvedRoute> route = Router::resolve(request, server);
 
     if (!route) {
-        return ErrorResponseFactory::create(HttpStatus::NotFound);
+        return ErrorResponseFactory::create(HttpStatus::NotFound, server);
     }
 
     if (route->redirect) {
@@ -36,6 +36,6 @@ HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConf
     return StaticHandler::handle(request, *route);
 }
 
-HttpResponse RequestHandler::reject(HttpStatus status) {
-    return ErrorResponseFactory::create(status);
+HttpResponse RequestHandler::reject(HttpStatus status, const ServerConfig& server) {
+    return ErrorResponseFactory::create(status, server);
 }

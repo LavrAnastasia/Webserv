@@ -8,7 +8,7 @@
 #include "MimeTypes.hpp"
 #include "UrlCodec.hpp"
 
-#include "fs/PathUtils.hpp"
+#include "fs/Path.hpp"
 
 #include <algorithm>
 #include <array>
@@ -194,7 +194,7 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
 
     try {
         const fs::path root = fs::weakly_canonical(route.root);
-        const fs::path filePath = fs::weakly_canonical(root / fs::path(request.path).relative_path());
+        const fs::path filePath = fs::weakly_canonical(Fs::resolve(root, fs::path(request.path)));
 
         if (!Fs::isPrefixOf(root, filePath)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
