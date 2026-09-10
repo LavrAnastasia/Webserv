@@ -42,8 +42,8 @@ public:
     Connection* getConnection(int fd);
 
     /*
-    deletes timed out connections from activeConnections_ and returns a vector
-    of the pruned fds for the poller to stop tracking
+    checks activeConnections_ for timed out connections, returns a vector containing
+    timed out fds
 */
-    std::vector<int> pruneConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime);
+    std::vector<int> getTimedOutConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime);
 };

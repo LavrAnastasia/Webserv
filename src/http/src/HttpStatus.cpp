@@ -43,6 +43,9 @@ namespace Http::Status {
             case HttpStatus::MethodNotAllowed:
                 return "Method Not Allowed";
 
+            case HttpStatus::RequestTimeout:
+                return "Request Timeout";
+
             case HttpStatus::PayloadTooLarge:
                 return "Payload Too Large";
 
