@@ -49,6 +49,9 @@ namespace Http::Status {
             case HttpStatus::UriTooLong:
                 return "URI Too Long";
 
+            case HttpStatus::RequestHeaderFieldsTooLarge:
+                return "Request Header Fields Too Large";
+
             case HttpStatus::InternalServerError:
                 return "Internal Server Error";
 

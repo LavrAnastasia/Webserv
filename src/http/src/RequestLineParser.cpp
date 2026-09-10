@@ -32,8 +32,15 @@ namespace {
         return std::vector<std::string>{method, target, version};
     }
 
-    bool isValidHttpVersion(const std::string& version) {
-        return version == "HTTP/1.1";
+    bool isValidHttpVersion(std::string_view version) {
+        const std::size_t separator = version.find(Http::Protocol::VersionSeparator);
+
+        if (separator == std::string_view::npos) {
+            return false;
+        }
+
+        return version.substr(0, separator) == Http::Protocol::Name &&
+            version.substr(separator + 1) == Http::Protocol::Version;
     }
 
     bool isControlCharacter(char c) {
@@ -121,27 +128,25 @@ namespace {
         return false;
     }
 
-    bool decodeAndValidateRequestPath(HttpRequest& request) {
-        std::optional<std::string> decodedPath = decodeUrlPath(request.path);
+    std::optional<std::string> decodePath(const std::string& rawPath) {
+        std::optional<std::string> decodedPath = decodeUrlPath(rawPath);
 
         if (!decodedPath.has_value()) {
-            return false;
+            return std::nullopt;
         }
 
         if (decodedPath->empty() || decodedPath->front() != Http::Syntax::PathPrefix) {
-            return false;
+            return std::nullopt;
         }
         if (decodedPath->find("//") != std::string::npos) {
-            return false;
+            return std::nullopt;
         }
 
         if (hasDotSegments(*decodedPath)) {
-            return false;
+            return std::nullopt;
         }
 
-        request.path = std::move(*decodedPath);
-
-        return true;
+        return decodedPath;
     }
 
     void fillPathAndQuery(HttpRequest& request) {
@@ -160,30 +165,30 @@ namespace {
 RequestLineParser::RequestLineParser(const std::string& line) : line_(line) {
 }
 
-std::optional<HttpRequest> RequestLineParser::parse(const std::string& line) {
+RequestLineResult RequestLineParser::parse(const std::string& line) {
     return RequestLineParser{line}.run();
 }
 
-std::optional<HttpRequest> RequestLineParser::run() {
+RequestLineResult RequestLineParser::run() {
     std::optional<std::vector<std::string>> tokens = tokenizeRequestLine(line_);
     if (!tokens) {
-        return std::nullopt;
+        return HttpStatus::BadRequest;
     }
 
     std::optional<HttpMethod> method = Http::Method::fromString((*tokens)[0]);
     if (!method) {
-        return std::nullopt;
+        return HttpStatus::NotImplemented;
     }
 
     const std::string& target = (*tokens)[1];
     const std::string& version = (*tokens)[2];
 
     if (!isValidRequestTarget(target)) {
-        return std::nullopt;
+        return HttpStatus::BadRequest;
     }
 
     if (!isValidHttpVersion(version)) {
-        return std::nullopt;
+        return HttpStatus::HttpVersionNotSupported;
     }
 
     HttpRequest request;
@@ -194,9 +199,12 @@ std::optional<HttpRequest> RequestLineParser::run() {
 
     fillPathAndQuery(request);
 
-    if (!decodeAndValidateRequestPath(request)) {
-        return std::nullopt;
+    std::optional<std::string> decodedPath = decodePath(request.path);
+
+    if (!decodedPath) {
+        return HttpStatus::BadRequest;
     }
+    request.path = std::move(*decodedPath);
 
     return request;
 }

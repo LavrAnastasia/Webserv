@@ -21,6 +21,7 @@ enum class HttpStatus {
     MethodNotAllowed = 405,
     PayloadTooLarge = 413,
     UriTooLong = 414,
+    RequestHeaderFieldsTooLarge = 431,
 
     InternalServerError = 500,
     NotImplemented = 501,

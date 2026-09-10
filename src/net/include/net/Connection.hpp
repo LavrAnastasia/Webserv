@@ -3,6 +3,7 @@
 #include "http/HttpParser.hpp"
 #include "net/Socket.hpp"
 #include <chrono>
+#include <optional>
 #include <string>
 
 /*
@@ -42,7 +43,7 @@ public:
     void appendResponse(const std::string& response);
 
     //called by server when POLLIN detected -reads raw bytes from socket -> HttpParser
-    ParseResult receiveRequest();
+    std::optional<ParseResult> receiveRequest();
 
     //called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
     bool sendResponse();
