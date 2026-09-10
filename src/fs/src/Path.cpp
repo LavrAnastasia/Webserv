@@ -10,4 +10,10 @@ namespace Fs {
     std::filesystem::path resolve(const std::filesystem::path& root, const std::filesystem::path& path) {
         return root / path.relative_path();
     }
+
+    bool hasDotComponents(const std::filesystem::path& path) {
+        return std::ranges::any_of(path, [](const std::filesystem::path& component) {
+            return component == "." || component == "..";
+        });
+    }
 } // namespace Fs

@@ -3,6 +3,8 @@
 #include <limits>
 #include <system_error>
 
+#include "fs/Path.hpp"
+
 #include "ConfigDecoder.hpp"
 #include "ConfigDecodingError.hpp"
 
@@ -114,6 +116,10 @@ std::string ConfigDecoder::decodeIndex(std::string_view value) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "index");
     }
 
+    if (Fs::hasDotComponents(std::filesystem::path(value))) {
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "index: " + std::string(value));
+    }
+
     return std::string(value);
 }
 
@@ -166,6 +172,10 @@ ConfigDecoder::decodeErrorPage(const std::vector<std::string>& values) {
 
     if (path.empty()) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "error page path");
+    }
+
+    if (Fs::hasDotComponents(path)) {
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "error page path: " + path.string());
     }
 
     std::unordered_map<HttpStatus, std::filesystem::path> pages;
