@@ -161,20 +161,44 @@ void EventLoop::run() {
 void EventLoop::cleanupTimedOutConnections() {
     std::vector<int> timedOutFds =
         connectionRegistry_.getTimedOutConnections(clientTimeoutSeconds_, std::chrono::steady_clock::now());
+
     for (int fd : timedOutFds) {
         Connection* connection = connectionRegistry_.getConnection(fd);
+
         if (!connection)
             continue;
-        HttpResponse res = RequestHandler::reject(HttpStatus::RequestTimeout);
+
+        // connection already flagged to close, but timed out before closing
+        // close immediately, do not queue another 408
+        if (connection->shouldClose()) {
+            std::cout << "webserv: info: fd " << fd << " timed out while waiting to close. Closing immediately."
+                      << std::endl;
+            poller_.removeSocket(fd);
+            connectionRegistry_.removeConnection(fd);
+            continue;
+        }
+
+        // response still pending after inactivity timeout
+        // close immediately, do not queue 408
+        if (!connection->isSendComplete()) {
+            std::cout << "webserv: info: fd " << fd << " timed out while sending response. Closing immediately."
+                      << std::endl;
+            poller_.removeSocket(fd);
+            connectionRegistry_.removeConnection(fd);
+            continue;
+        }
+
         try {
+            // no response pending: client timed out while sending request
+            HttpResponse res = RequestHandler::reject(HttpStatus::RequestTimeout);
             connection->appendResponse(HttpSerializer::serialize(res));
             connection->setShouldClose(true);
             poller_.modifySocket(fd, POLLOUT);
             std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
-        } catch (const std::exception& e) {
-            //in case of serializer error, kill connection immediately
-            connectionRegistry_.removeConnection(fd);
+        } catch (const std::exception&) {
+            // if preparing or queueing response fails, remove connection immediately
             poller_.removeSocket(fd);
+            connectionRegistry_.removeConnection(fd);
         }
     }
 }

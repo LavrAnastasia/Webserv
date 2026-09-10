@@ -48,7 +48,7 @@ ConnectionRegistry::getTimedOutConnections(int timeoutSeconds, std::chrono::stea
     std::vector<int> timedOutFds;
 
     for (auto& [fd, connection] : activeConnections_) {
-        if (!connection.shouldClose() && connection.hasTimedOut(currentTime, timeoutSeconds)) {
+        if (connection.hasTimedOut(currentTime, timeoutSeconds)) {
             timedOutFds.push_back(fd);
         }
     }
