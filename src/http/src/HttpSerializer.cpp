@@ -1,7 +1,7 @@
 #include <ctime>
 #include <stdexcept>
 
-#include "HttpHeadersUtils.hpp"
+#include "HeaderFields.hpp"
 #include "HttpSyntax.hpp"
 
 #include "http/HttpSerializer.hpp"

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <string_view>
 
 namespace Http::Headers {
@@ -14,6 +13,11 @@ namespace Http::Headers {
     constexpr std::string_view Location = "Location";
     constexpr std::string_view Server = "Server";
 
-    bool isValidName(const std::string& name);
-    bool isValidValue(const std::string& value);
+    namespace ConnectionOption {
+        constexpr std::string_view Close = "close";
+    }
+
+    namespace TransferCoding {
+        constexpr std::string_view Chunked = "chunked";
+    }
 } // namespace Http::Headers
