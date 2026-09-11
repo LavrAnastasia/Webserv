@@ -1,6 +1,6 @@
 #include "RedirectHandler.hpp"
 #include "ErrorResponseFactory.hpp"
-#include "HttpHeaders.hpp"
+#include "HeaderFields.hpp"
 #include "HttpResponseFactory.hpp"
 #include "MimeTypes.hpp"
 

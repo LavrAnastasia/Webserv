@@ -1,5 +1,5 @@
 #include "HttpResponseFactory.hpp"
-#include "HttpHeaders.hpp"
+#include "HeaderFields.hpp"
 
 HttpResponse HttpResponseFactory::create(HttpStatus status, std::string body, std::string contentType) {
     HttpResponse response;

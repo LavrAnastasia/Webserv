@@ -1,5 +1,5 @@
 #include "http/HttpRequest.hpp"
-#include "HttpHeaders.hpp"
+#include "HeaderFields.hpp"
 
 #include <string>
 

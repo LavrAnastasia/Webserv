@@ -1,8 +1,8 @@
 #include <charconv>
 #include <string_view>
 
+#include "HeaderFields.hpp"
 #include "HeadersParser.hpp"
-#include "HttpHeaders.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 #include "RequestLineParser.hpp"

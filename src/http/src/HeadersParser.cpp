@@ -1,5 +1,5 @@
 #include "HeadersParser.hpp"
-#include "HttpHeaders.hpp"
+#include "HeaderFields.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 
