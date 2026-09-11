@@ -1,5 +1,6 @@
 #include "http/RequestHandler.hpp"
 #include "ErrorResponseFactory.hpp"
+#include "HttpHeaders.hpp"
 #include "RedirectHandler.hpp"
 #include "Router.hpp"
 #include "StaticHandler.hpp"
@@ -37,5 +38,9 @@ HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConf
 }
 
 HttpResponse RequestHandler::reject(HttpStatus status, const ServerConfig& server) {
-    return ErrorResponseFactory::create(status, server);
+    HttpResponse response = ErrorResponseFactory::create(status, server);
+
+    response.headers.set(std::string(Http::Headers::Connection), std::string(Http::Headers::ConnectionOption::Close));
+
+    return response;
 }

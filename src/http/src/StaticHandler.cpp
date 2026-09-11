@@ -1,7 +1,7 @@
 #include "StaticHandler.hpp"
 
 #include "ErrorResponseFactory.hpp"
-#include "HttpHeadersUtils.hpp"
+#include "HttpHeaders.hpp"
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "HttpSyntax.hpp"

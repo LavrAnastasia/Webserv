@@ -2,7 +2,7 @@
 #include <string_view>
 
 #include "HeadersParser.hpp"
-#include "HttpHeadersUtils.hpp"
+#include "HttpHeaders.hpp"
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 #include "RequestLineParser.hpp"
@@ -138,7 +138,7 @@ HttpParser::Step HttpParser::handleHeaders() {
     std::optional<std::string> transferEncoding = _request.headers.get(std::string(Http::Headers::TransferEncoding));
 
     if (transferEncoding) {
-        if (Http::Ascii::tolower(*transferEncoding) == Http::TransferCoding::Chunked) {
+        if (Http::Ascii::tolower(*transferEncoding) == Http::Headers::TransferCoding::Chunked) {
             _state = ParserState::ChunkSize;
             return Step::Continue;
         }
