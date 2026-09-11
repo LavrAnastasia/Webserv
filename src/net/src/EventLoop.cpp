@@ -93,7 +93,9 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         close connection after sending!
         */
         else if (const Failed* failed = std::get_if<Failed>(&result)) {
-            connection->appendResponse(HttpSerializer::serialize(RequestHandler::reject(failed->status)));
+            HttpResponse response = RequestHandler::reject(failed->status, connection->getServerConfig());
+
+            connection->appendResponse(HttpSerializer::serialize(response));
             connection->setShouldClose(true);
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
@@ -191,8 +193,8 @@ void EventLoop::cleanupTimedOutConnections() {
 
         try {
             // no response pending: client timed out while sending request
-            HttpResponse res = RequestHandler::reject(HttpStatus::RequestTimeout);
-            connection->appendResponse(HttpSerializer::serialize(res));
+            HttpResponse response = RequestHandler::reject(HttpStatus::RequestTimeout, connection->getServerConfig());
+            connection->appendResponse(HttpSerializer::serialize(response));
             connection->setShouldClose(true);
             poller_.modifySocket(fd, POLLOUT);
             std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;

@@ -26,7 +26,7 @@ CONFIG_SRC := $(addprefix src/config/src/, \
 )
 
 FS_SRC := $(addprefix src/fs/src/, \
-	PathUtils.cpp \
+	Path.cpp \
 )
 
 HTTP_SRC := $(addprefix src/http/src/, \

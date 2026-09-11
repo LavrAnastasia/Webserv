@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "fs/Path.hpp"
 #include "http/HttpMethod.hpp"
 #include "http/HttpStatus.hpp"
 
@@ -45,33 +46,46 @@ namespace {
         return body;
     }
 
-    HttpResponse buildResponse(HttpStatus status, const ResolvedRoute& route) {
-        const auto it = route.errorPages.find(status);
+    HttpResponse buildResponse(HttpStatus status) {
+        return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
+    }
 
-        if (it == route.errorPages.end()) {
-            return ErrorResponseFactory::create(status);
+    HttpResponse
+    buildResponse(HttpStatus status, const std::unordered_map<HttpStatus, std::filesystem::path>& errorPages) {
+        const auto it = errorPages.find(status);
+
+        if (it == errorPages.end()) {
+            return buildResponse(status);
         }
 
         std::optional<std::string> body = readBody(it->second);
 
         if (!body.has_value()) {
-            return ErrorResponseFactory::create(status);
+            return buildResponse(status);
         }
 
         return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
     }
 } // namespace
 
-HttpResponse ErrorResponseFactory::create(HttpStatus status) {
-    return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
-}
-
 HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute& route) {
-    HttpResponse response = buildResponse(status, route);
+    HttpResponse response = buildResponse(status, route.errorPages);
 
     if (status == HttpStatus::MethodNotAllowed) {
         response.headers.set(std::string(Http::Headers::Allow), Http::Method::toString(route.allowedMethods));
     }
+
+    return response;
+}
+
+HttpResponse ErrorResponseFactory::create(HttpStatus status, const ServerConfig& server) {
+    std::unordered_map<HttpStatus, std::filesystem::path> errorPages;
+
+    for (const auto& [code, page] : server.errorPages) {
+        errorPages.emplace(code, Fs::resolve(server.root, page));
+    }
+
+    HttpResponse response = buildResponse(status, errorPages);
 
     return response;
 }

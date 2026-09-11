@@ -1,5 +1,7 @@
 #include <filesystem>
 
+#include "fs/Path.hpp"
+
 #include "HttpSyntax.hpp"
 #include "Router.hpp"
 
@@ -69,7 +71,7 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.index = location->index.value_or(server.index);
     route.clientMaxBodySize = location->clientMaxBodySize.value_or(server.clientMaxBodySize);
     for (const auto& [code, page] : server.errorPages) {
-        route.errorPages.emplace(code, route.root / page.relative_path());
+        route.errorPages.emplace(code, Fs::resolve(route.root, page));
     }
 
     route.allowedMethods = location->allowedMethods;

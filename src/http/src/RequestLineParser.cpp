@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <vector>
 
+#include "fs/Path.hpp"
+#include "http/HttpMethod.hpp"
+
 #include "HttpSyntax.hpp"
 #include "RequestLineParser.hpp"
-#include "http/HttpMethod.hpp"
 
 namespace {
     std::optional<std::vector<std::string>> tokenizeRequestLine(const std::string& line) {
@@ -105,29 +107,6 @@ namespace {
         return decodedPath;
     }
 
-    bool hasDotSegments(std::string_view path) {
-        std::size_t begin = 0;
-
-        while (begin <= path.size()) {
-            const std::size_t end = path.find('/', begin);
-
-            const std::size_t length = end == std::string_view::npos ? std::string_view::npos : end - begin;
-
-            const std::string_view segment = path.substr(begin, length);
-
-            if (segment == "." || segment == "..") {
-                return true;
-            }
-
-            if (end == std::string_view::npos) {
-                break;
-            }
-
-            begin = end + 1;
-        }
-        return false;
-    }
-
     std::optional<std::string> decodePath(const std::string& rawPath) {
         std::optional<std::string> decodedPath = decodeUrlPath(rawPath);
 
@@ -142,7 +121,7 @@ namespace {
             return std::nullopt;
         }
 
-        if (hasDotSegments(*decodedPath)) {
+        if (Fs::hasDotComponents(*decodedPath)) {
             return std::nullopt;
         }
 
