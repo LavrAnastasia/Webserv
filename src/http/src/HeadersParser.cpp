@@ -3,6 +3,8 @@
 #include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 
+#include <algorithm>
+
 HeadersParser::HeadersParser(const std::string& headersBlock) : headersBlock_(headersBlock), headers_() {
 }
 
