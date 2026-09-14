@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <ranges>
 
-
+#include "HttpSyntax.hpp"
 #include "HttpUtils.hpp"
 #include "http/HttpHeaders.hpp"
 
@@ -34,7 +34,7 @@ bool HttpHeaders::has(std::string_view name, std::string_view token) const {
         return false;
     }
 
-    return std::ranges::any_of(std::views::split(it->second, ','), [token](const auto& part) {
+    return std::ranges::any_of(std::views::split(it->second, Http::Syntax::ListSeparator), [token](const auto& part) {
         return equals(Http::Ascii::trim(std::string(part.begin(), part.end())), token);
     });
 }
