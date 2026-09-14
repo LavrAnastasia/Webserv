@@ -10,7 +10,7 @@
 #include "http/HttpMethod.hpp"
 #include "http/HttpStatus.hpp"
 
-#include "HttpHeadersUtils.hpp"
+#include "HeaderFields.hpp"
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
 #include "MimeTypes.hpp"
