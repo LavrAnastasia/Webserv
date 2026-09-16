@@ -8,17 +8,6 @@
 
 namespace fs = std::filesystem;
 
-/*
-!   FAIL CAUSES
-    bad client path
-    → target escapes upload root
-    → 403 Forbidden
-
-    bad server/config state
-    → upload_path missing / not a directory / canonical() fails
-    → 500 Internal Server Error
-*/
-
 namespace {
 
     std::optional<fs::path>
@@ -40,8 +29,10 @@ namespace {
         //      /project/public/uploads/images/cat.png
         std::error_code error;
         const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relativePath), error);
+        // TODO: differentiate between path resolution failures and target escaping uploadRoot
+        // TODO: path resolution failure should be error 500 rather than 403
 
-        // 4.   Return nullopt of path resolution failed, or normalized target outside uploadRoot
+        // 4.   Return nullopt if path resolution failed, or normalized target outside uploadRoot
         if (error || !Fs::isPrefixOf(uploadRoot, target)) {
             return std::nullopt;
         }
@@ -52,48 +43,61 @@ namespace {
 } //namespace
 
 HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
-    // validate configured upload root directory -> error 500
+    // validate configured upload root directory:
+    // must exist, resolve successfully and be a directory, ELSE -> error 500
     std::error_code error;
     const fs::path uploadRoot = fs::canonical(route.upload->uploadPath, error);
     if (error || !fs::is_directory(uploadRoot, error)) {
         return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
     }
 
-    //validate client path -> error 403
+    // validate client path:
+    // no specified path or target outside of uploadRoot -> error 403
     const auto target = resolveTarget(request, route, uploadRoot);
     if (!target) {
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
+
+    // validate that the target doesn't already exist, ELSE -> error 409
+    error.clear();
+    if (fs::exists(*target, error)) {
+        return ErrorResponseFactory::create(HttpStatus::Conflict, route);
+    }
+
+    // could not verify (filesystem operation failed) -> error 500
+    if (error) {
+        return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+    }
+
+    // validate parent directory:
+    // must already exist and be a directory, ELSE -> error 500
+    // could not verify (filesystem operation failed) -> also error 500
+    error.clear();
+    if (!fs::is_directory(target->parent_path(), error) || error) {
+        return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+    }
+
+    // open fs path stored inside (optional) target for writing, treat file as raw binary data
+    std::ofstream file(*target, std::ios::binary);
+
+    // failed to open/create destination file -> error 500
+    if (!file) {
+        return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+    }
+
+    file.write(request.body.data(), static_cast<std::streamsize>(request.body.size()));
+    file.close();
+
+    // write or close failure puts stream into failed state -> error 500
+    if (!file) {
+        std::error_code cleanupError; // stores remove() failure error code to avoid thrown exception
+        fs::remove(*target, cleanupError);
+
+        return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+    }
+
+    // upload completed successfully
+    return {
+        .status = HttpStatus::Created // designated initializer
+    };
 }
-
-/*
-struct HttpRequest {
-    HttpMethod method;
-
-    std::string target;
-!    std::string path; what file path the client requested: "/uploads/avatar.png";
-    std::string query;
-    std::string version;
-    HttpHeaders headers;
-!    std::string body; actual file data (bytes)
-
-    bool isPersistent() const;
-};
-
-struct ResolvedRoute {
-!    std::string locationPath;
-
-    std::filesystem::path root;
-    std::string index;
-    std::size_t clientMaxBodySize;
-
-    std::set<HttpMethod> allowedMethods;
-    bool autoindex = false;
-
-    std::optional<RedirectConfig> redirect;
-!    std::optional<UploadConfig> upload;
-    std::optional<CgiConfig> cgi;
-
-    std::unordered_map<HttpStatus, std::filesystem::path> errorPages;
-};
-*/

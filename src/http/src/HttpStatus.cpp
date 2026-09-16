@@ -46,6 +46,9 @@ namespace Http::Status {
             case HttpStatus::RequestTimeout:
                 return "Request Timeout";
 
+            case HttpStatus::Conflict:
+                return "Conflict";
+
             case HttpStatus::PayloadTooLarge:
                 return "Payload Too Large";
 
