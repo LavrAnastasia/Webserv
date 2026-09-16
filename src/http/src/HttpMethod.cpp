@@ -1,5 +1,7 @@
 #include "http/HttpMethod.hpp"
 
+#include "HttpSyntax.hpp"
+
 #include <algorithm>
 #include <array>
 #include <stdexcept>
@@ -39,7 +41,8 @@ namespace Http::Method {
 
         for (const HttpMethod method : methods) {
             if (!result.empty()) {
-                result += ", ";
+                result += Http::Syntax::ListSeparator;
+                result += Http::Syntax::SP;
             }
 
             result += toString(method);
