@@ -191,18 +191,12 @@ void EventLoop::cleanupTimedOutConnections() {
             continue;
         }
 
-        try {
-            // no response pending: client timed out while sending request
-            HttpResponse response = RequestHandler::reject(HttpStatus::RequestTimeout, connection->getServerConfig());
-            connection->appendResponse(HttpSerializer::serialize(response));
-            connection->setShouldClose(true);
-            poller_.modifySocket(fd, POLLOUT);
-            std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
-        } catch (const std::exception&) {
-            // if preparing or queueing response fails, remove connection immediately
-            poller_.removeSocket(fd);
-            connectionRegistry_.removeConnection(fd);
-        }
+        // no response pending: client timed out while sending request
+        HttpResponse response = RequestHandler::reject(HttpStatus::RequestTimeout, connection->getServerConfig());
+        connection->appendResponse(HttpSerializer::serialize(response));
+        connection->setShouldClose(true);
+        poller_.modifySocket(fd, POLLOUT);
+        std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
     }
 }
 
