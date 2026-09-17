@@ -46,6 +46,12 @@ namespace Http::Status {
         }
     }
 
+    constexpr bool isInformational(HttpStatus status) {
+        const int code = static_cast<int>(status);
+
+        return code >= 100 && code <= 199;
+    }
+
     constexpr bool isError(HttpStatus status) {
         const int code = static_cast<int>(status);
 

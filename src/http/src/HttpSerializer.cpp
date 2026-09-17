@@ -53,9 +53,7 @@ namespace {
     }
 
     bool statusForbidsBody(HttpStatus status) {
-        const int statusCode = static_cast<int>(status);
-
-        return (statusCode >= 100 && statusCode < 200) || status == HttpStatus::NoContent ||
+        return Http::Status::isInformational(status) || status == HttpStatus::NoContent ||
             status == HttpStatus::NotModified;
     }
 
