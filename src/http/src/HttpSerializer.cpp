@@ -1,5 +1,6 @@
+#include <array>
 #include <ctime>
-#include <stdexcept>
+#include <optional>
 
 #include "HeaderFields.hpp"
 #include "HttpSyntax.hpp"
@@ -10,26 +11,45 @@
 namespace {
     constexpr std::string_view serverName = "webserv";
 
-    std::string httpDate() {
+    constexpr std::array<std::string_view, 7> weekDays = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+
+    constexpr std::array<std::string_view, 12> months = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+
+    void appendTwoDigits(std::string& output, int value) {
+        output += static_cast<char>('0' + value / 10);
+        output += static_cast<char>('0' + value % 10);
+    }
+
+    std::optional<std::string> httpDate() {
         const std::time_t now = std::time(nullptr);
 
         std::tm time{};
 
         if (gmtime_r(&now, &time) == nullptr) {
-            throw std::runtime_error("failed to create HTTP date");
+            return std::nullopt;
         }
 
-        char buffer[64]{};
+        std::string date;
+        date.reserve(29);
 
-        const std::size_t size = std::strftime(
-            buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", &time
-        ); //TODO: replace with fixed RFC 7231 day/month tables
+        date += weekDays[time.tm_wday];
+        date += ", ";
+        appendTwoDigits(date, time.tm_mday);
+        date += ' ';
+        date += months[time.tm_mon];
+        date += ' ';
+        date += std::to_string(time.tm_year + 1900);
+        date += ' ';
+        appendTwoDigits(date, time.tm_hour);
+        date += ':';
+        appendTwoDigits(date, time.tm_min);
+        date += ':';
+        appendTwoDigits(date, time.tm_sec);
+        date += " GMT";
 
-        if (size == 0) {
-            throw std::runtime_error("failed to format HTTP date");
-        }
-
-        return std::string(buffer, size);
+        return date;
     }
 
     bool statusForbidsBody(HttpStatus status) {
@@ -37,6 +57,12 @@ namespace {
 
         return (statusCode >= 100 && statusCode < 200) || status == HttpStatus::NoContent ||
             status == HttpStatus::NotModified;
+    }
+
+    bool isServerControlled(std::string_view name) {
+        return HttpHeaders::equals(name, Http::Headers::ContentLength) ||
+            HttpHeaders::equals(name, Http::Headers::TransferEncoding) ||
+            HttpHeaders::equals(name, Http::Headers::Date);
     }
 
     void appendHeader(std::string& output, std::string_view name, std::string_view value) {
@@ -66,19 +92,15 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         .append(Http::Syntax::CRLF);
 
     for (const auto& [name, value] : response.headers) {
-        if (HttpHeaders::equals(name, Http::Headers::ContentLength)) {
-            continue;
-        }
-
-        if (HttpHeaders::equals(name, Http::Headers::TransferEncoding)) {
+        if (isServerControlled(name)) {
             continue;
         }
 
         appendHeader(output, name, value);
     }
 
-    if (!response.headers.has(Http::Headers::Date)) {
-        appendHeader(output, Http::Headers::Date, httpDate());
+    if (const std::optional<std::string> date = httpDate()) {
+        appendHeader(output, Http::Headers::Date, *date);
     }
 
     if (!response.headers.has(Http::Headers::Server)) {
