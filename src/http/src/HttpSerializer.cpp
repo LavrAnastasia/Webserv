@@ -71,7 +71,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         }
 
         if (HttpHeaders::equals(name, Http::Headers::TransferEncoding)) {
-            throw std::invalid_argument("transfer encoding is not supported");
+            continue;
         }
 
         appendHeader(output, name, value);
