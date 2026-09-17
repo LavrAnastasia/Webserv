@@ -218,6 +218,11 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
         if (!fs::exists(fileStatus)) {
             return ErrorResponseFactory::create(HttpStatus::NotFound, route);
         }
+        if (request.method == HttpMethod::Delete) {
+            if (!fs::is_regular_file(fileStatus))
+                return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+            return handleDeleteRequest(filePath, route);
+        }
 
         if (fs::is_directory(fileStatus)) {
             return handleDirectoryRequest(filePath, root, request, route);
@@ -226,8 +231,6 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
         if (!fs::is_regular_file(fileStatus)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
-
-        // TODO: WEB-35 Support DELETE
         return handleFileRequest(filePath, route);
     } catch (const fs::filesystem_error& error) {
         return ErrorResponseFactory::create(httpStatusFrom(error.code()), route);
