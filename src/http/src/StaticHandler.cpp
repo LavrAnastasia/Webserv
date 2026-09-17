@@ -185,6 +185,19 @@ namespace {
 
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
+
+    HttpResponse handleDeleteRequest(const fs::path& path, const ResolvedRoute& route) {
+        std::error_code error;
+        const bool removed = fs::remove(path, error);
+
+        if (error)
+            return ErrorResponseFactory::create(httpStatusFrom(error), route);
+        if (!removed)
+            return ErrorResponseFactory::create(HttpStatus::NotFound, route);
+        HttpResponse response{};
+        response.status = HttpStatus::NoContent;
+        return response;
+    }
 } // namespace
 
 HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
