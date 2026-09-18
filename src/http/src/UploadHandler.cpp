@@ -100,7 +100,7 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
     }
 
     // upload completed successfully
-    return {
-        .status = HttpStatus::Created // designated initializer
-    };
+    HttpResponse response{};
+    response.status = HttpStatus::Created;
+    return response;
 }
