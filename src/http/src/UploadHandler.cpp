@@ -10,29 +10,28 @@ namespace fs = std::filesystem;
 
 namespace {
 
-    std::optional<fs::path>
-    resolveTarget(const HttpRequest& request, const ResolvedRoute& route, const fs::path& uploadRoot) {
+    std::optional<fs::path> resolveTarget(
+        const HttpRequest& request, const ResolvedRoute& route, const fs::path& uploadRoot, std::error_code& error
+    ) {
         // 1.   Remove matched upload location from request path:
         //      request.path: /uploads/images/cat.png +
         //      route.locationPath: /uploads =
         //      /images/cat.png
         const fs::path relativePath = request.path.substr(route.locationPath.size());
 
-        // 2.   Verify that the request identifies a file inside the upload location
+        //  Client did not specify a file inside the upload location
         if (relativePath.empty() || relativePath == "/") {
             return std::nullopt;
         }
 
-        // 3.   Build filesystem target in configured upload root, then normalize it
+        // 2.   Build filesystem target in configured upload root, then normalize it
         //      resolve() <- uploadRoot: /project/public/uploads +
         //      relativePath: /images/cat.png =
         //      /project/public/uploads/images/cat.png
-        std::error_code error;
         const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relativePath), error);
-        // TODO: differentiate between path resolution failures and target escaping uploadRoot
-        // TODO: path resolution failure should be error 500 rather than 403
 
-        // 4.   Return nullopt if path resolution failed, or normalized target outside uploadRoot
+        //  Return nullopt if path resolution failed, or normalized target outside uploadRoot
+        //  NOTE: error modified only if path resolution failed, otherwise empty
         if (error || !Fs::isPrefixOf(uploadRoot, target)) {
             return std::nullopt;
         }
@@ -52,9 +51,13 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
     }
 
     // validate client path:
-    // no specified path or target outside of uploadRoot -> error 403
-    const auto target = resolveTarget(request, route, uploadRoot);
+    const auto target = resolveTarget(request, route, uploadRoot, error);
+    // path resolution failed & error set -> error 500
+    // error not set (target outside upload directory)-> error 403
     if (!target) {
+        if (error) {
+            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
+        }
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
 
