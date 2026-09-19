@@ -187,24 +187,16 @@ namespace {
     }
 
     HttpResponse handleDeleteRequest(const fs::path& requestedPath, const fs::path& root, const ResolvedRoute& route) {
-        std::error_code error;
-
         if (requestedPath.filename().empty())
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
 
-        const fs::path parentPath = fs::weakly_canonical(requestedPath.parent_path(), error);
-
-        if (error)
-            return ErrorResponseFactory::create(httpStatusFrom(error), route);
+        const fs::path parentPath = fs::weakly_canonical(requestedPath.parent_path());
 
         if (!Fs::isPrefixOf(root, parentPath))
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
 
         const fs::path targetPath = parentPath / requestedPath.filename();
-        const fs::file_status targetStatus = fs::symlink_status(targetPath, error);
-
-        if (error)
-            return ErrorResponseFactory::create(httpStatusFrom(error), route);
+        const fs::file_status targetStatus = fs::symlink_status(targetPath);
 
         if (!fs::exists(targetStatus))
             return ErrorResponseFactory::create(HttpStatus::NotFound, route);
@@ -212,10 +204,7 @@ namespace {
         if (!fs::is_regular_file(targetStatus) && !fs::is_symlink(targetStatus))
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
 
-        const bool removed = fs::remove(targetPath, error);
-
-        if (error)
-            return ErrorResponseFactory::create(httpStatusFrom(error), route);
+        const bool removed = fs::remove(targetPath);
 
         if (!removed)
             return ErrorResponseFactory::create(HttpStatus::NotFound, route);
