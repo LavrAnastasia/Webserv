@@ -35,6 +35,10 @@ namespace {
             return UploadHandler::handle(request, *route);
         }
 
+        if (request.method == HttpMethod::Post) {
+            return ErrorResponseFactory::create(HttpStatus::MethodNotAllowed, *route);
+        }
+
         return StaticHandler::handle(request, *route);
     }
 } // namespace

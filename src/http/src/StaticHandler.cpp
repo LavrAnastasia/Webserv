@@ -4,6 +4,7 @@
 #include "HeaderFields.hpp"
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
+#include "HttpStatusUtils.hpp"
 #include "HttpSyntax.hpp"
 #include "MimeTypes.hpp"
 #include "UrlCodec.hpp"
@@ -19,18 +20,6 @@
 
 namespace {
     namespace fs = std::filesystem;
-
-    HttpStatus httpStatusFrom(const std::error_code& error) {
-        if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted) {
-            return HttpStatus::Forbidden;
-        }
-
-        if (error == std::errc::no_such_file_or_directory || error == std::errc::not_a_directory) {
-            return HttpStatus::NotFound;
-        }
-
-        return HttpStatus::InternalServerError;
-    }
 
     std::string buildDirectoryList(const std::vector<fs::directory_entry>& entries, const std::string& requestPath) {
         std::string body = "<ul>\n";
@@ -106,7 +95,7 @@ namespace {
 
         if (!file.is_open()) {
             const std::error_code error(openError, std::generic_category());
-            return ErrorResponseFactory::create(httpStatusFrom(error), route);
+            return ErrorResponseFactory::create(Http::Status::from(error), route);
         }
 
         std::string body;
@@ -248,6 +237,6 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
         }
         return handleFileRequest(filePath, route);
     } catch (const fs::filesystem_error& error) {
-        return ErrorResponseFactory::create(httpStatusFrom(error.code()), route);
+        return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
     }
 }
