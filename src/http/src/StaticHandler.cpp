@@ -185,6 +185,34 @@ namespace {
 
         return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
     }
+
+    HttpResponse handleDeleteRequest(const fs::path& requestedPath, const fs::path& root, const ResolvedRoute& route) {
+        if (requestedPath.filename().empty())
+            return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+
+        const fs::path parentPath = fs::weakly_canonical(requestedPath.parent_path());
+
+        if (!Fs::isPrefixOf(root, parentPath))
+            return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+
+        const fs::path targetPath = parentPath / requestedPath.filename();
+        const fs::file_status targetStatus = fs::symlink_status(targetPath);
+
+        if (!fs::exists(targetStatus))
+            return ErrorResponseFactory::create(HttpStatus::NotFound, route);
+
+        if (!fs::is_regular_file(targetStatus) && !fs::is_symlink(targetStatus))
+            return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+
+        const bool removed = fs::remove(targetPath);
+
+        if (!removed)
+            return ErrorResponseFactory::create(HttpStatus::NotFound, route);
+
+        HttpResponse response{};
+        response.status = HttpStatus::NoContent;
+        return response;
+    }
 } // namespace
 
 HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
@@ -194,7 +222,12 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
 
     try {
         const fs::path root = fs::weakly_canonical(route.root);
-        const fs::path filePath = fs::weakly_canonical(Fs::resolve(root, fs::path(request.path)));
+        const fs::path requestedPath = Fs::resolve(root, fs::path(request.path));
+
+        if (request.method == HttpMethod::Delete)
+            return handleDeleteRequest(requestedPath, root, route);
+
+        const fs::path filePath = fs::weakly_canonical(requestedPath);
 
         if (!Fs::isPrefixOf(root, filePath)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
@@ -213,8 +246,6 @@ HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRou
         if (!fs::is_regular_file(fileStatus)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
-
-        // TODO: WEB-35 Support DELETE
         return handleFileRequest(filePath, route);
     } catch (const fs::filesystem_error& error) {
         return ErrorResponseFactory::create(httpStatusFrom(error.code()), route);
