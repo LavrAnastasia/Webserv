@@ -5,6 +5,12 @@
 #include "HttpUtils.hpp"
 #include "http/HttpHeaders.hpp"
 
+HttpHeaders::HttpHeaders(std::initializer_list<std::pair<std::string_view, std::string_view>> fields) {
+    for (const auto& [name, value] : fields) {
+        set(std::string(name), std::string(value));
+    }
+}
+
 bool HttpHeaders::equals(std::string_view a, std::string_view b) {
     return std::ranges::equal(a, b, [](char lhs, char rhs) {
         return Http::Ascii::tolower(lhs) == Http::Ascii::tolower(rhs);

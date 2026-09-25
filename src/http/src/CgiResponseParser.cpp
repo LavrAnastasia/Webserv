@@ -2,9 +2,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "HeaderFields.hpp"
 #include "HeadersParser.hpp"
+#include "HttpResponseFactory.hpp"
 #include "HttpSyntax.hpp"
 #include "http/CgiResponseParser.hpp"
 #include "http/HttpHeaders.hpp"
@@ -96,17 +98,13 @@ std::optional<HttpResponse> CgiResponseParser::parse(std::string_view output) {
         return std::nullopt;
     }
 
-    HttpResponse response{};
-
-    response.status = *status;
+    HttpHeaders forwarded;
 
     for (const auto& [name, value] : *headers) {
         if (isForwarded(name)) {
-            response.headers.set(name, value);
+            forwarded.set(name, value);
         }
     }
 
-    response.body = std::string(sections->body);
-
-    return response;
+    return HttpResponseFactory::create(*status, std::move(forwarded), std::string(sections->body));
 }

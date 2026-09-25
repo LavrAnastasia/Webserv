@@ -7,14 +7,8 @@
 #include "http/HttpStatus.hpp"
 
 HttpResponse RedirectHandler::handle(const RedirectConfig& redirect, const ResolvedRoute& route) {
-    HttpResponse response{};
-
-    response.status = redirect.status;
-
     if (Http::Status::isRedirect(redirect.status)) {
-        response.headers.set(std::string(Http::Headers::Location), *redirect.target);
-
-        return response;
+        return HttpResponseFactory::create(redirect.status, HttpHeaders{{Http::Headers::Location, *redirect.target}});
     }
 
     if (redirect.target) {
@@ -25,5 +19,5 @@ HttpResponse RedirectHandler::handle(const RedirectConfig& redirect, const Resol
         return ErrorResponseFactory::create(redirect.status, route);
     }
 
-    return response;
+    return HttpResponseFactory::create(redirect.status);
 }
