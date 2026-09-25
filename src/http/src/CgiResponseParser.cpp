@@ -72,11 +72,6 @@ namespace {
 
         return Http::Status::fromCode(code);
     }
-
-    bool isForwarded(std::string_view name) {
-        return !HttpHeaders::equals(name, Http::Headers::Status) &&
-            !HttpHeaders::equals(name, Http::Headers::Connection);
-    }
 } // namespace
 
 std::optional<HttpResponse> CgiResponseParser::parse(std::string_view output) {
@@ -86,7 +81,7 @@ std::optional<HttpResponse> CgiResponseParser::parse(std::string_view output) {
         return std::nullopt;
     }
 
-    const std::optional<HttpHeaders> headers = HeadersParser::parse(sections->headers);
+    std::optional<HttpHeaders> headers = HeadersParser::parse(sections->headers);
 
     if (!headers) {
         return std::nullopt;
@@ -98,13 +93,8 @@ std::optional<HttpResponse> CgiResponseParser::parse(std::string_view output) {
         return std::nullopt;
     }
 
-    HttpHeaders forwarded;
+    headers->erase(Http::Headers::Status);
+    headers->erase(Http::Headers::Connection);
 
-    for (const auto& [name, value] : *headers) {
-        if (isForwarded(name)) {
-            forwarded.set(name, value);
-        }
-    }
-
-    return HttpResponseFactory::create(*status, std::move(forwarded), std::string(sections->body));
+    return HttpResponseFactory::create(*status, std::move(*headers), std::string(sections->body));
 }

@@ -14,8 +14,13 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 
 namespace {
 
+    bool isUnique(std::string_view name) {
+        return HttpHeaders::equals(name, Http::Headers::ContentLength) ||
+            HttpHeaders::equals(name, Http::Headers::Host);
+    }
+
     bool canStoreHeader(const HttpHeaders& headers, const std::string& name) {
-        if (headers.has(name))
+        if (isUnique(name) && headers.has(name))
             return false;
 
         if (HttpHeaders::equals(name, Http::Headers::ContentLength) &&
@@ -76,7 +81,9 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
     if (!canStoreHeader(headers_, key))
         return false;
 
-    return headers_.set(key, value);
+    headers_.add(key, value);
+
+    return true;
 }
 
 std::optional<HttpHeaders> HeadersParser::run() {
