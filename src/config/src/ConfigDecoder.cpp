@@ -163,6 +163,10 @@ std::size_t ConfigDecoder::decodeClientMaxBodySize(std::string_view value) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::OutOfRange, "client max body size");
     }
 
+    if (size == 0) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+
     return size * multiplier;
 }
 
