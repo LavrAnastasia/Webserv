@@ -57,19 +57,6 @@ namespace {
             status == HttpStatus::NotModified;
     }
 
-    bool isServerControlled(std::string_view name) {
-        return HttpHeaders::equals(name, Http::Headers::ContentLength) ||
-            HttpHeaders::equals(name, Http::Headers::TransferEncoding) ||
-            HttpHeaders::equals(name, Http::Headers::Date);
-    }
-
-    void appendHeader(std::string& output, std::string_view name, std::string_view value) {
-        output.append(name)
-            .append(1, Http::Syntax::HeaderKeyEnd)
-            .append(1, Http::Syntax::SP)
-            .append(value)
-            .append(Http::Syntax::CRLF);
-    }
 } // namespace
 
 std::string HttpSerializer::serialize(const HttpResponse& response, bool headersOnly) {
@@ -89,27 +76,25 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
         .append(Http::Status::toString(response.status))
         .append(Http::Syntax::CRLF);
 
-    for (const auto& [name, value] : response.headers) {
-        if (isServerControlled(name)) {
-            continue;
-        }
+    HttpHeaders headers = response.headers;
 
-        appendHeader(output, name, value);
-    }
+    headers.erase(Http::Headers::TransferEncoding);
 
     if (const std::optional<std::string> date = httpDate()) {
-        appendHeader(output, Http::Headers::Date, *date);
+        headers.set(std::string(Http::Headers::Date), *date);
     }
 
-    if (!response.headers.has(Http::Headers::Server)) {
-        appendHeader(output, Http::Headers::Server, serverName);
+    if (!headers.has(Http::Headers::Server)) {
+        headers.set(std::string(Http::Headers::Server), std::string(serverName));
     }
 
-    if (!bodyForbidden) {
-        appendHeader(output, Http::Headers::ContentLength, std::to_string(body.size()));
+    if (bodyForbidden) {
+        headers.erase(Http::Headers::ContentLength);
+    } else {
+        headers.set(std::string(Http::Headers::ContentLength), std::to_string(body.size()));
     }
 
-    output.append(Http::Syntax::CRLF);
+    output.append(headers.serialize()).append(Http::Syntax::CRLF);
 
     if (!headersOnly && !bodyForbidden) {
         output.append(body);

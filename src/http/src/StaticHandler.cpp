@@ -147,11 +147,9 @@ namespace {
             location += request.query;
         }
 
-        HttpResponse response{};
-
-        response.status = HttpStatus::MovedPermanently;
-        response.headers.set(std::string(Http::Headers::Location), location);
-        return response;
+        return HttpResponseFactory::create(
+            HttpStatus::MovedPermanently, HttpHeaders{{Http::Headers::Location, location}}
+        );
     }
 
     HttpResponse handleDirectoryRequest(
@@ -209,9 +207,7 @@ namespace {
         if (!removed)
             return ErrorResponseFactory::create(HttpStatus::NotFound, route);
 
-        HttpResponse response{};
-        response.status = HttpStatus::NoContent;
-        return response;
+        return HttpResponseFactory::create(HttpStatus::NoContent);
     }
 } // namespace
 
