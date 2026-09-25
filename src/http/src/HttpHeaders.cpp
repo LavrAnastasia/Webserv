@@ -7,7 +7,7 @@
 
 HttpHeaders::HttpHeaders(std::initializer_list<std::pair<std::string_view, std::string_view>> fields) {
     for (const auto& [name, value] : fields) {
-        set(std::string(name), std::string(value));
+        add(std::string(name), std::string(value));
     }
 }
 
@@ -17,39 +17,63 @@ bool HttpHeaders::equals(std::string_view a, std::string_view b) {
     });
 }
 
-std::map<std::string, std::string>::const_iterator HttpHeaders::find(std::string_view name) const {
-    return std::ranges::find_if(_headers, [name](const auto& entry) { return equals(entry.first, name); });
+void HttpHeaders::add(const std::string& name, const std::string& value) {
+    _headers.emplace_back(name, value);
 }
 
-bool HttpHeaders::set(const std::string& name, const std::string& value) {
-    if (has(name)) {
-        return false;
-    }
+void HttpHeaders::set(const std::string& name, const std::string& value) {
+    erase(name);
+    add(name, value);
+}
 
-    return _headers.emplace(name, value).second;
+void HttpHeaders::erase(std::string_view name) {
+    std::erase_if(_headers, [name](const auto& entry) { return equals(entry.first, name); });
 }
 
 bool HttpHeaders::has(std::string_view name) const {
-    return find(name) != _headers.end();
+    return std::ranges::any_of(_headers, [name](const auto& entry) { return equals(entry.first, name); });
 }
 
 bool HttpHeaders::has(std::string_view name, std::string_view token) const {
-    const auto it = find(name);
+    const std::optional<std::string> value = get(name);
 
-    if (it == _headers.end()) {
+    if (!value) {
         return false;
     }
 
-    return std::ranges::any_of(std::views::split(it->second, Http::Syntax::ListSeparator), [token](const auto& part) {
+    return std::ranges::any_of(std::views::split(*value, Http::Syntax::ListSeparator), [token](const auto& part) {
         return equals(Http::Ascii::trim(std::string(part.begin(), part.end())), token);
     });
 }
 
-std::optional<std::string> HttpHeaders::get(const std::string& name) const {
-    const auto it = find(name);
+std::optional<std::string> HttpHeaders::get(std::string_view name) const {
+    std::optional<std::string> result;
 
-    if (it == _headers.end()) {
-        return std::nullopt;
+    for (const auto& [key, value] : _headers) {
+        if (!equals(key, name)) {
+            continue;
+        }
+
+        if (!result) {
+            result = value;
+        } else {
+            result->append(1, Http::Syntax::ListSeparator).append(1, Http::Syntax::SP).append(value);
+        }
     }
-    return it->second;
+
+    return result;
+}
+
+std::string HttpHeaders::serialize() const {
+    std::string output;
+
+    for (const auto& [name, value] : _headers) {
+        output.append(name)
+            .append(1, Http::Syntax::HeaderKeyEnd)
+            .append(1, Http::Syntax::SP)
+            .append(value)
+            .append(Http::Syntax::CRLF);
+    }
+
+    return output;
 }
