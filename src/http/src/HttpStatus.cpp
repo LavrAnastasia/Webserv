@@ -1,5 +1,5 @@
 #include "http/HttpStatus.hpp"
-#include "HttpStatusUtils.hpp"
+#include "ErrorStatus.hpp"
 
 namespace {
     constexpr std::string_view unknownStatus = "Unknown Status";

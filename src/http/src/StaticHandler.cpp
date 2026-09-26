@@ -1,10 +1,10 @@
 #include "StaticHandler.hpp"
 
 #include "ErrorResponseFactory.hpp"
+#include "ErrorStatus.hpp"
 #include "HeaderFields.hpp"
 #include "HttpHtmlUtils.hpp"
 #include "HttpResponseFactory.hpp"
-#include "HttpStatusUtils.hpp"
 #include "HttpSyntax.hpp"
 #include "MimeTypes.hpp"
 #include "UrlCodec.hpp"

@@ -1,7 +1,8 @@
 #include "UploadHandler.hpp"
 
 #include "ErrorResponseFactory.hpp"
-#include "HttpStatusUtils.hpp"
+#include "ErrorStatus.hpp"
+#include "HeaderFields.hpp"
 #include "fs/Path.hpp"
 
 #include <filesystem>
@@ -10,33 +11,18 @@
 
 namespace fs = std::filesystem;
 
-namespace {
-
-    fs::path resolveTarget(const fs::path& relativePath, const fs::path& uploadRoot) {
-        //      Build filesystem target in configured upload root, then normalize it
-        //      uploadRoot:     /project/public/uploads
-        //      relativePath:   /images/cat.png
-        //      target:         /project/public/uploads/images/cat.png
-        const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relativePath));
-
-        // reject normalized targets outside of configured upload root
-        if (!Fs::isPrefixOf(uploadRoot, target)) {
-            return {};
-        }
-
-        return target;
-    }
-
-} // namespace
-
 HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
     try {
-        // resolve configured upload path relative to the route root
-        const fs::path uploadRoot = fs::canonical(Fs::resolve(route.root, route.upload->uploadPath));
+        // build configured upload path relative to route root
+        const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
 
-        if (!fs::is_directory(uploadRoot)) {
+        // configured upload path must exist and be a directory
+        if (!fs::is_directory(uploadPath)) {
             return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
+
+        // canonicalize validated upload directory
+        const fs::path uploadRoot = fs::canonical(uploadPath);
 
         // extract request-relative upload path
         const fs::path relativePath = request.path.substr(route.locationPath.size());
@@ -46,11 +32,11 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
             return ErrorResponseFactory::create(HttpStatus::BadRequest, route);
         }
 
-        // validate client upload target
-        const fs::path target = resolveTarget(relativePath, uploadRoot);
+        // build filesystem target in configured upload root, then normalize it
+        const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relativePath));
 
         // target escapes upload root -> 403 forbidden
-        if (target.empty()) {
+        if (!Fs::isPrefixOf(uploadRoot, target)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
 
@@ -88,6 +74,7 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
         // upload completed successfully
         HttpResponse response{};
         response.status = HttpStatus::Created;
+        response.headers.set(std::string(Http::Headers::Location), request.path);
         return response;
 
     } catch (const fs::filesystem_error& error) {
