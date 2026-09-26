@@ -43,6 +43,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	HttpSerializer.cpp \
 	StaticHandler.cpp \
 	RedirectHandler.cpp \
+	UploadHandler.cpp \
 	UrlCodec.cpp \
 	MimeTypes.cpp \
 	HttpHtmlUtils.cpp \

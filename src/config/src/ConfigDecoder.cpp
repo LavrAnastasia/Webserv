@@ -245,6 +245,10 @@ UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "upload path");
     }
 
+    if (Fs::hasDotComponents(path)) {
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "upload path: " + path.string());
+    }
+
     return UploadConfig{.uploadPath = path};
 }
 

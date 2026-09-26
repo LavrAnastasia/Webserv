@@ -4,6 +4,7 @@
 #include "RedirectHandler.hpp"
 #include "Router.hpp"
 #include "StaticHandler.hpp"
+#include "UploadHandler.hpp"
 
 namespace {
     HttpResponse dispatch(const HttpRequest& request, const ServerConfig& server) {
@@ -30,9 +31,12 @@ namespace {
             return ErrorResponseFactory::create(HttpStatus::NotImplemented, *route);
         }
 
-        if (route->upload) {
-            // TODO: WEB-37 Upload Handler
-            return ErrorResponseFactory::create(HttpStatus::NotImplemented, *route);
+        if (route->upload && request.method == HttpMethod::Post) {
+            return UploadHandler::handle(request, *route);
+        }
+
+        if (request.method == HttpMethod::Post) {
+            return ErrorResponseFactory::create(HttpStatus::MethodNotAllowed, *route);
         }
 
         return StaticHandler::handle(request, *route);
