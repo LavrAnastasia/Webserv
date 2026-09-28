@@ -2,10 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cstddef>
 #include <initializer_list>
-#include <string>
-#include <string_view>
 #include <variant>
 
 namespace {
@@ -23,13 +20,13 @@ namespace {
     const std::string CHUNKED = POST + "Transfer-Encoding: chunked\r\n\r\n";
 
 
-    ParseResult feed(HttpParser& parser, std::string_view bytes) {
+    ParseResult result(HttpParser& parser, std::string_view bytes) {
         return parser.append(bytes.empty() ? "" : bytes.data(), bytes.size());
     }
 
     ParseResult parse(const std::string& raw) {
         HttpParser parser;
-        return feed(parser, raw);
+        return result(parser, raw);
     }
 
     std::string withRequestLine(const std::string& line) {
@@ -284,12 +281,14 @@ namespace {
 
             HttpParser parser;
 
-            const auto first = feed(parser, std::string_view(test.raw).substr(0, split));
+            const auto first = result(parser, std::string_view(test.raw).substr(0, split));
             ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
-            expectBody(feed(parser, std::string_view(test.raw).substr(split)), test.body);
+            expectBody(result(parser, std::string_view(test.raw).substr(split)), test.body);
         }
     }
+
+    // Verify that the parser correctly processes a request one byte at a time.
 
     TEST_P(HttpParserFragmentTest, ByteByByte) {
         const auto& test = GetParam();
@@ -298,12 +297,12 @@ namespace {
         for (std::size_t i = 0; i < test.raw.size(); ++i) {
             SCOPED_TRACE("byte " + std::to_string(i));
 
-            const auto result = feed(parser, std::string_view(test.raw).substr(i, 1));
+            const auto byteResult = result(parser, std::string_view(test.raw).substr(i, 1));
 
             if (i + 1 == test.raw.size()) {
-                expectBody(result, test.body);
+                expectBody(byteResult, test.body);
             } else {
-                ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result));
+                ASSERT_TRUE(std::holds_alternative<NeedMoreData>(byteResult));
             }
         }
     }
@@ -336,16 +335,16 @@ namespace {
     TEST(HttpParserTest, WaitsForRemainingBody) {
         HttpParser parser;
 
-        const auto first = feed(parser, withLength(5) + "hel");
+        const auto first = result(parser, withLength(5) + "hel");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
-        expectBody(feed(parser, "lo"), "hello");
+        expectBody(result(parser, "lo"), "hello");
     }
 
     TEST(HttpParserTest, PreservesNextRequestAfterBody) {
         HttpParser parser;
 
-        const auto first = feed(parser, withLength(5) + "hello" + GET + "Host: localhost\r\n\r\n");
+        const auto first = result(parser, withLength(5) + "hello" + GET + "Host: localhost\r\n\r\n");
 
         const auto* firstRequest = std::get_if<Complete>(&first);
         ASSERT_NE(firstRequest, nullptr);
@@ -355,7 +354,7 @@ namespace {
 
         parser.reset();
 
-        const auto second = feed(parser, "");
+        const auto second = result(parser, "");
         const auto* secondRequest = std::get_if<Complete>(&second);
         ASSERT_NE(secondRequest, nullptr);
 
@@ -384,13 +383,13 @@ namespace {
     TEST(HttpParserTest, WaitsForFinalChunkAndDelimiter) {
         HttpParser parser;
 
-        const auto first = feed(parser, CHUNKED + "1\r\na\r\n");
+        const auto first = result(parser, CHUNKED + "1\r\na\r\n");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
-        const auto second = feed(parser, "0\r\n");
+        const auto second = result(parser, "0\r\n");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(second));
 
-        expectBody(feed(parser, "\r\n"), "a");
+        expectBody(result(parser, "\r\n"), "a");
     }
 
     // SizeBoundary
@@ -453,10 +452,10 @@ namespace {
     TEST(HttpParserTest, SplitStartLineDelimiterAtLimit) {
         HttpParser parser;
 
-        const auto first = feed(parser, startLine(LINE_LIMIT) + "\r");
+        const auto first = result(parser, startLine(LINE_LIMIT) + "\r");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
-        expectBody(feed(parser, "\nHost: localhost\r\n\r\n"), "");
+        expectBody(result(parser, "\nHost: localhost\r\n\r\n"), "");
     }
 
     class HttpParserHeaderDelimiterTest : public testing::TestWithParam<std::size_t> {};
@@ -467,10 +466,10 @@ namespace {
 
         HttpParser parser;
 
-        const auto first = feed(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
+        const auto first = result(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
-        expectBody(feed(parser, delimiter.substr(split)), "");
+        expectBody(result(parser, delimiter.substr(split)), "");
     }
 
     INSTANTIATE_TEST_SUITE_P(
@@ -480,10 +479,10 @@ namespace {
     TEST(HttpParserTest, SplitChunkDelimiterAtLimit) {
         HttpParser parser;
 
-        const auto first = feed(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
+        const auto first = result(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
-        expectBody(feed(parser, "\na\r\n0\r\n\r\n"), "a");
+        expectBody(result(parser, "\na\r\n0\r\n\r\n"), "a");
     }
 
 } // namespace

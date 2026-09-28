@@ -103,7 +103,7 @@ format-check: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 c
 .SECONDARY: $(BUILD_DIR) $(OBJ)
 
 PARSER_TEST_SRC := \
-	tests/http_parser_test.cpp \
+	tests/http_parser_tests.cpp \
 	src/http/src/HttpParser.cpp \
 	src/http/src/RequestLineParser.cpp \
 	src/http/src/HeadersParser.cpp \
@@ -113,12 +113,12 @@ PARSER_TEST_SRC := \
 	src/fs/src/Path.cpp
 
 PARSER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(PARSER_TEST_SRC:.cpp=.o))
-PARSER_TEST_BIN := $(BUILD_DIR)/http_parser_test
+PARSER_TEST_BIN := $(BUILD_DIR)/http_parser_tests
 
 GTEST_CFLAGS = $(shell pkg-config --cflags gtest_main)
 GTEST_LIBS = $(shell pkg-config --libs gtest_main)
 
-$(BUILD_DIR)/tests/http_parser_test.o: INCLUDES += $(GTEST_CFLAGS)
+$(BUILD_DIR)/tests/http_parser_tests.o: INCLUDES += $(GTEST_CFLAGS)
 
 -include $(PARSER_TEST_OBJ:.o=.d)
 
@@ -129,3 +129,26 @@ test-unit: $(PARSER_TEST_BIN)
 	./$(PARSER_TEST_BIN)
 
 .PHONY: test-unit
+
+
+CONFIG_TEST_SRC := \
+	tests/config_loader_tests.cpp \
+	$(CONFIG_SRC) \
+	src/http/src/HttpMethod.cpp \
+	src/http/src/HttpStatus.cpp \
+	$(FS_SRC)
+
+CONFIG_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(CONFIG_TEST_SRC:.cpp=.o))
+CONFIG_TEST_BIN := $(BUILD_DIR)/config_loader_test
+
+$(BUILD_DIR)/tests/config_loader_tests.o: INCLUDES += $(GTEST_CFLAGS)
+
+-include $(CONFIG_TEST_OBJ:.o=.d)
+
+$(CONFIG_TEST_BIN): $(CONFIG_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-config: $(CONFIG_TEST_BIN)
+	./$(CONFIG_TEST_BIN)
+
+.PHONY: test-config
