@@ -3,6 +3,8 @@
 #include "ErrorResponseFactory.hpp"
 #include "ErrorStatus.hpp"
 #include "HeaderFields.hpp"
+#include "HttpResponseFactory.hpp"
+#include "UrlCodec.hpp"
 #include "fs/Path.hpp"
 
 #include <filesystem>
@@ -27,9 +29,8 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
         // extract request-relative upload path
         const fs::path relativePath = request.path.substr(route.locationPath.size());
 
-        // no file name specified in upload location -> 400 bad request
         if (relativePath.empty() || relativePath == "/") {
-            return ErrorResponseFactory::create(HttpStatus::BadRequest, route);
+            return ErrorResponseFactory::create(HttpStatus::Conflict, route);
         }
 
         // build filesystem target in configured upload root, then normalize it
@@ -72,11 +73,9 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
         }
 
         // upload completed successfully
-        HttpResponse response{};
-        response.status = HttpStatus::Created;
-        response.headers.set(std::string(Http::Headers::Location), request.path);
-        return response;
-
+        return HttpResponseFactory::create(
+            HttpStatus::Created, HttpHeaders{{Http::Headers::Location, Http::Url::encodePath(request.path)}}
+        );
     } catch (const fs::filesystem_error& error) {
         // handle failures from throwing std::filesystem operations
         // and map underlying error to corresponding HTTP status

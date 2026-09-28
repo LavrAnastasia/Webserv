@@ -1,12 +1,20 @@
-#include "HttpResponseFactory.hpp"
+#include <utility>
+
 #include "HeaderFields.hpp"
+#include "HttpResponseFactory.hpp"
+
+HttpResponse HttpResponseFactory::create(HttpStatus status) {
+    return HttpResponse{.status = status};
+}
+
+HttpResponse HttpResponseFactory::create(HttpStatus status, HttpHeaders headers) {
+    return HttpResponse{.status = status, .headers = std::move(headers)};
+}
+
+HttpResponse HttpResponseFactory::create(HttpStatus status, HttpHeaders headers, std::string body) {
+    return HttpResponse{.status = status, .headers = std::move(headers), .body = std::move(body)};
+}
 
 HttpResponse HttpResponseFactory::create(HttpStatus status, std::string body, std::string contentType) {
-    HttpResponse response;
-
-    response.status = status;
-    response.headers.set(std::string(Http::Headers::ContentType), std::move(contentType));
-    response.body = std::move(body);
-
-    return response;
+    return create(status, HttpHeaders{{Http::Headers::ContentType, contentType}}, std::move(body));
 }

@@ -6,6 +6,6 @@
 
 struct HttpResponse {
     HttpStatus status;
-    HttpHeaders headers;
-    std::string body;
+    HttpHeaders headers = {};
+    std::string body = {};
 };
