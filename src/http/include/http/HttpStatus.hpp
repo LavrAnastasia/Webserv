@@ -20,6 +20,7 @@ enum class HttpStatus {
     NotFound = 404,
     MethodNotAllowed = 405,
     RequestTimeout = 408,
+    Conflict = 409,
     PayloadTooLarge = 413,
     UriTooLong = 414,
     RequestHeaderFieldsTooLarge = 431,

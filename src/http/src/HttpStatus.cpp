@@ -1,4 +1,5 @@
 #include "http/HttpStatus.hpp"
+#include "ErrorStatus.hpp"
 
 namespace {
     constexpr std::string_view unknownStatus = "Unknown Status";
@@ -46,6 +47,9 @@ namespace Http::Status {
             case HttpStatus::RequestTimeout:
                 return "Request Timeout";
 
+            case HttpStatus::Conflict:
+                return "Conflict";
+
             case HttpStatus::PayloadTooLarge:
                 return "Payload Too Large";
 
@@ -84,5 +88,17 @@ namespace Http::Status {
         const HttpStatus status = static_cast<HttpStatus>(code);
 
         return toString(status) == unknownStatus ? std::nullopt : std::optional<HttpStatus>(status);
+    }
+
+    HttpStatus from(const std::error_code& error) {
+        if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted) {
+            return HttpStatus::Forbidden;
+        }
+
+        if (error == std::errc::no_such_file_or_directory || error == std::errc::not_a_directory) {
+            return HttpStatus::NotFound;
+        }
+
+        return HttpStatus::InternalServerError;
     }
 } // namespace Http::Status
