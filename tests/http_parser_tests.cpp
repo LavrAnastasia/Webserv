@@ -19,7 +19,7 @@ namespace {
 
     const std::string CHUNKED = POST + "Transfer-Encoding: chunked\r\n\r\n";
 
-
+    //Append data to an existing parser and return the parsing result
     ParseResult result(HttpParser& parser, std::string_view bytes) {
         return parser.append(bytes.empty() ? "" : bytes.data(), bytes.size());
     }
@@ -29,6 +29,7 @@ namespace {
         return result(parser, raw);
     }
 
+    // Test invalid HTTP methods, paths, or versions without repeating headers
     std::string withRequestLine(const std::string& line) {
         return line + "\r\nHost: localhost\r\n\r\n";
     }

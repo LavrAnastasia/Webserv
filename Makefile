@@ -160,3 +160,25 @@ test-config: $(CONFIG_TEST_BIN)
 	./$(CONFIG_TEST_BIN)
 
 .PHONY: test-config
+
+ROUTER_TEST_SRC := \
+	tests/router_tests.cpp \
+	src/http/src/Router.cpp \
+	src/fs/src/Path.cpp
+
+ROUTER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(ROUTER_TEST_SRC:.cpp=.o))
+ROUTER_TEST_BIN := $(BUILD_DIR)/router_tests
+
+$(BUILD_DIR)/tests/router_tests.o: INCLUDES += \
+	-Isrc/http/src \
+	$(GTEST_CFLAGS)
+
+-include $(ROUTER_TEST_OBJ:.o=.d)
+
+$(ROUTER_TEST_BIN): $(ROUTER_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-router: $(ROUTER_TEST_BIN)
+	./$(ROUTER_TEST_BIN)
+
+.PHONY: test-router
