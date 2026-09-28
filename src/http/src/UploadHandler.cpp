@@ -29,9 +29,8 @@ HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRou
         // extract request-relative upload path
         const fs::path relativePath = request.path.substr(route.locationPath.size());
 
-        // no file name specified in upload location -> 400 bad request
         if (relativePath.empty() || relativePath == "/") {
-            return ErrorResponseFactory::create(HttpStatus::BadRequest, route);
+            return ErrorResponseFactory::create(HttpStatus::Conflict, route);
         }
 
         // build filesystem target in configured upload root, then normalize it
