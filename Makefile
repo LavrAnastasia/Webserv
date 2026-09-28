@@ -101,3 +101,31 @@ format-check: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 c
 
 .PHONY: all clean fclean re
 .SECONDARY: $(BUILD_DIR) $(OBJ)
+
+PARSER_TEST_SRC := \
+	tests/http_parser_test.cpp \
+	src/http/src/HttpParser.cpp \
+	src/http/src/RequestLineParser.cpp \
+	src/http/src/HeadersParser.cpp \
+	src/http/src/HttpHeaders.cpp \
+	src/http/src/HttpMethod.cpp \
+	src/http/src/HttpUtils.cpp \
+	src/fs/src/Path.cpp
+
+PARSER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(PARSER_TEST_SRC:.cpp=.o))
+PARSER_TEST_BIN := $(BUILD_DIR)/http_parser_test
+
+GTEST_CFLAGS = $(shell pkg-config --cflags gtest_main)
+GTEST_LIBS = $(shell pkg-config --libs gtest_main)
+
+$(BUILD_DIR)/tests/http_parser_test.o: INCLUDES += $(GTEST_CFLAGS)
+
+-include $(PARSER_TEST_OBJ:.o=.d)
+
+$(PARSER_TEST_BIN): $(PARSER_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-unit: $(PARSER_TEST_BIN)
+	./$(PARSER_TEST_BIN)
+
+.PHONY: test-unit
