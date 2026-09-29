@@ -269,3 +269,7 @@ test-server: $(SERVER_TEST_BIN)
 	./$(SERVER_TEST_BIN)
 
 .PHONY: test-server
+
+
+.PHONY: test
+test: test-unit test-config test-router test-handler test-static test-serializer test-server
