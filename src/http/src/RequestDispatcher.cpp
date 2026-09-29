@@ -41,6 +41,6 @@ HandlerResult RequestDispatcher::dispatch(const HttpRequest& request, const Serv
     return StaticHandler::handle(request, *route);
 }
 
-HttpResponse RequestDispatcher::reject(HttpStatus status, const ServerConfig& server) {
+HttpResponse RequestDispatcher::fail(HttpStatus status, const ServerConfig& server) {
     return ErrorResponseFactory::create(status, server);
 }

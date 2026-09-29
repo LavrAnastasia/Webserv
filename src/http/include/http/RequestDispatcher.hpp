@@ -12,5 +12,5 @@ using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 class RequestDispatcher {
 public:
     static HandlerResult dispatch(const HttpRequest& request, const ServerConfig& server);
-    static HttpResponse reject(HttpStatus status, const ServerConfig& server);
+    static HttpResponse fail(HttpStatus status, const ServerConfig& server);
 };

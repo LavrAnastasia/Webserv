@@ -90,7 +90,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             } else {
                 // TODO: run CGI
                 connection->setShouldClose(true);
-                connection->appendResponse(RequestDispatcher::reject(HttpStatus::NotImplemented, server));
+                connection->appendResponse(RequestDispatcher::fail(HttpStatus::NotImplemented, server));
             }
 
             poller_.modifySocket(clientFd, POLLOUT);
@@ -102,7 +102,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         */
         else if (const Failed* failed = std::get_if<Failed>(&result)) {
             connection->setShouldClose(true);
-            connection->appendResponse(RequestDispatcher::reject(failed->status, connection->getServerConfig()));
+            connection->appendResponse(RequestDispatcher::fail(failed->status, connection->getServerConfig()));
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
         /*
@@ -199,9 +199,7 @@ void EventLoop::cleanupTimedOutConnections() {
 
         // no response pending: client timed out while sending request
         connection->setShouldClose(true);
-        connection->appendResponse(
-            RequestDispatcher::reject(HttpStatus::RequestTimeout, connection->getServerConfig())
-        );
+        connection->appendResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
         poller_.modifySocket(fd, POLLOUT);
         std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
     }
