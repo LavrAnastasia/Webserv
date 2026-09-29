@@ -203,3 +203,69 @@ test-handler: $(HANDLER_TEST_BIN)
 	./$(HANDLER_TEST_BIN)
 
 .PHONY: test-handler
+
+
+STATIC_TEST_SRC := \
+	tests/static_handler_tests.cpp \
+	$(HTTP_SRC) \
+	$(FS_SRC)
+
+STATIC_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(STATIC_TEST_SRC:.cpp=.o))
+STATIC_TEST_BIN := $(BUILD_DIR)/static_handler_tests
+
+$(BUILD_DIR)/tests/static_handler_tests.o: INCLUDES += \
+	-Isrc/http/src \
+	$(GTEST_CFLAGS)
+
+-include $(STATIC_TEST_OBJ:.o=.d)
+
+$(STATIC_TEST_BIN): $(STATIC_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-static: $(STATIC_TEST_BIN)
+	./$(STATIC_TEST_BIN)
+
+.PHONY: test-static
+
+SERIALIZER_TEST_SRC := \
+	tests/serializer_tests.cpp \
+	src/http/src/HttpSerializer.cpp \
+	src/http/src/HttpHeaders.cpp \
+	src/http/src/HttpStatus.cpp \
+	src/http/src/HttpUtils.cpp
+
+SERIALIZER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(SERIALIZER_TEST_SRC:.cpp=.o))
+SERIALIZER_TEST_BIN := $(BUILD_DIR)/serializer_tests
+
+$(BUILD_DIR)/tests/serializer_tests.o: INCLUDES += $(GTEST_CFLAGS)
+
+-include $(SERIALIZER_TEST_OBJ:.o=.d)
+
+$(SERIALIZER_TEST_BIN): $(SERIALIZER_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-serializer: $(SERIALIZER_TEST_BIN)
+	./$(SERIALIZER_TEST_BIN)
+
+.PHONY: test-
+
+SERVER_TEST_SRC := \
+	tests/server_tests.cpp \
+	$(HTTP_SRC) \
+	$(NET_SRC) \
+	$(FS_SRC)
+
+SERVER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(SERVER_TEST_SRC:.cpp=.o))
+SERVER_TEST_BIN := $(BUILD_DIR)/server_tests
+
+$(BUILD_DIR)/tests/server_tests.o: INCLUDES += $(GTEST_CFLAGS)
+
+-include $(SERVER_TEST_OBJ:.o=.d)
+
+$(SERVER_TEST_BIN): $(SERVER_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-server: $(SERVER_TEST_BIN)
+	./$(SERVER_TEST_BIN)
+
+.PHONY: test-server
