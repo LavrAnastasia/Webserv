@@ -52,15 +52,16 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	CgiResponseParser.cpp \
 )
 
-NET_SRC := \
-	src/net/src/Socket.cpp \
-	src/net/src/ServerSocket.cpp \
-	src/net/src/SocketManager.cpp \
-	src/net/src/Connection.cpp \
-	src/net/src/ConnectionRegistry.cpp \
-	src/net/src/Poller.cpp \
-	src/net/src/TcpServer.cpp \
-	src/net/src/EventLoop.cpp
+NET_SRC := $(addprefix src/net/src/, \
+	Socket.cpp \
+	ServerSocket.cpp \
+	SocketManager.cpp \
+	Connection.cpp \
+	ConnectionRegistry.cpp \
+	Poller.cpp \
+	TcpServer.cpp \
+	EventLoop.cpp \
+)
 
 SRC := \
 	app/main.cpp \
