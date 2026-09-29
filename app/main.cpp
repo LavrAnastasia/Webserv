@@ -32,9 +32,6 @@ int main(int argc, char* argv[]) {
 
         loop.run();
 
-        //             Request Handler ->  make HttpResponse from HttpRequest
-        //             Serialize Response to bytes
-
     } catch (const std::exception& error) {
         printError(error.what());
         return EXIT_FAILURE;

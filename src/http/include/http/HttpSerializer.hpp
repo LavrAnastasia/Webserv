@@ -4,5 +4,10 @@
 
 class HttpSerializer {
 public:
-    static std::string serialize(const HttpResponse& response, bool headersOnly = false);
+    struct Framing {
+        bool close = false;
+        bool headersOnly = false;
+    };
+
+    static std::string serialize(const HttpResponse& response, const Framing& framing);
 };

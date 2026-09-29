@@ -1,7 +1,6 @@
 #include "net/EventLoop.hpp"
 #include "http/HttpResponse.hpp"
-#include "http/HttpSerializer.hpp"
-#include "http/RequestHandler.hpp"
+#include "http/RequestDispatcher.hpp"
 #include "net/TcpServer.hpp"
 
 #include <algorithm>
@@ -81,10 +80,19 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
         // Parsing complete -> build response from HttpRequest
         if (const Complete* complete = std::get_if<Complete>(&result)) {
-            HttpResponse response = RequestHandler::handle(complete->request, connection->getServerConfig());
+            const ServerConfig& server = connection->getServerConfig();
+            HandlerResult handlerResult = RequestDispatcher::dispatch(complete->request, server);
 
-            connection->appendResponse(HttpSerializer::serialize(response));
             connection->setShouldClose(!complete->request.isPersistent());
+
+            if (const HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
+                connection->appendResponse(*response);
+            } else {
+                // TODO: run CGI
+                connection->setShouldClose(true);
+                connection->appendResponse(RequestDispatcher::fail(HttpStatus::NotImplemented, server));
+            }
+
             poller_.modifySocket(clientFd, POLLOUT);
         }
 
@@ -93,10 +101,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         close connection after sending!
         */
         else if (const Failed* failed = std::get_if<Failed>(&result)) {
-            HttpResponse response = RequestHandler::reject(failed->status, connection->getServerConfig());
-
-            connection->appendResponse(HttpSerializer::serialize(response));
             connection->setShouldClose(true);
+            connection->appendResponse(RequestDispatcher::fail(failed->status, connection->getServerConfig()));
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
         /*
@@ -192,9 +198,8 @@ void EventLoop::cleanupTimedOutConnections() {
         }
 
         // no response pending: client timed out while sending request
-        HttpResponse response = RequestHandler::reject(HttpStatus::RequestTimeout, connection->getServerConfig());
-        connection->appendResponse(HttpSerializer::serialize(response));
         connection->setShouldClose(true);
+        connection->appendResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
         poller_.modifySocket(fd, POLLOUT);
         std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
     }

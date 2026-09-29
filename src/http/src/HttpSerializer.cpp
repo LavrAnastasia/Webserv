@@ -59,7 +59,7 @@ namespace {
 
 } // namespace
 
-std::string HttpSerializer::serialize(const HttpResponse& response, bool headersOnly) {
+std::string HttpSerializer::serialize(const HttpResponse& response, const Framing& framing) {
     const int statusCode = static_cast<int>(response.status);
     const std::string& body = response.body;
     const bool bodyForbidden = statusForbidsBody(response.status);
@@ -80,6 +80,10 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
 
     headers.erase(Http::Headers::TransferEncoding);
 
+    if (framing.close) {
+        headers.set(std::string(Http::Headers::Connection), std::string(Http::Headers::ConnectionOption::Close));
+    }
+
     if (const std::optional<std::string> date = httpDate()) {
         headers.set(std::string(Http::Headers::Date), *date);
     }
@@ -96,7 +100,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, bool headers
 
     output.append(headers.serialize()).append(Http::Syntax::CRLF);
 
-    if (!headersOnly && !bodyForbidden) {
+    if (!framing.headersOnly && !bodyForbidden) {
         output.append(body);
     }
 
