@@ -1,5 +1,7 @@
 #include "net/Connection.hpp"
 
+#include "http/HttpSerializer.hpp"
+
 #include <sys/socket.h>
 
 
@@ -9,9 +11,9 @@ Connection::Connection(int fd, const std::string& ip, const ServerConfig& config
     setNonBlocking();
 }
 
-// called by server, appends HTTP response string to sendBuffer_ and updates state
-void Connection::appendResponse(const std::string& response) {
-    sendBuffer_.append(response);
+// called by server, serializes the response into sendBuffer_ and updates state
+void Connection::appendResponse(const HttpResponse& response) {
+    sendBuffer_.append(HttpSerializer::serialize(response, {.close = shouldClose_}));
     lastActivity_ = std::chrono::steady_clock::now();
 }
 

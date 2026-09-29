@@ -1,6 +1,7 @@
 #pragma once
 
 #include "http/HttpParser.hpp"
+#include "http/HttpResponse.hpp"
 #include "net/Socket.hpp"
 #include <chrono>
 #include <optional>
@@ -39,8 +40,8 @@ public:
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN
     bool isSendComplete() const { return sendBuffer_.empty(); }
 
-    // called by server, appends HTTP response string to sendBuffer_
-    void appendResponse(const std::string& response);
+    // called by server, serializes the response into sendBuffer_
+    void appendResponse(const HttpResponse& response);
 
     //called by server when POLLIN detected -reads raw bytes from socket -> HttpParser
     std::optional<ParseResult> receiveRequest();

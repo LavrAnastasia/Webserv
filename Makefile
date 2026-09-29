@@ -47,7 +47,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	UrlCodec.cpp \
 	MimeTypes.cpp \
 	HttpHtmlUtils.cpp \
-	RequestHandler.cpp \
+	RequestDispatcher.cpp \
 	HttpRequest.cpp \
 	CgiHandler.cpp \
 	CgiResponseParser.cpp \

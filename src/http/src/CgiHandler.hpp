@@ -1,7 +1,7 @@
 #pragma once
 
 #include "http/HttpRequest.hpp"
-#include "http/RequestHandler.hpp"
+#include "http/RequestDispatcher.hpp"
 
 #include "ResolvedRoute.hpp"
 

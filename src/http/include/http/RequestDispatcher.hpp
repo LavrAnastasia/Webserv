@@ -9,8 +9,8 @@
 
 using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 
-class RequestHandler {
+class RequestDispatcher {
 public:
-    static HandlerResult handle(const HttpRequest& request, const ServerConfig& server);
+    static HandlerResult dispatch(const HttpRequest& request, const ServerConfig& server);
     static HttpResponse reject(HttpStatus status, const ServerConfig& server);
 };
