@@ -1,8 +1,11 @@
 #pragma once
 
 #include "config/ServerConfig.hpp"
+#include "http/CgiRequest.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
+
+using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 
 class RequestHandler {
 public:
