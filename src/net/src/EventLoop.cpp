@@ -81,10 +81,20 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
         // Parsing complete -> build response from HttpRequest
         if (const Complete* complete = std::get_if<Complete>(&result)) {
-            HttpResponse response = RequestHandler::handle(complete->request, connection->getServerConfig());
+            const ServerConfig& server = connection->getServerConfig();
+            HandlerResult result = RequestHandler::handle(complete->request, server);
 
-            connection->appendResponse(HttpSerializer::serialize(response));
-            connection->setShouldClose(!complete->request.isPersistent());
+            if (const HttpResponse* response = std::get_if<HttpResponse>(&result)) {
+                connection->appendResponse(HttpSerializer::serialize(*response));
+                connection->setShouldClose(!complete->request.isPersistent());
+            } else {
+                // TODO: run CGI
+                connection->appendResponse(
+                    HttpSerializer::serialize(RequestHandler::reject(HttpStatus::NotImplemented, server))
+                );
+                connection->setShouldClose(true);
+            }
+
             poller_.modifySocket(clientFd, POLLOUT);
         }
 

@@ -1,4 +1,6 @@
 #include "http/RequestHandler.hpp"
+
+#include "CgiHandler.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "HeaderFields.hpp"
 #include "RedirectHandler.hpp"
@@ -7,7 +9,7 @@
 #include "UploadHandler.hpp"
 
 namespace {
-    HttpResponse dispatch(const HttpRequest& request, const ServerConfig& server) {
+    HandlerResult dispatch(const HttpRequest& request, const ServerConfig& server) {
         const std::optional<ResolvedRoute> route = Router::resolve(request, server);
 
         if (!route) {
@@ -27,8 +29,7 @@ namespace {
         }
 
         if (route->cgi) {
-            // TODO: WEB-36 CGI Handler
-            return ErrorResponseFactory::create(HttpStatus::NotImplemented, *route);
+            return CgiHandler::handle(request, *route);
         }
 
         if (route->upload && request.method == HttpMethod::Post) {
@@ -43,16 +44,17 @@ namespace {
     }
 } // namespace
 
-HttpResponse RequestHandler::handle(const HttpRequest& request, const ServerConfig& server) {
-    HttpResponse response = dispatch(request, server);
+HandlerResult RequestHandler::handle(const HttpRequest& request, const ServerConfig& server) {
+    HandlerResult result = dispatch(request, server);
+    HttpResponse* response = std::get_if<HttpResponse>(&result);
 
-    if (!request.isPersistent()) {
-        response.headers.set(
+    if (response != nullptr && !request.isPersistent()) {
+        response->headers.set(
             std::string(Http::Headers::Connection), std::string(Http::Headers::ConnectionOption::Close)
         );
     }
 
-    return response;
+    return result;
 }
 
 HttpResponse RequestHandler::reject(HttpStatus status, const ServerConfig& server) {
