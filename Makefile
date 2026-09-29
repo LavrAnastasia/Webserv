@@ -182,3 +182,24 @@ test-router: $(ROUTER_TEST_BIN)
 	./$(ROUTER_TEST_BIN)
 
 .PHONY: test-router
+
+
+HANDLER_TEST_SRC := \
+	tests/request_handler_tests.cpp \
+	$(HTTP_SRC) \
+	$(FS_SRC)
+
+HANDLER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(HANDLER_TEST_SRC:.cpp=.o))
+HANDLER_TEST_BIN := $(BUILD_DIR)/request_handler_tests
+
+$(BUILD_DIR)/tests/request_handler_tests.o: INCLUDES += $(GTEST_CFLAGS)
+
+-include $(HANDLER_TEST_OBJ:.o=.d)
+
+$(HANDLER_TEST_BIN): $(HANDLER_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(GTEST_LIBS) -o $@
+
+test-handler: $(HANDLER_TEST_BIN)
+	./$(HANDLER_TEST_BIN)
+
+.PHONY: test-handler
