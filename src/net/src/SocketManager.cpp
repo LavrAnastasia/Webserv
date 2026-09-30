@@ -16,6 +16,7 @@ void SocketManager::createServers(const std::vector<ServerConfig>& configs) {
                 auto newSocket = std::make_unique<ServerSocket>(listenBlock.host, listenBlock.port);
                 //4. configure socket
                 newSocket->setNonBlocking();
+                newSocket->setCloseOnExec();
                 //5. Map fd to config block
                 int fd = newSocket->getFd();
                 fdToConfig_[fd] = &config;
