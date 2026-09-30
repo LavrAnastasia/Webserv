@@ -12,7 +12,11 @@ class CgiProcess {
 private:
     CgiProcess(pid_t pid, FileDescriptor inputPipe, FileDescriptor outputPipe, std::string body);
 
+    void reap();
+    void kill();
+
     pid_t pid_;
+    bool alive_;
     FileDescriptor inputPipe_;
     FileDescriptor outputPipe_;
     std::string body_;
