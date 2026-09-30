@@ -1,7 +1,15 @@
+#include <cstddef>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
+#include <string>
+#include <system_error>
+#include <variant>
+
 #include <gtest/gtest.h>
 
-#include "http/RequestHandler.hpp"
+#include "config/ServerConfig.hpp"
+#include "http/RequestDispatcher.hpp"
 
 namespace {
 
@@ -10,7 +18,7 @@ namespace {
     class RequestHandlerTest : public ::testing::Test {
     protected:
         fs::path root_;
-        ServerConfig server_;
+        ServerConfig server_{};
         const std::string fileBody_ = "<h1>Hello</h1>\n";
 
         void SetUp() override {
@@ -61,37 +69,42 @@ namespace {
         }
     };
 
-    // 200: the contents of the existing file are returned
-
     TEST_F(RequestHandlerTest, Returns200ForExistingFile) {
-        const auto response = RequestHandler::handle(requestFor("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(requestFor("/index.html"), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::OK);
         EXPECT_EQ(response.body, fileBody_);
     }
 
-    // 404: Location found, but the file is missing
-
     TEST_F(RequestHandlerTest, Returns404ForMissingFile) {
-        const auto response = RequestHandler::handle(requestFor("/missing.html"), server_);
+        const auto result = RequestDispatcher::dispatch(requestFor("/missing.html"), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::NotFound);
         EXPECT_FALSE(response.body.empty());
     }
 
-    // 404: The file exists, but there is no matching location
-
     TEST_F(RequestHandlerTest, Returns404WhenNoLocationMatches) {
         server_.locations.front().path = "/private";
 
-        const auto response = RequestHandler::handle(requestFor("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(requestFor("/index.html"), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::NotFound);
     }
 
-
     TEST_F(RequestHandlerTest, Returns405WithAllowHeader) {
-        const auto response = RequestHandler::handle(requestFor("/index.html", HttpMethod::Post), server_);
+        const auto result = RequestDispatcher::dispatch(requestFor("/index.html", HttpMethod::Post), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::MethodNotAllowed);
 
@@ -112,9 +125,12 @@ namespace {
     TEST_P(RequestHandlerBodyLimitTest, ChecksBodySize) {
         const auto& test = GetParam();
 
-        const auto response = RequestHandler::handle(
+        const auto result = RequestDispatcher::dispatch(
             requestFor("/index.html", HttpMethod::Get, std::string(test.bodySize, 'a')), server_
         );
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, test.expectedStatus);
 
@@ -138,7 +154,10 @@ namespace {
     TEST_F(RequestHandlerTest, UsesSmallerLocationBodyLimit) {
         server_.locations.front().clientMaxBodySize = 4;
 
-        const auto response = RequestHandler::handle(requestFor("/index.html", HttpMethod::Get, "12345"), server_);
+        const auto result = RequestDispatcher::dispatch(requestFor("/index.html", HttpMethod::Get, "12345"), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::PayloadTooLarge);
     }
@@ -147,12 +166,14 @@ namespace {
         server_.clientMaxBodySize = 4;
         server_.locations.front().clientMaxBodySize = 8;
 
-        const auto response = RequestHandler::handle(requestFor("/index.html", HttpMethod::Get, "12345"), server_);
+        const auto result = RequestDispatcher::dispatch(requestFor("/index.html", HttpMethod::Get, "12345"), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::OK);
         EXPECT_EQ(response.body, fileBody_);
     }
-
 
     struct RedirectCase {
         const char* name;
@@ -167,8 +188,11 @@ namespace {
 
         server_.locations.front().redirect = RedirectConfig{test.status, std::string(test.target)};
 
-        // File /old does not exist: the redirect must take effect before the file is read
-        const auto response = RequestHandler::handle(requestFor("/old"), server_);
+        // The file does not exist: the redirect must happen before file access.
+        const auto result = RequestDispatcher::dispatch(requestFor("/old"), server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, test.status);
 

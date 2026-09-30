@@ -163,15 +163,13 @@ test-config: $(CONFIG_TEST_BIN)
 
 ROUTER_TEST_SRC := \
 	tests/router_tests.cpp \
-	src/http/src/Router.cpp \
-	src/fs/src/Path.cpp
+	$(HTTP_SRC) \
+	$(FS_SRC)
 
 ROUTER_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(ROUTER_TEST_SRC:.cpp=.o))
 ROUTER_TEST_BIN := $(BUILD_DIR)/router_tests
 
-$(BUILD_DIR)/tests/router_tests.o: INCLUDES += \
-	-Isrc/http/src \
-	$(GTEST_CFLAGS)
+$(BUILD_DIR)/tests/router_tests.o: INCLUDES += $(GTEST_CFLAGS)
 
 -include $(ROUTER_TEST_OBJ:.o=.d)
 
@@ -213,9 +211,7 @@ STATIC_TEST_SRC := \
 STATIC_TEST_OBJ := $(addprefix $(BUILD_DIR)/,$(STATIC_TEST_SRC:.cpp=.o))
 STATIC_TEST_BIN := $(BUILD_DIR)/static_handler_tests
 
-$(BUILD_DIR)/tests/static_handler_tests.o: INCLUDES += \
-	-Isrc/http/src \
-	$(GTEST_CFLAGS)
+$(BUILD_DIR)/tests/static_handler_tests.o: INCLUDES += $(GTEST_CFLAGS)
 
 -include $(STATIC_TEST_OBJ:.o=.d)
 
