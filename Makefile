@@ -33,6 +33,7 @@ FS_SRC := $(addprefix src/fs/src/, \
 
 CGI_SRC := $(addprefix src/cgi/src/, \
 	CgiProcess.cpp \
+	CgiRegistry.cpp \
 )
 
 HTTP_SRC := $(addprefix src/http/src/, \
