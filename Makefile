@@ -6,7 +6,8 @@ INCLUDES := \
 	-Isrc/http/include \
 	-Isrc/config/include \
 	-Isrc/net/include \
-	-Isrc/fs/include
+	-Isrc/fs/include \
+	-Isrc/cgi/include
 
 DEPFLAGS := -MMD -MP
 
@@ -27,6 +28,12 @@ CONFIG_SRC := $(addprefix src/config/src/, \
 
 FS_SRC := $(addprefix src/fs/src/, \
 	Path.cpp \
+	FileDescriptor.cpp \
+)
+
+CGI_SRC := $(addprefix src/cgi/src/, \
+	CgiProcess.cpp \
+	CgiRegistry.cpp \
 )
 
 HTTP_SRC := $(addprefix src/http/src/, \
@@ -69,6 +76,7 @@ SRC := \
 	${CONFIG_SRC} \
 	${HTTP_SRC} \
 	${NET_SRC} \
+	${CGI_SRC} \
 	${FS_SRC}
 
 BUILD_DIR := build

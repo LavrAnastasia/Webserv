@@ -1,10 +1,10 @@
 #pragma once
 
-#include <unistd.h>
+#include "fs/FileDescriptor.hpp"
 
 class Socket {
 private:
-    int fd_;
+    FileDescriptor fd_;
 
 protected:
     bool isValidFd() const;
@@ -20,4 +20,5 @@ public:
 
     int getFd() const;
     void setNonBlocking();
+    void setCloseOnExec();
 };

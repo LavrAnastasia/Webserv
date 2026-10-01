@@ -92,14 +92,6 @@ int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) 
     bind() takes a generic sockaddr dummy struct as an input, allowing support for different
     address types (IPv4, IPv6, Bluetooth etc)
 
-    fcntl() is used to read or change internal settings for open files or sockets
-    arguments:
-    1. TARGET
-    2. COMMAND: F_GETFL (return settings packed into a single int variable)
-                F_SETFL (change internal state of target)
-    3. INPUT:   a) unused when only getting data
-                b) flags | O_NONBLOCK = bitwise merge, which sets specific bit of nonblock flag to 1
-
     inet_pton(AF_INET, host.c_str(), &socketAddress_.sin_addr) converts a string address to uint32_t
     1. CONVERSION RULE (address type): AF_INET = IPv4
     2. INPUT: host.c_str() converts a std::string object to a c-style string

@@ -9,6 +9,7 @@ Connection::Connection(int fd, const std::string& ip, const ServerConfig& config
     : clientIp_(ip), serverConfig_(config), lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
     setFd(fd);
     setNonBlocking();
+    setCloseOnExec();
 }
 
 // called by server, serializes the response into sendBuffer_ and updates state
