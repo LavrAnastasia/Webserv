@@ -1,4 +1,5 @@
 #include "net/EventLoop.hpp"
+#include "http/CgiResponseParser.hpp"
 #include "http/HttpResponse.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "net/TcpServer.hpp"
@@ -8,7 +9,9 @@
 #include <csignal>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 volatile std::sig_atomic_t EventLoop::stopRequested_ = 0;
@@ -41,8 +44,7 @@ void EventLoop::handleNewConnection(int listenFd) {
                 // in case of setNonBlocking() failure, log error and remove connection + socket
                 std::cerr << "NetError: Failed to initialize client " << clientInfo->ip << " - " << e.what()
                           << std::endl;
-                connectionRegistry_.removeConnection(clientInfo->fd);
-                poller_.removeSocket(clientInfo->fd);
+                closeConnection(clientInfo->fd);
             }
         } else {
             // if config for accepted client not found, close connection
@@ -60,8 +62,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     }
     //handle errors and disconnects (POLLERR and POLLHUP)
     if (events & (POLLERR | POLLHUP)) {
-        poller_.removeSocket(clientFd);
-        connectionRegistry_.removeConnection(clientFd);
+        closeConnection(clientFd);
         return;
     }
     //reading phase (OS kernel receive buffer has data)
@@ -71,8 +72,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
         // Client disconnected -> clean up immediately
         if (!received) {
-            poller_.removeSocket(clientFd);
-            connectionRegistry_.removeConnection(clientFd);
+            closeConnection(clientFd);
             return;
         }
 
@@ -87,13 +87,10 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
             if (const HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
                 connection->appendResponse(*response);
+                poller_.modifySocket(clientFd, POLLOUT);
             } else {
-                // TODO: run CGI
-                connection->setShouldClose(true);
-                connection->appendResponse(RequestDispatcher::fail(HttpStatus::NotImplemented, server));
+                launchCgi(*connection, std::get<CgiRequest>(handlerResult));
             }
-
-            poller_.modifySocket(clientFd, POLLOUT);
         }
 
         /*
@@ -114,15 +111,13 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     if (events & POLLOUT) {
         if (!connection->sendResponse()) {
             //client disconnected
-            poller_.removeSocket(clientFd);
-            connectionRegistry_.removeConnection(clientFd);
+            closeConnection(clientFd);
             return;
         }
 
         if (connection->isSendComplete()) {
             if (connection->shouldClose()) {
-                poller_.removeSocket(clientFd);
-                connectionRegistry_.removeConnection(clientFd);
+                closeConnection(clientFd);
             } else {
                 connection->resetParser();
                 /*
@@ -136,6 +131,72 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             }
         }
     }
+}
+
+void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
+    std::optional<CgiProcess> process = CgiProcess::launch(request);
+
+    if (!process) {
+        connection.appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection.getServerConfig()));
+        poller_.modifySocket(connection.getFd(), POLLOUT);
+        return;
+    }
+
+    if (process->inputFd() >= 0) {
+        poller_.addSocket(process->inputFd());
+        poller_.modifySocket(process->inputFd(), POLLOUT);
+    }
+
+    poller_.addSocket(process->outputFd());
+    poller_.modifySocket(connection.getFd(), 0);
+    cgiRegistry_.add(connection.getFd(), std::move(*process));
+}
+
+void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
+    CgiProcess* process = cgiRegistry_.find(clientFd);
+    const int input = process->inputFd();
+    const int output = process->outputFd();
+
+    if (pipeFd == input) {
+        process->writeInput();
+    } else {
+        process->readOutput();
+    }
+
+    if (process->inputFd() != input) {
+        poller_.removeSocket(input);
+    }
+
+    if (process->outputFd() != output) {
+        poller_.removeSocket(output);
+    }
+
+    if (process->isAlive()) {
+        return;
+    }
+
+    Connection* connection = connectionRegistry_.getConnection(clientFd);
+    const std::optional<HttpResponse> response = CgiResponseParser::parse(process->output());
+
+    if (response) {
+        connection->appendResponse(*response);
+    } else {
+        connection->appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection->getServerConfig()));
+    }
+
+    cgiRegistry_.remove(clientFd);
+    poller_.modifySocket(clientFd, POLLOUT);
+}
+
+void EventLoop::closeConnection(int fd) {
+    if (CgiProcess* process = cgiRegistry_.find(fd)) {
+        poller_.removeSocket(process->inputFd());
+        poller_.removeSocket(process->outputFd());
+        cgiRegistry_.remove(fd);
+    }
+
+    poller_.removeSocket(fd);
+    connectionRegistry_.removeConnection(fd);
 }
 
 void EventLoop::initialize() {
@@ -157,6 +218,8 @@ void EventLoop::run() {
             //if active fd is in listeningFds_, it's a new connection
             if (it != listeningFds_.end()) {
                 handleNewConnection(event.fd);
+            } else if (std::optional<int> client = cgiRegistry_.client(event.fd)) {
+                handleCgiActivity(*client, event.fd);
             }
             //if not, it's an existing client
             else {
@@ -177,13 +240,16 @@ void EventLoop::cleanupTimedOutConnections() {
         if (!connection)
             continue;
 
+        if (cgiRegistry_.find(fd)) {
+            continue;
+        }
+
         // connection already flagged to close, but timed out before closing
         // close immediately, do not queue another 408
         if (connection->shouldClose()) {
             std::cout << "webserv: info: fd " << fd << " timed out while waiting to close. Closing immediately."
                       << std::endl;
-            poller_.removeSocket(fd);
-            connectionRegistry_.removeConnection(fd);
+            closeConnection(fd);
             continue;
         }
 
@@ -192,8 +258,7 @@ void EventLoop::cleanupTimedOutConnections() {
         if (!connection->isSendComplete()) {
             std::cout << "webserv: info: fd " << fd << " timed out while sending response. Closing immediately."
                       << std::endl;
-            poller_.removeSocket(fd);
-            connectionRegistry_.removeConnection(fd);
+            closeConnection(fd);
             continue;
         }
 
