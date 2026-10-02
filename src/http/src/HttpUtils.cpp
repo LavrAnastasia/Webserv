@@ -10,6 +10,10 @@ namespace Http::Ascii {
         }
     } // namespace
 
+    bool isalnum(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+    }
+
     char tolower(char c) {
         unsigned char uc = static_cast<unsigned char>(c);
 
