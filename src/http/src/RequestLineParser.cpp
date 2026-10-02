@@ -45,12 +45,13 @@ namespace {
     bool isValidHttpVersion(std::string_view version) {
         const std::size_t separator = version.find(Http::Protocol::VersionSeparator);
 
-        if (separator == std::string_view::npos) {
+        if (separator == std::string_view::npos || version.substr(0, separator) != Http::Protocol::Name) {
             return false;
         }
 
-        return version.substr(0, separator) == Http::Protocol::Name &&
-            version.substr(separator + 1) == Http::Protocol::Version;
+        const std::string_view number = version.substr(separator + 1);
+        return number.size() == 3 && Http::Ascii::isdigit(number.front()) &&
+            number[1] == Http::Protocol::VersionComponentSeparator && Http::Ascii::isdigit(number.back());
     }
 
     bool isControlCharacter(char c) {
@@ -179,6 +180,10 @@ RequestLineResult RequestLineParser::run() {
     }
 
     if (!isValidHttpVersion(version)) {
+        return HttpStatus::BadRequest;
+    }
+
+    if (version.substr(Http::Protocol::Name.size() + 1) != Http::Protocol::Version) {
         return HttpStatus::HttpVersionNotSupported;
     }
 
