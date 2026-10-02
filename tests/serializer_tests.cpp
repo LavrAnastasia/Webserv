@@ -84,7 +84,7 @@ namespace {
         const auto& test = GetParam();
         response_.status = test.status;
 
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
         const auto lineEnd = serialized.find("\r\n");
 
         ASSERT_NE(lineEnd, std::string::npos);
@@ -119,7 +119,7 @@ namespace {
         response_.headers.set("X-Empty", "");
         response_.body = "Hello";
 
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
 
         expectHeader(serialized, "Content-Type", "text/plain; charset=utf-8");
         expectHeader(serialized, "Connection", "close");
@@ -135,7 +135,7 @@ namespace {
         response_.headers.set("Content-Type", "text/plain");
         response_.body = "body";
 
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
         const auto separator = serialized.find("\r\n\r\n");
 
         ASSERT_NE(separator, std::string::npos);
@@ -156,7 +156,7 @@ namespace {
     }
 
     TEST_F(HttpSerializerTest, AddsDefaultServerHeader) {
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
 
         expectHeader(serialized, "Server", "webserv");
     }
@@ -166,9 +166,9 @@ namespace {
             SCOPED_TRACE(name);
 
             auto response = response_;
-            ASSERT_TRUE(response.headers.set(name, "custom-server"));
+            response.headers.set(name, "custom-server");
 
-            const auto serialized = HttpSerializer::serialize(response);
+            const auto serialized = HttpSerializer::serialize(response, {});
 
             expectHeader(serialized, "Server", "custom-server");
         }
@@ -177,7 +177,7 @@ namespace {
     TEST_F(HttpSerializerTest, GeneratesDateInsteadOfUsingProvidedValue) {
         response_.headers.set("dAtE", "user-supplied-date");
 
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
         const auto dates = headerValues(serialized, "Date");
 
         ASSERT_EQ(dates.size(), 1u);
@@ -199,9 +199,9 @@ namespace {
 
             auto response = response_;
             response.body = "Hello";
-            ASSERT_TRUE(response.headers.set(name, "999"));
+            response.headers.set(name, "999");
 
-            const auto serialized = HttpSerializer::serialize(response);
+            const auto serialized = HttpSerializer::serialize(response, {});
 
             expectHeader(serialized, "Content-Length", "5");
             expectBody(serialized, "Hello");
@@ -214,9 +214,9 @@ namespace {
 
             auto response = response_;
             response.body = "Hello";
-            ASSERT_TRUE(response.headers.set(name, "chunked"));
+            response.headers.set(name, "chunked");
 
-            const auto serialized = HttpSerializer::serialize(response);
+            const auto serialized = HttpSerializer::serialize(response, {});
 
             EXPECT_TRUE(headerValues(serialized, "Transfer-Encoding").empty());
             expectHeader(serialized, "Content-Length", "5");
@@ -238,7 +238,7 @@ namespace {
         const auto& test = GetParam();
         response_.body = test.body;
 
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
 
         expectHeader(serialized, "Content-Length", std::to_string(test.expectedBytes));
         expectBody(serialized, test.body);
@@ -272,7 +272,7 @@ namespace {
         response_.body = std::string("A\0B", 3);
         response_.headers.set("Content-Type", "application/octet-stream");
 
-        const auto serialized = HttpSerializer::serialize(response_, true);
+        const auto serialized = HttpSerializer::serialize(response_, {.headersOnly = true});
 
         expectHeader(serialized, "Content-Length", "3");
         expectHeader(serialized, "Content-Type", "application/octet-stream");
@@ -291,7 +291,7 @@ namespace {
         for (const bool headersOnly : {false, true}) {
             SCOPED_TRACE(headersOnly);
 
-            const auto serialized = HttpSerializer::serialize(response_, headersOnly);
+            const auto serialized = HttpSerializer::serialize(response_, {.headersOnly = headersOnly});
 
             expectBody(serialized, "");
             expectHeader(serialized, "X-Test", "preserved");
@@ -305,7 +305,7 @@ namespace {
         response_.status = HttpStatus::NoContent;
         response_.body.clear();
 
-        const auto serialized = HttpSerializer::serialize(response_);
+        const auto serialized = HttpSerializer::serialize(response_, {});
 
         expectBody(serialized, "");
         EXPECT_TRUE(headerValues(serialized, "Content-Length").empty());

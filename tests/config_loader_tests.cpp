@@ -1,7 +1,7 @@
 #include "config/ConfigError.hpp"
 #include "config/ConfigLoader.hpp"
-#include "helpers/Files.hpp"
-#include "helpers/TempDirectory.hpp"
+#include "includes/Files.hpp"
+#include "includes/TempDirectory.hpp"
 
 #include <gtest/gtest.h>
 
