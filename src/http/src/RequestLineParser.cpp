@@ -1,10 +1,12 @@
 #include <algorithm>
+#include <string_view>
 #include <vector>
 
 #include "fs/Path.hpp"
 #include "http/HttpMethod.hpp"
 
 #include "HttpSyntax.hpp"
+#include "HttpUtils.hpp"
 #include "RequestLineParser.hpp"
 
 namespace {
@@ -34,15 +36,22 @@ namespace {
         return std::vector<std::string>{method, target, version};
     }
 
+    bool isValidMethod(std::string_view method) {
+        return !method.empty() && std::all_of(method.begin(), method.end(), [](char c) {
+            return Http::Ascii::isalnum(c) || Http::Syntax::TokenSpecialChars.find(c) != std::string_view::npos;
+        });
+    }
+
     bool isValidHttpVersion(std::string_view version) {
         const std::size_t separator = version.find(Http::Protocol::VersionSeparator);
 
-        if (separator == std::string_view::npos) {
+        if (separator == std::string_view::npos || version.substr(0, separator) != Http::Protocol::Name) {
             return false;
         }
 
-        return version.substr(0, separator) == Http::Protocol::Name &&
-            version.substr(separator + 1) == Http::Protocol::Version;
+        const std::string_view number = version.substr(separator + 1);
+        return number.size() == 3 && Http::Ascii::isdigit(number.front()) &&
+            number[1] == Http::Protocol::VersionComponentSeparator && Http::Ascii::isdigit(number.back());
     }
 
     bool isControlCharacter(char c) {
@@ -154,6 +163,10 @@ RequestLineResult RequestLineParser::run() {
         return HttpStatus::BadRequest;
     }
 
+    if (!isValidMethod((*tokens)[0])) {
+        return HttpStatus::BadRequest;
+    }
+
     std::optional<HttpMethod> method = Http::Method::fromString((*tokens)[0]);
     if (!method) {
         return HttpStatus::NotImplemented;
@@ -167,6 +180,10 @@ RequestLineResult RequestLineParser::run() {
     }
 
     if (!isValidHttpVersion(version)) {
+        return HttpStatus::BadRequest;
+    }
+
+    if (version.substr(Http::Protocol::Name.size() + 1) != Http::Protocol::Version) {
         return HttpStatus::HttpVersionNotSupported;
     }
 

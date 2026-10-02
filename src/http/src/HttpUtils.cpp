@@ -10,6 +10,18 @@ namespace Http::Ascii {
         }
     } // namespace
 
+    bool isdigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+
+    bool isxdigit(char c) {
+        return isdigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    bool isalnum(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || isdigit(c);
+    }
+
     char tolower(char c) {
         unsigned char uc = static_cast<unsigned char>(c);
 

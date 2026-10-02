@@ -17,7 +17,10 @@ namespace {
             return true;
         }
 
-        return requestPath.starts_with(locationPath + kPathSeparator);
+        const std::string prefix =
+            locationPath.ends_with(Http::Syntax::PathPrefix) ? locationPath : locationPath + kPathSeparator;
+
+        return requestPath.starts_with(prefix);
     }
 
     const LocationConfig* findLocation(const std::string& requestPath, const std::vector<LocationConfig>& locations) {

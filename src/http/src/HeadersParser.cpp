@@ -4,6 +4,7 @@
 #include "HttpUtils.hpp"
 
 #include <algorithm>
+#include <arpa/inet.h>
 
 HeadersParser::HeadersParser(const std::string& headersBlock) : headersBlock_(headersBlock), headers_() {
 }
@@ -13,6 +14,66 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 }
 
 namespace {
+
+    bool isHostNameCharacter(char c) {
+        return Http::Ascii::isalnum(c) || Http::Syntax::Host::NameSymbols.find(c) != std::string_view::npos;
+    }
+
+    bool isValidHostName(std::string_view name) {
+        for (std::size_t index = 0; index < name.size(); ++index) {
+            if (name[index] == Http::Syntax::Host::PercentEncodingPrefix) {
+                if (name.size() - index < 3 || !Http::Ascii::isxdigit(name[index + 1]) ||
+                    !Http::Ascii::isxdigit(name[index + 2])) {
+                    return false;
+                }
+                index += 2;
+            } else if (!isHostNameCharacter(name[index])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool isValidIpLiteral(std::string_view literal) {
+        if (literal.empty()) {
+            return false;
+        }
+
+        if (Http::Ascii::tolower(literal.front()) == Http::Syntax::Host::FutureVersionPrefix) {
+            const std::size_t separator = literal.find(Http::Syntax::Host::FutureVersionSeparator);
+            if (separator == std::string_view::npos || separator <= 1 || separator + 1 == literal.size()) {
+                return false;
+            }
+
+            return std::ranges::all_of(literal.substr(1, separator - 1), Http::Ascii::isxdigit) &&
+                std::ranges::all_of(literal.substr(separator + 1), [](char c) {
+                       return isHostNameCharacter(c) || c == Http::Syntax::Host::PortSeparator;
+                   });
+        }
+
+        in6_addr address{};
+        return ::inet_pton(AF_INET6, std::string(literal).c_str(), &address) == 1;
+    }
+
+    bool isValidHost(std::string_view value) {
+        if (value.starts_with(Http::Syntax::Host::LiteralOpen)) {
+            const std::size_t close = value.find(Http::Syntax::Host::LiteralClose);
+            if (close == std::string_view::npos || !isValidIpLiteral(value.substr(1, close - 1))) {
+                return false;
+            }
+            value.remove_prefix(close + 1);
+        } else {
+            const std::string_view name = value.substr(0, value.find(Http::Syntax::Host::PortSeparator));
+            if (!isValidHostName(name)) {
+                return false;
+            }
+            value.remove_prefix(name.size());
+        }
+
+        return value.empty() ||
+            (value.front() == Http::Syntax::Host::PortSeparator &&
+             std::ranges::all_of(value.substr(1), Http::Ascii::isdigit));
+    }
 
     bool isUnique(std::string_view name) {
         return HttpHeaders::equals(name, Http::Headers::ContentLength) ||
@@ -76,6 +137,9 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
         return false;
 
     if (!isValidValue(value))
+        return false;
+
+    if (HttpHeaders::equals(key, Http::Headers::Host) && !isValidHost(value))
         return false;
 
     if (!canStoreHeader(headers_, key))
