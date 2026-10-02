@@ -10,8 +10,12 @@ namespace Http::Ascii {
         }
     } // namespace
 
+    bool isdigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+
     bool isalnum(char c) {
-        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || isdigit(c);
     }
 
     char tolower(char c) {
