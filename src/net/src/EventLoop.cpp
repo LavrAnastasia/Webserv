@@ -154,13 +154,20 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
 
 void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     CgiProcess* process = cgiRegistry_.find(clientFd);
+
+    if (process == nullptr) {
+        return;
+    }
+
     const int input = process->inputFd();
     const int output = process->outputFd();
 
     if (pipeFd == input) {
         process->writeInput();
-    } else {
+    } else if (pipeFd == output) {
         process->readOutput();
+    } else {
+        return;
     }
 
     if (process->inputFd() != input) {
@@ -176,6 +183,12 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     }
 
     Connection* connection = connectionRegistry_.getConnection(clientFd);
+
+    if (connection == nullptr) {
+        cgiRegistry_.remove(clientFd);
+        return;
+    }
+
     const std::optional<HttpResponse> response = CgiResponseParser::parse(process->output());
 
     if (response) {
