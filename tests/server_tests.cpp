@@ -1,4 +1,5 @@
 #include <charconv>
+#include <fcntl.h>
 #include <filesystem>
 
 #include <gtest/gtest.h>
@@ -91,10 +92,14 @@ namespace {
     // Unconsumed bytes are retained between responses
     class TestClient {
     public:
-        explicit TestClient(std::uint16_t port, int receiveBuffer = 0)
-            : socket_(::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) {
+        explicit TestClient(std::uint16_t port, int receiveBuffer = 0) : socket_(::socket(AF_INET, SOCK_STREAM, 0)) {
             if (socket_.get() < 0) {
                 systemError("socket");
+            }
+
+            const int flags = ::fcntl(socket_.get(), F_GETFL, 0);
+            if (flags == -1 || ::fcntl(socket_.get(), F_SETFL, flags | O_NONBLOCK) == -1) {
+                systemError("fcntl");
             }
 
             if (receiveBuffer > 0 &&
