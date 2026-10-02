@@ -10,6 +10,7 @@ namespace Http::Syntax {
 
     constexpr std::string_view CRLF = "\r\n";
     constexpr std::string_view HeaderSectionEnd = "\r\n\r\n";
+    constexpr std::string_view TokenSpecialChars = "!#$%&'*+-.^_`|~";
     constexpr char HeaderKeyEnd = ':';
     constexpr char ListSeparator = ',';
     constexpr char ChunkExtSeparator = ';';

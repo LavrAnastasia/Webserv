@@ -1,10 +1,12 @@
 #include <algorithm>
+#include <string_view>
 #include <vector>
 
 #include "fs/Path.hpp"
 #include "http/HttpMethod.hpp"
 
 #include "HttpSyntax.hpp"
+#include "HttpUtils.hpp"
 #include "RequestLineParser.hpp"
 
 namespace {
@@ -32,6 +34,12 @@ namespace {
         }
 
         return std::vector<std::string>{method, target, version};
+    }
+
+    bool isValidMethod(std::string_view method) {
+        return !method.empty() && std::all_of(method.begin(), method.end(), [](char c) {
+            return Http::Ascii::isalnum(c) || Http::Syntax::TokenSpecialChars.find(c) != std::string_view::npos;
+        });
     }
 
     bool isValidHttpVersion(std::string_view version) {
@@ -151,6 +159,10 @@ RequestLineResult RequestLineParser::parse(const std::string& line) {
 RequestLineResult RequestLineParser::run() {
     std::optional<std::vector<std::string>> tokens = tokenizeRequestLine(line_);
     if (!tokens) {
+        return HttpStatus::BadRequest;
+    }
+
+    if (!isValidMethod((*tokens)[0])) {
         return HttpStatus::BadRequest;
     }
 
