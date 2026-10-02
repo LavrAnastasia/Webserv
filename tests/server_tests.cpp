@@ -1,9 +1,10 @@
 #include <charconv>
 #include <filesystem>
-#include <fstream>
 
 #include <gtest/gtest.h>
 
+#include "helpers/Files.hpp"
+#include "helpers/TempDirectory.hpp"
 #include "net/EventLoop.hpp"
 #include "net/TcpServer.hpp"
 
@@ -303,6 +304,7 @@ namespace {
 
     class ServerTest : public ::testing::Test {
     protected:
+        TempDirectory temp_{"webserv-server"};
         fs::path root_;
         pid_t child_ = -1;
         std::uint16_t port_ = 0;
@@ -311,14 +313,10 @@ namespace {
         const std::string otherBody_ = "another response\n";
 
         void SetUp() override {
-            std::string pattern = (fs::temp_directory_path() / "webserv-server-XXXXXX").string();
+            root_ = temp_.path();
 
-            char* directory = ::mkdtemp(pattern.data());
-            ASSERT_NE(directory, nullptr);
-            root_ = directory;
-
-            writeFile("small.txt", smallBody_);
-            writeFile("other.txt", otherBody_);
+            Files::write(root_ / "small.txt", smallBody_);
+            Files::write(root_ / "other.txt", otherBody_);
 
             ServerConfig serverConfig;
             serverConfig.root = root_;
@@ -424,20 +422,6 @@ namespace {
 
                 child_ = -1;
             }
-
-            if (!root_.empty()) {
-                std::error_code error;
-                fs::remove_all(root_, error);
-                EXPECT_FALSE(error) << error.message();
-            }
-        }
-
-        void writeFile(const std::string& name, const std::string& body) const {
-            std::ofstream file;
-            file.exceptions(std::ios::failbit | std::ios::badbit);
-            file.open(root_ / name, std::ios::binary);
-            file.write(body.data(), static_cast<std::streamsize>(body.size()));
-            file.close();
         }
 
         std::string createLargeFile() const {
@@ -448,7 +432,7 @@ namespace {
                 body[i] = static_cast<char>((i * 37 + i / 251) % 256);
             }
 
-            writeFile("large.bin", body);
+            Files::write(root_ / "large.bin", body);
             return body;
         }
 
@@ -479,7 +463,7 @@ namespace {
         // Keep all requests incomplete until every client has connected
         for (int i = 0; i < clientCount; ++i) {
             const std::string name = "client-" + std::to_string(i) + ".txt";
-            writeFile(name, "response for client " + std::to_string(i));
+            Files::write(root_ / name, "response for client " + std::to_string(i));
 
             clients.push_back(std::make_unique<TestClient>(port_));
 

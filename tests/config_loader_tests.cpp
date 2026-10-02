@@ -1,9 +1,11 @@
 #include "config/ConfigError.hpp"
 #include "config/ConfigLoader.hpp"
+#include "helpers/Files.hpp"
+#include "helpers/TempDirectory.hpp"
 
 #include <gtest/gtest.h>
 
-#include <fstream>
+#include <filesystem>
 
 
 namespace {
@@ -27,38 +29,11 @@ namespace {
 
     class ConfigLoaderTest : public testing::Test {
     protected:
-        fs::path tempDir_;
-
-        void SetUp() override {
-            std::string pattern = (fs::temp_directory_path() / "webserv-config-test-XXXXXX").string();
-            char* directory = ::mkdtemp(pattern.data());
-
-            ASSERT_NE(directory, nullptr) << "Cannot create temporary test directory";
-
-            tempDir_ = directory;
-        }
-
-        void TearDown() override {
-            if (tempDir_.empty()) {
-                return;
-            }
-
-            std::error_code error;
-            fs::remove_all(tempDir_, error);
-
-            EXPECT_FALSE(error) << error.message();
-        }
+        TempDirectory tempDir_{"webserv-config-test"};
 
         std::string writeConfig(const std::string& source) {
-            const fs::path path = tempDir_ / "test.conf";
-
-            std::ofstream file;
-            file.exceptions(std::ios::failbit | std::ios::badbit);
-            file.open(path, std::ios::out | std::ios::binary | std::ios::trunc);
-
-            file << source;
-            file.close();
-
+            const fs::path path = tempDir_.path() / "test.conf";
+            Files::write(path, source);
             return path.string();
         }
 
@@ -285,13 +260,13 @@ namespace {
 
 
     TEST_F(ConfigLoaderTest, RejectsMissingFile) {
-        const auto path = tempDir_ / "missing.conf";
+        const auto path = tempDir_.path() / "missing.conf";
 
         EXPECT_THROW(ConfigLoader::load(path.string()), ConfigError);
     }
 
     TEST_F(ConfigLoaderTest, RejectsDirectoryInsteadOfFile) {
-        EXPECT_THROW(ConfigLoader::load(tempDir_.string()), ConfigError);
+        EXPECT_THROW(ConfigLoader::load(tempDir_.path().string()), ConfigError);
     }
 
 

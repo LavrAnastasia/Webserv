@@ -1,14 +1,14 @@
 #include <cstddef>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <string>
-#include <system_error>
 #include <variant>
 
 #include <gtest/gtest.h>
 
 #include "config/ServerConfig.hpp"
+#include "helpers/Files.hpp"
+#include "helpers/Requests.hpp"
+#include "helpers/TempDirectory.hpp"
 #include "http/RequestDispatcher.hpp"
 
 namespace {
@@ -17,17 +17,13 @@ namespace {
 
     class RequestHandlerTest : public ::testing::Test {
     protected:
+        TempDirectory temp_{"webserv-handler"};
         fs::path root_;
         ServerConfig server_{};
         const std::string fileBody_ = "<h1>Hello</h1>\n";
 
         void SetUp() override {
-            std::string pattern = (fs::temp_directory_path() / "webserv-handler-XXXXXX").string();
-
-            char* directory = ::mkdtemp(pattern.data());
-            ASSERT_NE(directory, nullptr);
-
-            root_ = directory;
+            root_ = temp_.path();
 
             server_.root = root_;
             server_.index = "index.html";
@@ -38,38 +34,12 @@ namespace {
             location.allowedMethods = {HttpMethod::Get};
             server_.locations = {location};
 
-            std::ofstream file;
-            file.exceptions(std::ios::failbit | std::ios::badbit);
-            file.open(root_ / "index.html", std::ios::binary);
-            file << fileBody_;
-            file.close();
-        }
-
-        void TearDown() override {
-            if (root_.empty()) {
-                return;
-            }
-
-            std::error_code error;
-            fs::remove_all(root_, error);
-            EXPECT_FALSE(error) << error.message();
-        }
-
-        HttpRequest
-        requestFor(const std::string& path, HttpMethod method = HttpMethod::Get, const std::string& body = "") const {
-            HttpRequest request{};
-            request.method = method;
-            request.target = path;
-            request.path = path;
-            request.version = "HTTP/1.1";
-            request.body = body;
-            request.headers.set("Host", "localhost");
-            return request;
+            Files::write(root_ / "index.html", fileBody_);
         }
     };
 
     TEST_F(RequestHandlerTest, Returns200ForExistingFile) {
-        const auto result = RequestDispatcher::dispatch(requestFor("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -79,7 +49,7 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns404ForMissingFile) {
-        const auto result = RequestDispatcher::dispatch(requestFor("/missing.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -91,7 +61,7 @@ namespace {
     TEST_F(RequestHandlerTest, Returns404WhenNoLocationMatches) {
         server_.locations.front().path = "/private";
 
-        const auto result = RequestDispatcher::dispatch(requestFor("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -100,7 +70,7 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns405WithAllowHeader) {
-        const auto result = RequestDispatcher::dispatch(requestFor("/index.html", HttpMethod::Post), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::post("/index.html"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -124,9 +94,8 @@ namespace {
     TEST_P(RequestHandlerBodyLimitTest, ChecksBodySize) {
         const auto& test = GetParam();
 
-        const auto result = RequestDispatcher::dispatch(
-            requestFor("/index.html", HttpMethod::Get, std::string(test.bodySize, 'a')), server_
-        );
+        const auto result =
+            RequestDispatcher::dispatch(Requests::get("/index.html", std::string(test.bodySize, 'a')), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -153,7 +122,7 @@ namespace {
     TEST_F(RequestHandlerTest, UsesSmallerLocationBodyLimit) {
         server_.locations.front().clientMaxBodySize = 4;
 
-        const auto result = RequestDispatcher::dispatch(requestFor("/index.html", HttpMethod::Get, "12345"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -165,7 +134,7 @@ namespace {
         server_.clientMaxBodySize = 4;
         server_.locations.front().clientMaxBodySize = 8;
 
-        const auto result = RequestDispatcher::dispatch(requestFor("/index.html", HttpMethod::Get, "12345"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
@@ -188,7 +157,7 @@ namespace {
         server_.locations.front().redirect = RedirectConfig{test.status, std::string(test.target)};
 
         // The file does not exist: the redirect must happen before file access.
-        const auto result = RequestDispatcher::dispatch(requestFor("/old"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/old"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         const auto& response = std::get<HttpResponse>(result);
