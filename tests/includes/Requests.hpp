@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 #include "http/HttpRequest.hpp"
 
@@ -23,6 +24,21 @@ namespace Requests {
 
     inline HttpRequest post(const std::string& path, const std::string& body = "") {
         return make(HttpMethod::Post, path, body);
+    }
+
+    inline std::string rawGet(std::string_view path, std::string_view connection = {}) {
+        std::string request = "GET ";
+        request.append(path);
+        request += " HTTP/1.1\r\nHost: localhost\r\n";
+
+        if (!connection.empty()) {
+            request += "Connection: ";
+            request.append(connection);
+            request += "\r\n";
+        }
+
+        request += "\r\n";
+        return request;
     }
 
 } // namespace Requests

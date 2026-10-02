@@ -3,8 +3,9 @@
 
 #include <gtest/gtest.h>
 
-#include "helpers/Files.hpp"
-#include "helpers/TempDirectory.hpp"
+#include "includes/Files.hpp"
+#include "includes/Requests.hpp"
+#include "includes/TempDirectory.hpp"
 #include "net/EventLoop.hpp"
 #include "net/TcpServer.hpp"
 
@@ -78,21 +79,6 @@ namespace {
             character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
         }
         return value;
-    }
-
-    std::string getRequest(std::string_view path, std::string_view connection = {}) {
-        std::string request = "GET ";
-        request.append(path);
-        request += " HTTP/1.1\r\nHost: localhost\r\n";
-
-        if (!connection.empty()) {
-            request += "Connection: ";
-            request.append(connection);
-            request += "\r\n";
-        }
-
-        request += "\r\n";
-        return request;
     }
 
     struct ReceivedResponse {
@@ -448,7 +434,7 @@ namespace {
 
         void expectFreshConnectionWorks() const {
             TestClient client(port_);
-            client.sendAll(getRequest("/small.txt", "close"));
+            client.sendAll(Requests::rawGet("/small.txt", "close"));
             expectOK(client, smallBody_);
             client.expectEof();
         }
@@ -467,7 +453,7 @@ namespace {
 
             clients.push_back(std::make_unique<TestClient>(port_));
 
-            const std::string request = getRequest("/" + name, "close");
+            const std::string request = Requests::rawGet("/" + name, "close");
             clients.back()->sendAll(request.substr(0, request.size() - 2));
         }
 
@@ -508,12 +494,12 @@ namespace {
             SCOPED_TRACE(i);
 
             const bool useOther = i % 2 != 0;
-            client.sendAll(getRequest(useOther ? "/other.txt" : "/small.txt", connection));
+            client.sendAll(Requests::rawGet(useOther ? "/other.txt" : "/small.txt", connection));
 
             expectOK(client, useOther ? otherBody_ : smallBody_);
         }
 
-        client.sendAll(getRequest("/small.txt", "close"));
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(client, smallBody_);
         client.expectEof();
     }
@@ -545,13 +531,13 @@ namespace {
                 // Otherwise the destructor closes the connection normally
             }
 
-            survivor.sendAll(getRequest("/other.txt"));
+            survivor.sendAll(Requests::rawGet("/other.txt"));
             expectOK(survivor, otherBody_);
 
             expectFreshConnectionWorks();
         }
 
-        survivor.sendAll(getRequest("/small.txt", "close"));
+        survivor.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(survivor, smallBody_);
         survivor.expectEof();
     }
@@ -562,13 +548,13 @@ namespace {
         TestClient survivor(port_);
         TestClient dropped(port_, 64 * 1024);
 
-        dropped.sendAll(getRequest("/large.bin"));
+        dropped.sendAll(Requests::rawGet("/large.bin"));
 
         // Wait until the server has actually started sending the response
         dropped.waitForResponseStart();
         dropped.abortWithReset();
 
-        survivor.sendAll(getRequest("/small.txt", "close"));
+        survivor.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(survivor, smallBody_);
         survivor.expectEof();
 
@@ -581,10 +567,10 @@ namespace {
         const std::string body = createLargeFile();
         TestClient client(port_);
 
-        client.sendAll(getRequest("/large.bin"));
+        client.sendAll(Requests::rawGet("/large.bin"));
         expectOK(client, body);
 
-        client.sendAll(getRequest("/other.txt", "close"));
+        client.sendAll(Requests::rawGet("/other.txt", "close"));
         expectOK(client, otherBody_);
         client.expectEof();
     }
@@ -593,7 +579,7 @@ namespace {
         const std::string body = createLargeFile();
 
         TestClient slow(port_, 64 * 1024);
-        slow.sendAll(getRequest("/large.bin"));
+        slow.sendAll(Requests::rawGet("/large.bin"));
         slow.waitForResponseStart();
 
         // Leave the large response unread while another client is served
@@ -601,7 +587,7 @@ namespace {
 
         expectOK(slow, body);
 
-        slow.sendAll(getRequest("/small.txt", "close"));
+        slow.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(slow, smallBody_);
         slow.expectEof();
     }

@@ -6,10 +6,10 @@
 #include <gtest/gtest.h>
 
 #include "config/ServerConfig.hpp"
-#include "helpers/Files.hpp"
-#include "helpers/Requests.hpp"
-#include "helpers/TempDirectory.hpp"
 #include "http/RequestDispatcher.hpp"
+#include "includes/Files.hpp"
+#include "includes/Requests.hpp"
+#include "includes/TempDirectory.hpp"
 
 namespace {
 
