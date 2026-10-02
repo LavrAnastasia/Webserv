@@ -17,6 +17,16 @@ namespace Http::Syntax {
     constexpr char QuerySeparator = '?';
     constexpr char PathPrefix = '/';
 
+    namespace Host {
+        constexpr std::string_view NameSymbols = "-._~!$&'()*+,;=";
+        constexpr char PortSeparator = ':';
+        constexpr char LiteralOpen = '[';
+        constexpr char LiteralClose = ']';
+        constexpr char PercentEncodingPrefix = '%';
+        constexpr char FutureVersionPrefix = 'v';
+        constexpr char FutureVersionSeparator = '.';
+    } // namespace Host
+
 } // namespace Http::Syntax
 
 namespace Http::Protocol {

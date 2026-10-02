@@ -126,6 +126,54 @@ namespace {
         EXPECT_TRUE(empty->empty());
     }
 
+    TEST(HttpParserTest, AcceptsValidHostValues) {
+        for (const std::string host :
+             {"",
+              "localhost",
+              "example.com:8080",
+              "localhost:",
+              "127.0.0.1:80",
+              "[::1]",
+              "[2001:db8::1]:8080",
+              "[::ffff:192.0.2.1]:80",
+              "[vF.a:b]:80",
+              "[V1.a]",
+              "caf%C3%A9.example"}) {
+            SCOPED_TRACE(host);
+            const auto parsed = parse(GET + "Host: \t" + host + " \t\r\n\r\n");
+            const auto* complete = std::get_if<Complete>(&parsed);
+
+            ASSERT_NE(complete, nullptr);
+            EXPECT_EQ(complete->request.headers.get("Host"), host);
+        }
+    }
+
+    TEST(HttpParserTest, RejectsMalformedHostValues) {
+        for (const std::string host :
+             {"user@localhost",
+              "localhost/path",
+              "localhost:80:90",
+              "localhost:-1",
+              "localhost: 80",
+              "::1",
+              "[::1",
+              "[::1]extra",
+              "[::1]:abc",
+              "[local host]",
+              "[not-an-ip]",
+              "[]",
+              "[v.a]",
+              "[vG.a]",
+              "[v1.]",
+              "[v1.a/b]",
+              "example%",
+              "example%2",
+              "example%ZZ"}) {
+            SCOPED_TRACE(host);
+            expectStatus(parse(GET + "Host: " + host + "\r\n\r\n"), HttpStatus::BadRequest);
+        }
+    }
+
     //Requests expected to fail
 
     struct ErrorCase {
@@ -484,6 +532,40 @@ namespace {
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
         expectBody(result(parser, "\na\r\n0\r\n\r\n"), "a");
+    }
+
+    TEST(HttpParserTest, RejectsStartLineOverflowAroundPartialDelimiter) {
+        HttpParser parser;
+        const auto first = result(parser, startLine(LINE_LIMIT) + "\r");
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
+
+        expectStatus(result(parser, "X"), HttpStatus::UriTooLong);
+        expectStatus(parse(startLine(LINE_LIMIT + 1) + "\r"), HttpStatus::UriTooLong);
+    }
+
+    TEST(HttpParserTest, RejectsHeadersOverflowAroundPartialDelimiter) {
+        const std::string delimiter = "\r\n\r\n";
+        for (std::size_t split = 1; split < delimiter.size(); ++split) {
+            SCOPED_TRACE(split);
+            HttpParser parser;
+            const auto first = result(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
+            ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
+
+            expectStatus(result(parser, "X"), HttpStatus::RequestHeaderFieldsTooLarge);
+            expectStatus(
+                parse(GET + headersBlock(HEADERS_LIMIT + 1) + delimiter.substr(0, split)),
+                HttpStatus::RequestHeaderFieldsTooLarge
+            );
+        }
+    }
+
+    TEST(HttpParserTest, RejectsChunkSizeOverflowAroundPartialDelimiter) {
+        HttpParser parser;
+        const auto first = result(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
+
+        expectStatus(result(parser, "X"), HttpStatus::BadRequest);
+        expectStatus(parse(CHUNKED + chunkLine(CHUNK_LINE_LIMIT + 1) + "\r"), HttpStatus::BadRequest);
     }
 
 } // namespace

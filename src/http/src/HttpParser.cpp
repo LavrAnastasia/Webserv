@@ -14,6 +14,20 @@ namespace {
     constexpr std::size_t MAX_BODY_SIZE = 10485760;
     constexpr std::size_t MAX_CHUNK_SIZE_LINE_SIZE = 1024;
 
+    bool exceedsLimit(std::string_view buffer, std::size_t limit, std::string_view delimiter) {
+        if (buffer.size() <= limit) {
+            return false;
+        }
+
+        // A trailing prefix of the delimiter may be completed by the next read.
+        for (std::size_t size = delimiter.size() - 1; size > 0; --size) {
+            if (buffer.ends_with(delimiter.substr(0, size))) {
+                return buffer.size() - size > limit;
+            }
+        }
+        return true;
+    }
+
     std::optional<std::size_t> parseUnsigned(std::string_view text, int base) {
         std::size_t value{};
 
@@ -81,7 +95,7 @@ HttpParser::Step HttpParser::handleStartLine() {
     std::size_t lineEnd = _buffer.find(Http::Syntax::CRLF);
 
     if (lineEnd == std::string::npos) {
-        if (_buffer.size() > MAX_START_LINE_SIZE) {
+        if (exceedsLimit(_buffer, MAX_START_LINE_SIZE, Http::Syntax::CRLF)) {
             return fail(HttpStatus::UriTooLong);
         }
         return Step::WaitForData;
@@ -112,7 +126,7 @@ HttpParser::Step HttpParser::handleHeaders() {
     } else {
         std::size_t headersEnd = _buffer.find(Http::Syntax::HeaderSectionEnd);
         if (headersEnd == std::string::npos) {
-            if (_buffer.size() > MAX_HEADERS_SIZE) {
+            if (exceedsLimit(_buffer, MAX_HEADERS_SIZE, Http::Syntax::HeaderSectionEnd)) {
                 return fail(HttpStatus::RequestHeaderFieldsTooLarge);
             }
             return Step::WaitForData;
@@ -177,7 +191,7 @@ HttpParser::Step HttpParser::handleChunkSize() {
     std::size_t lineEnd = _buffer.find(Http::Syntax::CRLF);
 
     if (lineEnd == std::string::npos) {
-        if (_buffer.size() > MAX_CHUNK_SIZE_LINE_SIZE) {
+        if (exceedsLimit(_buffer, MAX_CHUNK_SIZE_LINE_SIZE, Http::Syntax::CRLF)) {
             return fail(HttpStatus::BadRequest);
         }
         return Step::WaitForData;
