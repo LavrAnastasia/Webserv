@@ -41,7 +41,6 @@ namespace {
         request.version = "HTTP/1.1";
         request.body = body;
         request.headers.set("Host", "localhost");
-        request.headers.set("Content-Length", std::to_string(body.size()));
         return request;
     }
 
