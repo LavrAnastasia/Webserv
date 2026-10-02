@@ -14,6 +14,10 @@
 #include <utility>
 #include <vector>
 
+namespace {
+    constexpr std::chrono::seconds kCgiTimeout{60};
+} // namespace
+
 volatile std::sig_atomic_t EventLoop::stopRequested_ = 0;
 
 void EventLoop::setupSignals() {
@@ -201,13 +205,16 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     poller_.modifySocket(clientFd, POLLOUT);
 }
 
-void EventLoop::closeConnection(int fd) {
-    if (CgiProcess* process = cgiRegistry_.find(fd)) {
+void EventLoop::closeCgi(int clientFd) {
+    if (CgiProcess* process = cgiRegistry_.find(clientFd)) {
         poller_.removeSocket(process->inputFd());
         poller_.removeSocket(process->outputFd());
-        cgiRegistry_.remove(fd);
+        cgiRegistry_.remove(clientFd);
     }
+}
 
+void EventLoop::closeConnection(int fd) {
+    closeCgi(fd);
     poller_.removeSocket(fd);
     connectionRegistry_.removeConnection(fd);
 }
@@ -240,6 +247,7 @@ void EventLoop::run() {
             }
         }
         cleanupTimedOutConnections();
+        cleanupTimedOutCgi();
     }
 }
 
@@ -285,4 +293,19 @@ void EventLoop::cleanupTimedOutConnections() {
 
 void EventLoop::stop() {
     stopRequested_ = 1;
+}
+
+void EventLoop::cleanupTimedOutCgi() {
+    for (int clientFd : cgiRegistry_.expired(kCgiTimeout, std::chrono::steady_clock::now())) {
+        closeCgi(clientFd);
+
+        Connection* connection = connectionRegistry_.getConnection(clientFd);
+
+        if (connection == nullptr) {
+            continue;
+        }
+
+        connection->appendResponse(RequestDispatcher::fail(HttpStatus::GatewayTimeout, connection->getServerConfig()));
+        poller_.modifySocket(clientFd, POLLOUT);
+    }
 }

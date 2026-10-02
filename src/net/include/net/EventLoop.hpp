@@ -26,8 +26,10 @@ private:
     void handleClientActivity(int clientFd, uint32_t events);
     void handleCgiActivity(int clientFd, int pipeFd);
     void launchCgi(Connection& connection, const CgiRequest& request);
+    void closeCgi(int clientFd);
     void closeConnection(int fd);
     void cleanupTimedOutConnections();
+    void cleanupTimedOutCgi();
 
 public:
     static void setupSignals();
