@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cgi/CgiRegistry.hpp"
+#include "http/CgiRequest.hpp"
 #include "net/ConnectionRegistry.hpp"
 #include "net/Poller.hpp"
 #include "net/TcpServer.hpp"
@@ -14,6 +16,7 @@ private:
 
     Poller poller_;
     ConnectionRegistry connectionRegistry_;
+    CgiRegistry cgiRegistry_;
     TcpServer& tcpServer_;
 
     int clientTimeoutSeconds_;
@@ -21,7 +24,12 @@ private:
 
     void handleNewConnection(int listenFd);
     void handleClientActivity(int clientFd, uint32_t events);
+    void handleCgiActivity(int clientFd, int pipeFd);
+    void launchCgi(Connection& connection, const CgiRequest& request);
+    void closeCgi(int clientFd);
+    void closeConnection(int fd);
     void cleanupTimedOutConnections();
+    void cleanupTimedOutCgi();
 
 public:
     static void setupSignals();
