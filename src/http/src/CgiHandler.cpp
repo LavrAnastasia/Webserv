@@ -1,4 +1,5 @@
 #include "CgiHandler.hpp"
+#include "CgiEnvironment.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "ErrorStatus.hpp"
 
@@ -25,8 +26,12 @@ HandlerResult CgiHandler::handle(const HttpRequest& request, const ResolvedRoute
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
 
-        // TODO: WEB-46 impl CGI Env here
-        return CgiRequest{.interpreter = route.cgi->interpreter, .script = script, .env = {}, .body = request.body};
+        return CgiRequest{
+            .interpreter = route.cgi->interpreter,
+            .script = script,
+            .env = CgiEnvironment::build(request, script),
+            .body = request.body
+        };
     } catch (const fs::filesystem_error& error) {
         return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
     }

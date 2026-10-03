@@ -56,6 +56,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	HttpHtmlUtils.cpp \
 	RequestDispatcher.cpp \
 	HttpRequest.cpp \
+	CgiEnvironment.cpp \
 	CgiHandler.cpp \
 	CgiResponseParser.cpp \
 )
