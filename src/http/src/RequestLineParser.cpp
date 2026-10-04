@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -37,21 +38,24 @@ namespace {
     }
 
     bool isValidMethod(std::string_view method) {
-        return !method.empty() && std::all_of(method.begin(), method.end(), [](char c) {
+        return !method.empty() && std::ranges::all_of(method, [](char c) {
             return Http::Ascii::isalnum(c) || Http::Syntax::TokenSpecialChars.find(c) != std::string_view::npos;
         });
     }
 
-    bool isValidHttpVersion(std::string_view version) {
-        const std::size_t separator = version.find(Http::Protocol::VersionSeparator);
-
-        if (separator == std::string_view::npos || version.substr(0, separator) != Http::Protocol::Name) {
-            return false;
+    std::optional<std::string_view> parseHttpVersion(std::string_view version) {
+        if (!version.starts_with(Http::Protocol::VersionPrefix)) {
+            return std::nullopt;
         }
 
-        const std::string_view number = version.substr(separator + 1);
-        return number.size() == 3 && Http::Ascii::isdigit(number.front()) &&
-            number[1] == Http::Protocol::VersionComponentSeparator && Http::Ascii::isdigit(number.back());
+        const std::string_view number = version.substr(Http::Protocol::VersionPrefix.size());
+        if (number.size() != Http::Protocol::VersionNumberLength || !Http::Ascii::isdigit(number.front()) ||
+            number[Http::Protocol::VersionComponentLength] != Http::Protocol::VersionComponentSeparator ||
+            !Http::Ascii::isdigit(number.back())) {
+            return std::nullopt;
+        }
+
+        return number;
     }
 
     bool isControlCharacter(char c) {
@@ -61,7 +65,7 @@ namespace {
 
     bool isValidRequestTarget(const std::string& target) {
         return !target.empty() && target[0] == Http::Syntax::PathPrefix &&
-            std::none_of(target.begin(), target.end(), isControlCharacter);
+            std::ranges::none_of(target, isControlCharacter);
     }
 
     int hexValue(char character) {
@@ -179,11 +183,12 @@ RequestLineResult RequestLineParser::run() {
         return HttpStatus::BadRequest;
     }
 
-    if (!isValidHttpVersion(version)) {
+    const std::optional<std::string_view> versionNumber = parseHttpVersion(version);
+    if (!versionNumber) {
         return HttpStatus::BadRequest;
     }
 
-    if (version.substr(Http::Protocol::Name.size() + 1) != Http::Protocol::Version) {
+    if (*versionNumber != Http::Protocol::Version) {
         return HttpStatus::HttpVersionNotSupported;
     }
 

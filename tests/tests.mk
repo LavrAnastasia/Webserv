@@ -40,15 +40,8 @@ test: $(TEST_BIN)
 	done; \
 	exit $$failed
 
-tests: test
-
 $(addprefix test-,$(TEST_NAMES)): test-%: $(BUILD_DIR)/$(TEST_DIR)/%_tests
 	"$<"
 
-test-unit: test-http_parser
-test-config: test-config_loader
-test-handler: test-request_handler
-test-static: test-static_handler
-
-.PHONY: test tests $(addprefix test-,$(TEST_NAMES)) test-unit test-config test-handler test-static
+.PHONY: test $(addprefix test-,$(TEST_NAMES))
 .SECONDARY: $(TEST_OBJ)
