@@ -14,44 +14,27 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 
 namespace {
 
-    bool isHostNameCharacter(char c) {
-        return Http::Ascii::isalnum(c) || Http::Syntax::Host::NameSymbols.find(c) != std::string_view::npos;
-    }
-
-    bool isValidHostName(std::string_view name) {
-        for (std::size_t index = 0; index < name.size(); ++index) {
-            if (name[index] == Http::Syntax::Host::PercentEncodingPrefix) {
-                if (name.size() - index < 3 || !Http::Ascii::isxdigit(name[index + 1]) ||
-                    !Http::Ascii::isxdigit(name[index + 2])) {
-                    return false;
-                }
-                index += 2;
-            } else if (!isHostNameCharacter(name[index])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool isValidIpLiteral(std::string_view literal) {
-        return !literal.empty() && std::ranges::all_of(literal, [](char c) {
-            return isHostNameCharacter(c) || c == Http::Syntax::Host::PortSeparator;
-        });
-    }
-
     bool isValidHost(std::string_view value) {
-        if (value.starts_with(Http::Syntax::Host::LiteralOpen)) {
-            const std::size_t close = value.find(Http::Syntax::Host::LiteralClose);
-            if (close == std::string_view::npos || !isValidIpLiteral(value.substr(1, close - 1))) {
-                return false;
-            }
-            value.remove_prefix(close + 1);
-        } else {
-            const std::string_view name = value.substr(0, value.find(Http::Syntax::Host::PortSeparator));
-            if (!isValidHostName(name)) {
-                return false;
-            }
-            value.remove_prefix(name.size());
+        const bool literal = value.starts_with(Http::Syntax::Host::LiteralOpen);
+        const std::size_t end =
+            value.find(literal ? Http::Syntax::Host::LiteralClose : Http::Syntax::Host::PortSeparator);
+        if (literal && end == std::string_view::npos) {
+            return false;
+        }
+
+        std::string_view name = value.substr(0, end);
+        value.remove_prefix(name.size());
+        if (literal) {
+            name.remove_prefix(1);
+            value.remove_prefix(1);
+        }
+
+        if (name.empty() || name.find(Http::Syntax::Host::ConsecutiveDots) != std::string_view::npos ||
+            !std::ranges::all_of(name, [literal](char c) {
+                return Http::Ascii::isalnum(c) || Http::Syntax::Host::NameSymbols.find(c) != std::string_view::npos ||
+                    (literal && c == Http::Syntax::Host::PortSeparator);
+            })) {
+            return false;
         }
 
         return value.empty() ||

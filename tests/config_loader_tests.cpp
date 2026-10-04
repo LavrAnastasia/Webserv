@@ -287,4 +287,4 @@ namespace {
         EXPECT_THROW(loadText(source), ConfigError);
     }
 
-} // namespace
+}

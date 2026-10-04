@@ -18,11 +18,11 @@ namespace Http::Syntax {
     constexpr char PathPrefix = '/';
 
     namespace Host {
-        constexpr std::string_view NameSymbols = "-._~!$&'()*+,;=";
+        constexpr std::string_view NameSymbols = "-._~!$&'()*+,;=%";
+        constexpr std::string_view ConsecutiveDots = "..";
         constexpr char PortSeparator = ':';
         constexpr char LiteralOpen = '[';
         constexpr char LiteralClose = ']';
-        constexpr char PercentEncodingPrefix = '%';
     } // namespace Host
 
 } // namespace Http::Syntax

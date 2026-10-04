@@ -26,4 +26,4 @@ namespace Files {
         return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 
-} // namespace Files
+}

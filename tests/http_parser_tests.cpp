@@ -19,7 +19,6 @@ namespace {
 
     const std::string CHUNKED = POST + "Transfer-Encoding: chunked\r\n\r\n";
 
-    //Append data to an existing parser and return the parsing result
     ParseResult result(HttpParser& parser, std::string_view bytes) {
         return parser.append(bytes.empty() ? "" : bytes.data(), bytes.size());
     }
@@ -29,7 +28,6 @@ namespace {
         return result(parser, raw);
     }
 
-    // Test invalid HTTP methods, paths, or versions without repeating headers
     std::string withRequestLine(const std::string& line) {
         return line + "\r\nHost: localhost\r\n\r\n";
     }
@@ -57,8 +55,6 @@ namespace {
         EXPECT_EQ(static_cast<int>(error->status), static_cast<int>(expected));
     }
 
-    // Generators for limit testing
-    // The trailing CRLF / CRLFCRLF are not included in the size
 
     std::string startLine(std::size_t size) {
         const std::string prefix = "GET /";
@@ -79,7 +75,6 @@ namespace {
         return prefix + std::string(size - prefix.size(), 'a');
     }
 
-    //Full request and correct headers
 
     TEST(HttpParserTest, FullRequest) {
         const auto result = parse(
@@ -128,8 +123,7 @@ namespace {
 
     TEST(HttpParserTest, AcceptsValidHostValues) {
         for (const std::string host :
-             {"",
-              "localhost",
+             {"localhost",
               "example.com:8080",
               "localhost:",
               "127.0.0.1:80",
@@ -149,8 +143,12 @@ namespace {
 
     TEST(HttpParserTest, RejectsMalformedHostValues) {
         for (const std::string host :
-             {"user@localhost",
+             {"",
+              ":80",
+              "example..com",
+              "user@localhost",
               "localhost/path",
+              "localhost\\path",
               "localhost:80:90",
               "localhost:-1",
               "localhost: 80",
@@ -165,16 +163,11 @@ namespace {
               "[::1\t]",
               "[::1/path]",
               "[::1\\path]",
-              "[]",
-              "example%",
-              "example%2",
-              "example%ZZ"}) {
+              "[]"}) {
             SCOPED_TRACE(host);
             expectStatus(parse(GET + "Host: " + host + "\r\n\r\n"), HttpStatus::BadRequest);
         }
     }
-
-    //Requests expected to fail
 
     struct ErrorCase {
         const char* name;
@@ -191,7 +184,6 @@ namespace {
     }
 
     const ErrorCase ERROR_CASES[] = {
-        // Query string structure
         {"MissingMethod", withRequestLine("/index.html HTTP/1.1")},
         {"EmptyMethod", withRequestLine(" /index.html HTTP/1.1")},
         {"MissingTarget", withRequestLine("GET HTTP/1.1")},
@@ -201,13 +193,11 @@ namespace {
         {"ExtraToken", withRequestLine("GET /index.html HTTP/1.1 EXTRA")},
         {"ExtraLeadingToken", withRequestLine("TRASH GET /index.html HTTP/1.1")},
 
-        //Strict whitespace checks
         {"LeadingSpace", withRequestLine(" GET /index.html HTTP/1.1")},
         {"DoubleSpaceAfterMethod", withRequestLine("GET  /index.html HTTP/1.1")},
         {"DoubleSpaceBeforeVersion", withRequestLine("GET /index.html  HTTP/1.1")},
         {"WrongTokenOrder", withRequestLine("HTTP/1.1 GET /index.html")},
 
-        // Request address
         {"RelativeTarget", withRequestLine("GET index.html HTTP/1.1")},
         {"FtpTarget", withRequestLine("GET ftp://example.com/file HTTP/1.1")},
         {"ControlInTarget",
@@ -222,35 +212,29 @@ namespace {
              "def HTTP/1.1"
          )},
 
-        // Percent-encoding
         {"PercentInvalidHex", withRequestLine("GET /abc%ZZ HTTP/1.1")},
         {"PercentWithoutDigits", withRequestLine("GET /abc% HTTP/1.1")},
         {"PercentOneDigit", withRequestLine("GET /abc%2 HTTP/1.1")},
         {"PercentInvalidSecondDigit", withRequestLine("GET /abc%2G HTTP/1.1")},
         {"PercentInvalidFirstDigit", withRequestLine("GET /abc%G2 HTTP/1.1")},
 
-        // Valid but unsupported methods
         {"UnsupportedPut", withRequestLine("PUT / HTTP/1.1"), HttpStatus::NotImplemented},
         {"UnsupportedTrace", withRequestLine("TRACE / HTTP/1.1"), HttpStatus::NotImplemented},
 
-        // Invalid method syntax
         {"MethodOpenParen", withRequestLine("GE(T / HTTP/1.1")},
         {"MethodCloseParen", withRequestLine("GE)T / HTTP/1.1")},
         {"MethodSlash", withRequestLine("GE/T / HTTP/1.1")},
         {"MethodTab", withRequestLine("GE\tT / HTTP/1.1")},
 
-        // Correct recording of an unsupported version.
         {"UnsupportedHttp2", withRequestLine("GET / HTTP/2.0"), HttpStatus::HttpVersionNotSupported},
         {"UnsupportedHttp3", withRequestLine("GET / HTTP/3.0"), HttpStatus::HttpVersionNotSupported},
 
-        // Invalid recording version
         {"VersionMissingMinor", withRequestLine("GET / HTTP/1")},
         {"VersionInvalidPrefix", withRequestLine("GET / HTP/1.1")},
         {"VersionLetters", withRequestLine("GET / HTTP/abc")},
         {"VersionEmptyMinor", withRequestLine("GET / HTTP/1.")},
         {"VersionExtraCharacter", withRequestLine("GET / HTTP/1.1x")},
 
-        // Headers
         {"MissingHost", GET + "\r\n"},
         {"HeaderWithoutColon", withHeaders("BrokenHeader")},
         {"HeaderNameWithSpace", withHeaders("Bad Name: value")},
@@ -268,12 +252,11 @@ namespace {
         {"LengthBeforeTransferEncoding", withHeaders("Content-Length: 1\r\nTransfer-Encoding: chunked")},
         {"TransferEncodingBeforeLength", withHeaders("Transfer-Encoding: chunked\r\nContent-Length: 1")},
 
-        // Only one Host
         {"TabInHost", GET + "Host: localh\tost\r\n\r\n"},
         {"SpaceInHost", GET + "Host: local host\r\n\r\n"},
+        {"NullByteInHost", GET + "Host: local" + '\0' + "host\r\n\r\n"},
         {"NonNumericHostPort", GET + "Host: localhost:abc\r\n\r\n"},
 
-        // Content-Length.
         {"EmptyContentLength", withHeaders("Content-Length:")},
         {"NegativeContentLength", withHeaders("Content-Length: -1")},
         {"PositiveSignContentLength", withHeaders("Content-Length: +5")},
@@ -282,18 +265,15 @@ namespace {
         {"ListContentLength", withHeaders("Content-Length: 1, 1")},
         {"OverflowContentLength", withHeaders("Content-Length: 999999999999999999999999999999999999")},
 
-        // Chunked.
         {"InvalidHexChunkSize", CHUNKED + "Z\r\n"},
         {"NegativeChunkSize", CHUNKED + "-1\r\n"},
         {"EmptyChunkSize", CHUNKED + "\r\n"},
         {"InvalidChunkDataDelimiter", CHUNKED + "1\r\naXX"},
         {"InvalidFinalChunkDelimiter", CHUNKED + "0\r\nXX"},
 
-        // unsupported transfer codings.
         {"UnsupportedGzip", POST + "Transfer-Encoding: gzip\r\n\r\n", HttpStatus::NotImplemented},
         {"UnsupportedGzipThenChunked", POST + "Transfer-Encoding: gzip, chunked\r\n\r\n", HttpStatus::NotImplemented},
 
-        // Exceeding limits with and without a separator
         {"StartLineTooLong", startLine(LINE_LIMIT + 1) + "\r\nHost: localhost\r\n\r\n", HttpStatus::UriTooLong},
         {"UnterminatedStartLineTooLong", startLine(LINE_LIMIT + 1), HttpStatus::UriTooLong},
         {"HeadersTooLarge",
@@ -312,7 +292,6 @@ namespace {
         }
     );
 
-    //Receipt by chunks
 
     struct FragmentCase {
         const char* name;
@@ -337,7 +316,6 @@ namespace {
         }
     }
 
-    // Verify that the parser correctly processes a request one byte at a time.
 
     TEST_P(HttpParserFragmentTest, ByteByByte) {
         const auto& test = GetParam();
@@ -369,7 +347,6 @@ namespace {
         [](const testing::TestParamInfo<FragmentCase>& info) { return std::string(info.param.name); }
     );
 
-    // Content-Length
 
     TEST(HttpParserTest, ZeroContentLength) {
         expectBody(parse(withLength(0)), "");
@@ -441,7 +418,6 @@ namespace {
         expectBody(result(parser, "\r\n"), "a");
     }
 
-    // SizeBoundary
 
     TEST(HttpParserTest, StartLineSizeBoundary) {
         for (const auto size : {LINE_LIMIT - 1, LINE_LIMIT}) {
@@ -475,14 +451,12 @@ namespace {
     TEST(HttpParserTest, ChunkedBodySizeBoundary) {
         const std::string body(BODY_LIMIT, 'a');
 
-        // 0xa00000 == 10 МиБ.
         expectBody(parse(CHUNKED + "a00000\r\n" + body + "\r\n0\r\n\r\n"), body);
     }
 
     TEST(HttpParserTest, CumulativeChunkedBodyTooLarge) {
         const std::string body(BODY_LIMIT, 'a');
 
-        // The first chunk takes up the entire limit, and the second adds another byte.
         expectStatus(parse(CHUNKED + "a00000\r\n" + body + "\r\n1\r\n"), HttpStatus::PayloadTooLarge);
     }
 
@@ -496,7 +470,6 @@ namespace {
         }
     }
 
-    // DelimiterAtLimit
 
     TEST(HttpParserTest, SplitStartLineDelimiterAtLimit) {
         HttpParser parser;
@@ -568,4 +541,4 @@ namespace {
         expectStatus(parse(CHUNKED + chunkLine(CHUNK_LINE_LIMIT + 1) + "\r"), HttpStatus::BadRequest);
     }
 
-} // namespace
+}

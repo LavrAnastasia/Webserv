@@ -156,7 +156,6 @@ namespace {
 
         server_.locations.front().redirect = RedirectConfig{test.status, std::string(test.target)};
 
-        // The file does not exist: the redirect must happen before file access.
         const auto result = RequestDispatcher::dispatch(Requests::get("/old"), server_);
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
@@ -182,4 +181,4 @@ namespace {
         [](const ::testing::TestParamInfo<RedirectCase>& info) { return std::string(info.param.name); }
     );
 
-} // namespace
+}

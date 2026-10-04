@@ -26,7 +26,6 @@ namespace {
         void SetUp() override {
             root_ = temp_.path() / "root";
 
-            // Similar prefix must not make this directory part of root.
             outside_ = temp_.path() / "root-other";
 
             fs::create_directories(root_);
@@ -50,7 +49,6 @@ namespace {
         }
     };
 
-    // File contents
 
     struct FileContentsCase {
         const char* name;
@@ -107,7 +105,6 @@ namespace {
         }
     }
 
-    // Index
 
     TEST_F(StaticHandlerTest, ReturnsIndexForRootDirectory) {
         const std::string body = "<h1>Home</h1>\n";
@@ -179,7 +176,6 @@ namespace {
         EXPECT_EQ(response.status, HttpStatus::Forbidden);
     }
 
-    // Autoindex
 
     TEST_F(StaticHandlerTest, AutoindexSortsDirectoriesBeforeFiles) {
         server_.locations.front().autoindex = true;
@@ -248,7 +244,6 @@ namespace {
         EXPECT_EQ(response.body.find("a & <b>.txt"), std::string::npos);
     }
 
-    // DELETE
 
     TEST_F(StaticHandlerTest, DeletesFileAndReturns204WithEmptyBody) {
         Files::write(root_ / "delete-me.txt", "temporary");
@@ -297,7 +292,6 @@ namespace {
         ASSERT_EQ(response.status, HttpStatus::NoContent);
         EXPECT_TRUE(response.body.empty());
 
-        // symlink_status checks the link itself, including dangling links.
         EXPECT_FALSE(fs::exists(fs::symlink_status(link)));
         EXPECT_EQ(Files::read(outside_ / "secret.txt"), outsideBody_);
     }
@@ -315,7 +309,6 @@ namespace {
         EXPECT_FALSE(fs::exists(fs::symlink_status(link)));
     }
 
-    // Root containment
 
     TEST_F(StaticHandlerTest, GetAllowsSymlinkWhoseTargetIsInsideRoot) {
         Files::write(root_ / "data" / "file.txt", "inside");
@@ -406,4 +399,4 @@ namespace {
         }
     );
 
-} // namespace
+}

@@ -19,7 +19,6 @@ namespace {
             return false;
         }
 
-        // A trailing prefix of the delimiter may be completed by the next read.
         for (std::size_t size = delimiter.size() - 1; size > 0; --size) {
             if (buffer.ends_with(delimiter.substr(0, size))) {
                 return buffer.size() - size > limit;

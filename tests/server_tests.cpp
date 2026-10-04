@@ -88,8 +88,6 @@ namespace {
         std::string body;
     };
 
-    // A small client for responses framed with Content-Length
-    // Unconsumed bytes are retained between responses
     class TestClient {
     public:
         explicit TestClient(std::uint16_t port, int receiveBuffer = 0) : socket_(::socket(AF_INET, SOCK_STREAM, 0)) {
@@ -312,8 +310,6 @@ namespace {
             ServerConfig serverConfig;
             serverConfig.root = root_;
 
-            // Port zero is used directly through ServerConfig
-            // The OS assigns a free port when TcpServer binds its listener
             serverConfig.listen = {{"127.0.0.1", 0}};
 
             LocationConfig location{};
@@ -358,10 +354,8 @@ namespace {
                 ::_exit(exitCode);
             }
 
-            // The child retains its copy of the listening socket
             server.reset();
 
-            // Readiness is checked by a real request, without a fixed sleep
             expectFreshConnectionWorks();
         }
 
@@ -418,7 +412,6 @@ namespace {
         std::string createLargeFile() const {
             std::string body(8u * 1024u * 1024u + 137u, '\0');
 
-            // Nonuniform binary data, including zero bytes
             for (std::size_t i = 0; i < body.size(); ++i) {
                 body[i] = static_cast<char>((i * 37 + i / 251) % 256);
             }
@@ -433,7 +426,6 @@ namespace {
             EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
             ASSERT_EQ(response.body.size(), expected.size());
 
-            // Avoid printing megabytes of binary data on failure
             EXPECT_TRUE(response.body == expected) << "Response body differs from the expected file contents";
         }
 
@@ -445,13 +437,11 @@ namespace {
         }
     };
 
-    // Multiple clients
 
     TEST_F(ServerTest, ServesSeveralClientsWithoutMixingTheirResponses) {
         constexpr int clientCount = 8;
         std::vector<std::unique_ptr<TestClient>> clients;
 
-        // Keep all requests incomplete until every client has connected
         for (int i = 0; i < clientCount; ++i) {
             const std::string name = "client-" + std::to_string(i) + ".txt";
             Files::write(root_ / name, "response for client " + std::to_string(i));
@@ -466,7 +456,6 @@ namespace {
             client->sendAll("\r\n");
         }
 
-        // Read in reverse order to avoid relying on connection order
         for (int i = clientCount - 1; i >= 0; --i) {
             SCOPED_TRACE(i);
 
@@ -486,7 +475,6 @@ namespace {
         slow.expectEof();
     }
 
-    // Keep-alive
 
     class ServerKeepAliveTest : public ServerTest, public ::testing::WithParamInterface<bool> {};
 
@@ -518,7 +506,6 @@ namespace {
         }
     );
 
-    // Disconnects
 
     TEST_F(ServerTest, DisconnectDuringRequestDoesNotAffectOtherClients) {
         TestClient survivor(port_);
@@ -533,7 +520,6 @@ namespace {
                 if (reset) {
                     dropped.abortWithReset();
                 }
-                // Otherwise the destructor closes the connection normally
             }
 
             survivor.sendAll(Requests::rawGet("/other.txt"));
@@ -555,7 +541,6 @@ namespace {
 
         dropped.sendAll(Requests::rawGet("/large.bin"));
 
-        // Wait until the server has actually started sending the response
         dropped.waitForResponseStart();
         dropped.abortWithReset();
 
@@ -566,7 +551,6 @@ namespace {
         expectFreshConnectionWorks();
     }
 
-    // Large responses
 
     TEST_F(ServerTest, SendsCompleteLargeBinaryResponseAndReusesConnection) {
         const std::string body = createLargeFile();
@@ -587,7 +571,6 @@ namespace {
         slow.sendAll(Requests::rawGet("/large.bin"));
         slow.waitForResponseStart();
 
-        // Leave the large response unread while another client is served
         expectFreshConnectionWorks();
 
         expectOK(slow, body);
@@ -597,4 +580,4 @@ namespace {
         slow.expectEof();
     }
 
-} // namespace
+}

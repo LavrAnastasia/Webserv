@@ -197,7 +197,6 @@ namespace {
         location.index = "listing.html";
         server_.locations = {location};
 
-        // The full request path is resolved beneath the configured root.
         Files::write(root_ / "assets" / "home.html", "server root and index");
         Files::write(root_ / "assets" / "listing.html", "server root");
         Files::write(customRoot / "assets" / "home.html", "server index");
@@ -297,7 +296,6 @@ namespace {
         Files::write(customRoot / "errors/404.html", "location 404");
         Files::write(customRoot / "errors/500.html", "location 500");
 
-        // An existing regular file used as an upload directory causes a 500 response.
         Files::write(root_ / "not-a-directory", "file");
         Files::write(customRoot / "not-a-directory", "file");
 
@@ -398,4 +396,4 @@ namespace {
         expectHeader(response, "Allow", "GET");
     }
 
-} // namespace
+}

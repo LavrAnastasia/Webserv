@@ -51,5 +51,6 @@ SpaceBeforeAssignmentOperators: true
 
 ReflowComments: false
 AlignTrailingComments: false
+FixNamespaceComments: false
 
 NamespaceIndentation: All

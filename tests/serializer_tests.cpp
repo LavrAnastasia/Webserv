@@ -24,7 +24,6 @@ namespace {
             return value;
         }
 
-        // Read only headers, so header-like text in the body is ignored.
         std::vector<std::string> headerValues(const std::string& serialized, const std::string& name) const {
             const auto headerEnd = serialized.find("\r\n\r\n");
 
@@ -69,7 +68,6 @@ namespace {
         }
     };
 
-    // Status line
 
     struct StatusLineCase {
         const char* name;
@@ -110,7 +108,6 @@ namespace {
         [](const ::testing::TestParamInfo<StatusLineCase>& info) { return std::string(info.param.name); }
     );
 
-    // Headers and message framing
 
     TEST_F(HttpSerializerTest, PreservesResponseHeadersAndTheirValues) {
         response_.headers.set("Content-Type", "text/plain; charset=utf-8");
@@ -141,7 +138,6 @@ namespace {
         ASSERT_NE(separator, std::string::npos);
         EXPECT_EQ(serialized.substr(separator + 4), "body");
 
-        // Every line ending in the status/header section must be CRLF.
         for (std::size_t i = 0; i < separator + 4; ++i) {
             if (serialized[i] == '\n') {
                 ASSERT_GT(i, 0u);
@@ -224,7 +220,6 @@ namespace {
         }
     }
 
-    // Body length in bytes and exact body contents
 
     struct BodyCase {
         const char* name;
@@ -255,10 +250,8 @@ namespace {
             BodyCase{"Empty", "", 0},
             BodyCase{"Ascii", "Hello", 5},
 
-            // "Привет": six characters, twelve UTF-8 bytes.
             BodyCase{"Utf8Cyrillic", "\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82", 12},
 
-            // One emoji, four UTF-8 bytes.
             BodyCase{"Utf8Emoji", "\xF0\x9F\x98\x80", 4},
             BodyCase{"EmbeddedNullBytes", std::string("A\0B\0C", 5), 5},
             BodyCase{"BinaryBytes", std::string("\x00\x01\x7f\x80\xff", 5), 5},
@@ -279,7 +272,6 @@ namespace {
         expectBody(serialized, "");
     }
 
-    // 204 No Content
 
     TEST_F(HttpSerializerTest, NoContentOmitsBodyAndFramingHeaders) {
         response_.status = HttpStatus::NoContent;
@@ -312,4 +304,4 @@ namespace {
         EXPECT_TRUE(headerValues(serialized, "Transfer-Encoding").empty());
     }
 
-} // namespace
+}
