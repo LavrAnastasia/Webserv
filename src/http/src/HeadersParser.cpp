@@ -4,7 +4,6 @@
 #include "HttpUtils.hpp"
 
 #include <algorithm>
-#include <arpa/inet.h>
 
 HeadersParser::HeadersParser(const std::string& headersBlock) : headersBlock_(headersBlock), headers_() {
 }
@@ -35,24 +34,9 @@ namespace {
     }
 
     bool isValidIpLiteral(std::string_view literal) {
-        if (literal.empty()) {
-            return false;
-        }
-
-        if (Http::Ascii::tolower(literal.front()) == Http::Syntax::Host::FutureVersionPrefix) {
-            const std::size_t separator = literal.find(Http::Syntax::Host::FutureVersionSeparator);
-            if (separator == std::string_view::npos || separator <= 1 || separator + 1 == literal.size()) {
-                return false;
-            }
-
-            return std::ranges::all_of(literal.substr(1, separator - 1), Http::Ascii::isxdigit) &&
-                std::ranges::all_of(literal.substr(separator + 1), [](char c) {
-                       return isHostNameCharacter(c) || c == Http::Syntax::Host::PortSeparator;
-                   });
-        }
-
-        in6_addr address{};
-        return ::inet_pton(AF_INET6, std::string(literal).c_str(), &address) == 1;
+        return !literal.empty() && std::ranges::all_of(literal, [](char c) {
+            return isHostNameCharacter(c) || c == Http::Syntax::Host::PortSeparator;
+        });
     }
 
     bool isValidHost(std::string_view value) {

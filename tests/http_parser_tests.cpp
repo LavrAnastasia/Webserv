@@ -134,10 +134,9 @@ namespace {
               "localhost:",
               "127.0.0.1:80",
               "[::1]",
+              "[::1]:",
               "[2001:db8::1]:8080",
               "[::ffff:192.0.2.1]:80",
-              "[vF.a:b]:80",
-              "[V1.a]",
               "caf%C3%A9.example"}) {
             SCOPED_TRACE(host);
             const auto parsed = parse(GET + "Host: \t" + host + " \t\r\n\r\n");
@@ -157,15 +156,16 @@ namespace {
               "localhost: 80",
               "::1",
               "[::1",
+              "[[::1]]",
+              "[::1]]",
               "[::1]extra",
               "[::1]:abc",
+              "[::1]:80:90",
               "[local host]",
-              "[not-an-ip]",
+              "[::1\t]",
+              "[::1/path]",
+              "[::1\\path]",
               "[]",
-              "[v.a]",
-              "[vG.a]",
-              "[v1.]",
-              "[v1.a/b]",
               "example%",
               "example%2",
               "example%ZZ"}) {

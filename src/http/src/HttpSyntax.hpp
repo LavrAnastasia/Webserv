@@ -23,8 +23,6 @@ namespace Http::Syntax {
         constexpr char LiteralOpen = '[';
         constexpr char LiteralClose = ']';
         constexpr char PercentEncodingPrefix = '%';
-        constexpr char FutureVersionPrefix = 'v';
-        constexpr char FutureVersionSeparator = '.';
     } // namespace Host
 
 } // namespace Http::Syntax
