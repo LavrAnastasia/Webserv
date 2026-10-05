@@ -181,4 +181,4 @@ namespace {
         [](const ::testing::TestParamInfo<RedirectCase>& info) { return std::string(info.param.name); }
     );
 
-}
+} // namespace

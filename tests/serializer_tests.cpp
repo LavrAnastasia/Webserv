@@ -304,4 +304,4 @@ namespace {
         EXPECT_TRUE(headerValues(serialized, "Transfer-Encoding").empty());
     }
 
-}
+} // namespace

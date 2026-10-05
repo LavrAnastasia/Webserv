@@ -396,4 +396,4 @@ namespace {
         expectHeader(response, "Allow", "GET");
     }
 
-}
+} // namespace

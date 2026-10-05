@@ -541,4 +541,4 @@ namespace {
         expectStatus(parse(CHUNKED + chunkLine(CHUNK_LINE_LIMIT + 1) + "\r"), HttpStatus::BadRequest);
     }
 
-}
+} // namespace

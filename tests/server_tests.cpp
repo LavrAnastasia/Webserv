@@ -580,4 +580,4 @@ namespace {
         slow.expectEof();
     }
 
-}
+} // namespace

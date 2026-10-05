@@ -41,4 +41,4 @@ namespace Requests {
         return request;
     }
 
-}
+} // namespace Requests
