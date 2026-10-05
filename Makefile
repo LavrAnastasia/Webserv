@@ -109,3 +109,5 @@ format-check: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 c
 
 .PHONY: all clean fclean re
 .SECONDARY: $(BUILD_DIR) $(OBJ)
+
+include tests/tests.mk

@@ -14,6 +14,34 @@ std::optional<HttpHeaders> HeadersParser::parse(const std::string& headersBlock)
 
 namespace {
 
+    bool isValidHost(std::string_view value) {
+        const bool literal = value.starts_with(Http::Syntax::Host::LiteralOpen);
+        const std::size_t end =
+            value.find(literal ? Http::Syntax::Host::LiteralClose : Http::Syntax::Host::PortSeparator);
+        if (literal && end == std::string_view::npos) {
+            return false;
+        }
+
+        std::string_view name = value.substr(0, end);
+        value.remove_prefix(name.size());
+        if (literal) {
+            name.remove_prefix(1);
+            value.remove_prefix(1);
+        }
+
+        if (name.empty() || name.find(Http::Syntax::Host::ConsecutiveDots) != std::string_view::npos ||
+            !std::ranges::all_of(name, [literal](char c) {
+                return Http::Ascii::isalnum(c) || Http::Syntax::Host::NameSymbols.find(c) != std::string_view::npos ||
+                    (literal && c == Http::Syntax::Host::PortSeparator);
+            })) {
+            return false;
+        }
+
+        return value.empty() ||
+            (value.front() == Http::Syntax::Host::PortSeparator &&
+             std::ranges::all_of(value.substr(1), Http::Ascii::isdigit));
+    }
+
     bool isUnique(std::string_view name) {
         return HttpHeaders::equals(name, Http::Headers::ContentLength) ||
             HttpHeaders::equals(name, Http::Headers::Host);
@@ -76,6 +104,9 @@ bool HeadersParser::parseHeaderLine(const std::string& line) {
         return false;
 
     if (!isValidValue(value))
+        return false;
+
+    if (HttpHeaders::equals(key, Http::Headers::Host) && !isValidHost(value))
         return false;
 
     if (!canStoreHeader(headers_, key))
