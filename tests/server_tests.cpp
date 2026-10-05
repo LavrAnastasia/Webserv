@@ -1,9 +1,9 @@
 #include <charconv>
-#include <fcntl.h>
 #include <filesystem>
 
 #include <gtest/gtest.h>
 
+#include "fs/FileDescriptor.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/TempDirectory.hpp"
@@ -19,28 +19,6 @@ namespace {
     [[noreturn]] void systemError(const char* operation) {
         throw std::system_error(errno, std::generic_category(), operation);
     }
-
-    class FileDescriptor {
-    public:
-        explicit FileDescriptor(int value) : value_(value) {}
-
-        ~FileDescriptor() { close(); }
-
-        FileDescriptor(const FileDescriptor&) = delete;
-        FileDescriptor& operator=(const FileDescriptor&) = delete;
-
-        int get() const { return value_; }
-
-        void close() {
-            if (value_ >= 0) {
-                ::close(value_);
-                value_ = -1;
-            }
-        }
-
-    private:
-        int value_;
-    };
 
     void waitReady(int fd, short events, Clock::time_point deadline) {
         while (true) {
@@ -95,8 +73,7 @@ namespace {
                 systemError("socket");
             }
 
-            const int flags = ::fcntl(socket_.get(), F_GETFL, 0);
-            if (flags == -1 || ::fcntl(socket_.get(), F_SETFL, flags | O_NONBLOCK) == -1) {
+            if (!socket_.setNonBlocking()) {
                 systemError("fcntl");
             }
 
