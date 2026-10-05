@@ -49,7 +49,6 @@ namespace {
         }
     };
 
-
     struct FileContentsCase {
         const char* name;
         std::string body;
@@ -104,7 +103,6 @@ namespace {
             EXPECT_EQ(response.status, HttpStatus::NotFound);
         }
     }
-
 
     TEST_F(StaticHandlerTest, ReturnsIndexForRootDirectory) {
         const std::string body = "<h1>Home</h1>\n";
@@ -176,7 +174,6 @@ namespace {
         EXPECT_EQ(response.status, HttpStatus::Forbidden);
     }
 
-
     TEST_F(StaticHandlerTest, AutoindexSortsDirectoriesBeforeFiles) {
         server_.locations.front().autoindex = true;
 
@@ -244,7 +241,6 @@ namespace {
         EXPECT_EQ(response.body.find("a & <b>.txt"), std::string::npos);
     }
 
-
     TEST_F(StaticHandlerTest, DeletesFileAndReturns204WithEmptyBody) {
         Files::write(root_ / "delete-me.txt", "temporary");
 
@@ -308,7 +304,6 @@ namespace {
         EXPECT_EQ(response.status, HttpStatus::NoContent);
         EXPECT_FALSE(fs::exists(fs::symlink_status(link)));
     }
-
 
     TEST_F(StaticHandlerTest, GetAllowsSymlinkWhoseTargetIsInsideRoot) {
         Files::write(root_ / "data" / "file.txt", "inside");

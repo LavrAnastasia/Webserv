@@ -7,7 +7,6 @@
 
 #include <filesystem>
 
-
 namespace {
 
     namespace fs = std::filesystem;
@@ -39,7 +38,6 @@ namespace {
 
         Configuration loadText(const std::string& source) { return ConfigLoader::load(writeConfig(source)); }
     };
-
 
     TEST_F(ConfigLoaderTest, LoadsMinimalConfigAndDefaults) {
         const auto config = loadText(makeConfig());
@@ -221,7 +219,6 @@ namespace {
         {"MissingLocation", makeConfig(SERVER_DIRECTIVES, "")},
         {"MissingMethods", makeConfig(SERVER_DIRECTIVES, "location / {}\n")},
 
-
         {"ZeroPort", withListen("127.0.0.1:0")},
         {"PortTooLarge", withListen("127.0.0.1:65536")},
         {"NegativePort", withListen("127.0.0.1:-1")},
@@ -232,16 +229,13 @@ namespace {
         {"MissingHost", withListen(":8080")},
         {"InvalidIpv4", withListen("256.0.0.1:8080")},
 
-
         {"DuplicateRoot", makeConfig(SERVER_DIRECTIVES + "root ./other;\n")},
         {"DuplicateEndpoint", makeConfig(SERVER_DIRECTIVES + "listen localhost:8080;\n")},
         {"DuplicateLocation", makeConfig(SERVER_DIRECTIVES, LOCATION + LOCATION)},
 
-
         {"MethodsInServerBlock", makeConfig(SERVER_DIRECTIVES + "methods GET;\n")},
         {"TooManyIndexArguments", makeConfig(SERVER_DIRECTIVES + "index first.html second.html;\n")},
         {"IndexWithoutArgument", makeConfig(SERVER_DIRECTIVES + "index;\n")},
-
 
         {"UnsupportedMethod", makeConfig(SERVER_DIRECTIVES, "location / { methods PUT; }\n")},
         {"DuplicateMethod", makeConfig(SERVER_DIRECTIVES, "location / { methods GET GET; }\n")},
@@ -258,7 +252,6 @@ namespace {
         [](const testing::TestParamInfo<InvalidConfigCase>& info) { return std::string(info.param.name); }
     );
 
-
     TEST_F(ConfigLoaderTest, RejectsMissingFile) {
         const auto path = tempDir_.path() / "missing.conf";
 
@@ -269,10 +262,8 @@ namespace {
         EXPECT_THROW(ConfigLoader::load(tempDir_.path().string()), ConfigError);
     }
 
-
     TEST_F(ConfigLoaderTest, AcceptsFileAtSizeLimit) {
         std::string source = makeConfig();
-
 
         source.resize(CONFIG_FILE_LIMIT, ' ');
 

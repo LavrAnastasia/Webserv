@@ -414,7 +414,6 @@ namespace {
         }
     };
 
-
     TEST_F(ServerTest, ServesSeveralClientsWithoutMixingTheirResponses) {
         constexpr int clientCount = 8;
         std::vector<std::unique_ptr<TestClient>> clients;
@@ -452,7 +451,6 @@ namespace {
         slow.expectEof();
     }
 
-
     class ServerKeepAliveTest : public ServerTest, public ::testing::WithParamInterface<bool> {};
 
     TEST_P(ServerKeepAliveTest, ReusesConnectionForSeveralRequests) {
@@ -482,7 +480,6 @@ namespace {
             return info.param ? std::string("ExplicitKeepAlive") : std::string("DefaultHttp11");
         }
     );
-
 
     TEST_F(ServerTest, DisconnectDuringRequestDoesNotAffectOtherClients) {
         TestClient survivor(port_);
@@ -527,7 +524,6 @@ namespace {
 
         expectFreshConnectionWorks();
     }
-
 
     TEST_F(ServerTest, SendsCompleteLargeBinaryResponseAndReusesConnection) {
         const std::string body = createLargeFile();

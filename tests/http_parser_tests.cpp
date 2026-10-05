@@ -55,7 +55,6 @@ namespace {
         EXPECT_EQ(static_cast<int>(error->status), static_cast<int>(expected));
     }
 
-
     std::string startLine(std::size_t size) {
         const std::string prefix = "GET /";
         const std::string suffix = " HTTP/1.1";
@@ -74,7 +73,6 @@ namespace {
 
         return prefix + std::string(size - prefix.size(), 'a');
     }
-
 
     TEST(HttpParserTest, FullRequest) {
         const auto result = parse(
@@ -292,7 +290,6 @@ namespace {
         }
     );
 
-
     struct FragmentCase {
         const char* name;
         std::string raw;
@@ -315,7 +312,6 @@ namespace {
             expectBody(result(parser, std::string_view(test.raw).substr(split)), test.body);
         }
     }
-
 
     TEST_P(HttpParserFragmentTest, ByteByByte) {
         const auto& test = GetParam();
@@ -346,7 +342,6 @@ namespace {
         testing::ValuesIn(FRAGMENT_CASES),
         [](const testing::TestParamInfo<FragmentCase>& info) { return std::string(info.param.name); }
     );
-
 
     TEST(HttpParserTest, ZeroContentLength) {
         expectBody(parse(withLength(0)), "");
@@ -389,7 +384,6 @@ namespace {
         EXPECT_TRUE(secondRequest->request.body.empty());
     }
 
-
     TEST(HttpParserTest, EmptyChunkedBody) {
         expectBody(parse(CHUNKED + "0\r\n\r\n"), "");
     }
@@ -417,7 +411,6 @@ namespace {
 
         expectBody(result(parser, "\r\n"), "a");
     }
-
 
     TEST(HttpParserTest, StartLineSizeBoundary) {
         for (const auto size : {LINE_LIMIT - 1, LINE_LIMIT}) {
@@ -469,7 +462,6 @@ namespace {
             EXPECT_TRUE(std::holds_alternative<NeedMoreData>(parse(CHUNKED + chunkLine(size))));
         }
     }
-
 
     TEST(HttpParserTest, SplitStartLineDelimiterAtLimit) {
         HttpParser parser;

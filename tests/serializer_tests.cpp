@@ -68,7 +68,6 @@ namespace {
         }
     };
 
-
     struct StatusLineCase {
         const char* name;
         HttpStatus status;
@@ -107,7 +106,6 @@ namespace {
         ),
         [](const ::testing::TestParamInfo<StatusLineCase>& info) { return std::string(info.param.name); }
     );
-
 
     TEST_F(HttpSerializerTest, PreservesResponseHeadersAndTheirValues) {
         response_.headers.set("Content-Type", "text/plain; charset=utf-8");
@@ -220,7 +218,6 @@ namespace {
         }
     }
 
-
     struct BodyCase {
         const char* name;
         std::string body;
@@ -271,7 +268,6 @@ namespace {
         expectHeader(serialized, "Content-Type", "application/octet-stream");
         expectBody(serialized, "");
     }
-
 
     TEST_F(HttpSerializerTest, NoContentOmitsBodyAndFramingHeaders) {
         response_.status = HttpStatus::NoContent;

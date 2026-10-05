@@ -29,9 +29,7 @@ namespace Http::Syntax {
 } // namespace Http::Syntax
 
 namespace Http::Protocol {
-    constexpr std::string_view Name = "HTTP";
     constexpr std::string_view VersionPrefix = "HTTP/";
-    constexpr char VersionSeparator = '/';
     constexpr char VersionComponentSeparator = '.';
     constexpr std::size_t VersionComponentLength = 1;
     constexpr std::size_t VersionNumberLength = 3;

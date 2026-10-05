@@ -67,8 +67,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, const Framin
     std::string output;
     output.reserve(256 + body.size());
 
-    output.append(Http::Protocol::Name)
-        .append(1, Http::Protocol::VersionSeparator)
+    output.append(Http::Protocol::VersionPrefix)
         .append(Http::Protocol::Version)
         .append(1, Http::Syntax::SP)
         .append(std::to_string(statusCode))
