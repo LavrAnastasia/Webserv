@@ -236,6 +236,7 @@ namespace {
         {"MethodsInServerBlock", makeConfig(SERVER_DIRECTIVES + "methods GET;\n")},
         {"TooManyIndexArguments", makeConfig(SERVER_DIRECTIVES + "index first.html second.html;\n")},
         {"IndexWithoutArgument", makeConfig(SERVER_DIRECTIVES + "index;\n")},
+        {"ErrorPageWithoutLeadingSlash", makeConfig(SERVER_DIRECTIVES + "error_page 404 errors/404.html;\n")},
 
         {"UnsupportedMethod", makeConfig(SERVER_DIRECTIVES, "location / { methods PUT; }\n")},
         {"DuplicateMethod", makeConfig(SERVER_DIRECTIVES, "location / { methods GET GET; }\n")},

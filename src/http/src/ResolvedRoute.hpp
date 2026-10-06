@@ -12,6 +12,8 @@
 #include "http/HttpMethod.hpp"
 #include "http/HttpStatus.hpp"
 
+using ErrorPages = std::unordered_map<HttpStatus, std::filesystem::path>;
+
 struct ResolvedRoute {
     std::string locationPath;
 
@@ -26,5 +28,5 @@ struct ResolvedRoute {
     std::optional<UploadConfig> upload;
     std::optional<CgiConfig> cgi;
 
-    std::unordered_map<HttpStatus, std::filesystem::path> errorPages;
+    ErrorPages errorPages;
 };

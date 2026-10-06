@@ -73,9 +73,7 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.root = location->root.value_or(server.root);
     route.index = location->index.value_or(server.index);
     route.clientMaxBodySize = location->clientMaxBodySize.value_or(server.clientMaxBodySize);
-    for (const auto& [code, page] : server.errorPages) {
-        route.errorPages.emplace(code, Fs::resolve(route.root, page));
-    }
+    route.errorPages = mapErrorPages(server);
 
     route.allowedMethods = location->allowedMethods;
     route.autoindex = location->autoindex;
@@ -84,4 +82,17 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.cgi = resolveCgi(request.path, *location);
 
     return route;
+}
+
+ErrorPages Router::mapErrorPages(const ServerConfig& server) {
+    ErrorPages pages;
+
+    for (const auto& [status, page] : server.errorPages) {
+        const LocationConfig* location = findLocation(page.string(), server.locations);
+        const std::filesystem::path root = location != nullptr ? location->root.value_or(server.root) : server.root;
+
+        pages.emplace(status, Fs::resolve(root, page));
+    }
+
+    return pages;
 }

@@ -10,4 +10,5 @@
 class Router {
 public:
     static std::optional<ResolvedRoute> resolve(const HttpRequest& request, const ServerConfig& server);
+    static ErrorPages mapErrorPages(const ServerConfig& server);
 };

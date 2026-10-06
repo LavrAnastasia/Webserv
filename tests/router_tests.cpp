@@ -285,7 +285,7 @@ namespace {
         const fs::path customRoot = temp_.path() / "custom";
         server_.errorPages = {
             {HttpStatus::NotFound, "/errors/404.html"},
-            {HttpStatus::InternalServerError, "errors/500.html"},
+            {HttpStatus::InternalServerError, "/errors/500.html"},
         };
         auto& location = server_.locations.front();
         location.allowedMethods = {HttpMethod::Get, HttpMethod::Post};
@@ -309,6 +309,46 @@ namespace {
             expectResponse(Requests::get("/missing"), HttpStatus::NotFound, prefix + "404");
             expectResponse(Requests::post("/upload/file.txt", "data"), HttpStatus::InternalServerError, prefix + "500");
         }
+    }
+
+    TEST_F(RouterTest, LoadsErrorPageFromLocationMatchingItsPath) {
+        const fs::path apiRoot = temp_.path() / "api";
+        auto api = makeLocation("/api");
+        api.root = apiRoot;
+        server_.locations.push_back(api);
+        server_.errorPages = {{HttpStatus::NotFound, "/errors/404.html"}};
+
+        Files::write(root_ / "errors/404.html", "site 404");
+        Files::write(apiRoot / "errors/404.html", "api 404");
+
+        expectResponse(Requests::get("/api/missing"), HttpStatus::NotFound, "site 404");
+    }
+
+    TEST_F(RouterTest, ErrorsWithoutRouteUseLocationRoot) {
+        const fs::path siteRoot = temp_.path() / "site";
+        server_.locations.front().root = siteRoot;
+        server_.errorPages = {{HttpStatus::BadRequest, "/errors/400.html"}};
+
+        Files::write(root_ / "errors/400.html", "server 400");
+        Files::write(siteRoot / "errors/400.html", "site 400");
+
+        const HttpResponse response = RequestDispatcher::fail(HttpStatus::BadRequest, server_);
+
+        EXPECT_EQ(response.status, HttpStatus::BadRequest);
+        EXPECT_EQ(response.body, "site 400");
+    }
+
+    TEST_F(RouterTest, LoadsErrorPageFromServerRootWhenNoLocationMatches) {
+        const fs::path apiRoot = temp_.path() / "api";
+        auto api = makeLocation("/api");
+        api.root = apiRoot;
+        server_.locations = {api};
+        server_.errorPages = {{HttpStatus::NotFound, "/errors/404.html"}};
+
+        Files::write(root_ / "errors/404.html", "server 404");
+        Files::write(apiRoot / "errors/404.html", "api 404");
+
+        expectResponse(Requests::get("/api/missing"), HttpStatus::NotFound, "server 404");
     }
 
     TEST_F(RouterTest, ReturnsConfiguredRedirect) {

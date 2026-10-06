@@ -178,7 +178,7 @@ ConfigDecoder::decodeErrorPage(const std::vector<std::string>& values) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "error page path");
     }
 
-    if (Fs::hasDotComponents(path)) {
+    if (!path.string().starts_with('/') || Fs::hasDotComponents(path)) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "error page path: " + path.string());
     }
 
