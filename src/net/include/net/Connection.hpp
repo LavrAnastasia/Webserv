@@ -47,7 +47,6 @@ public:
     //called by server when POLLIN detected -reads raw bytes from socket -> HttpParser
     std::optional<ParseResult> receiveRequest();
 
-    //called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
     bool sendResponse();
     bool hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const;
 };

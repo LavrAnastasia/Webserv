@@ -52,10 +52,6 @@ std::optional<ParseResult> Connection::receiveRequest() {
     return parser_.append(buffer, bytesReceived);
 }
 
-/*
-    called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
-    send function signature: ssize_t send(int sockfd, const void *buf, size_t len, int flags);
-*/
 bool Connection::sendResponse() {
     //early exit if buffer is empty
     if (sendBuffer_.empty()) {
@@ -77,7 +73,7 @@ bool Connection::sendResponse() {
     sendOffset_ += static_cast<std::size_t>(bytesSent);
 
     if (sendOffset_ == sendBuffer_.size()) {
-        sendBuffer_ = std::string();
+        std::string().swap(sendBuffer_);
         sendOffset_ = 0;
     }
 
