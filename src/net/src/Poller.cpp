@@ -53,7 +53,7 @@ std::vector<pollfd> Poller::waitForEvents() {
     how pollfd.revents flags are checked: if (p.revents & POLLIN) etc.
     common pollfd.revents flags:    POLLIN (data ready to read)
                                     POLLOUT (data ready to write)
-                                    POLLHUP (client closed connection)
+                                    POLLHUP (client hung up; on macOS can mean it only stopped sending)
                                     POLLERR (abrupt failure ex. crashed router)
 
     erase_if syntax:    pollFds_ = the list to look at

@@ -64,7 +64,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     if (connection == nullptr) {
         return;
     }
-    //handle errors and disconnects (POLLERR and POLLHUP)
+    // close on error, or on hangup with nothing left to read
     if ((events & POLLERR) || ((events & POLLHUP) && !(events & POLLIN))) {
         closeConnection(clientFd);
         return;
