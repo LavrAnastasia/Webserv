@@ -10,11 +10,10 @@ namespace {
 
     std::string timestamp() {
         const std::time_t now = std::time(nullptr);
-        std::tm time{};
+        const std::tm* local = std::localtime(&now);
         char buffer[kTimestampSize]{};
 
-        if (localtime_r(&now, &time) == nullptr ||
-            std::strftime(buffer, sizeof(buffer), "%Y/%m/%d %H:%M:%S", &time) == 0) {
+        if (local == nullptr || std::strftime(buffer, sizeof(buffer), "%Y/%m/%d %H:%M:%S", local) == 0) {
             return "-";
         }
 
