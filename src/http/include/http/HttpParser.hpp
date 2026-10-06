@@ -37,6 +37,7 @@ private:
     HttpRequest _request;
     std::size_t _contentLength;
     std::size_t _currentChunkSize;
+    std::size_t _maxBodySize;
 
     Step fail(HttpStatus status);
     Step handleStartLine();
@@ -46,9 +47,10 @@ private:
     Step handleChunkData();
     Step handleChunkEnd();
     std::optional<std::size_t> parseContentLength() const;
+    bool fits(std::size_t size) const;
 
 public:
-    HttpParser();
+    explicit HttpParser(std::size_t maxBodySize);
     ParseResult append(const char* data, std::size_t size);
     void reset();
 };

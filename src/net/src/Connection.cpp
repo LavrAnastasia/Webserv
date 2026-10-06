@@ -1,12 +1,14 @@
 #include "net/Connection.hpp"
 
+#include "config/ServerConfig.hpp"
 #include "http/HttpSerializer.hpp"
 
 #include <sys/socket.h>
 
 
 Connection::Connection(int fd, const std::string& ip, const ServerConfig& config)
-    : clientIp_(ip), serverConfig_(config), lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
+    : clientIp_(ip), parser_(config.maxBodySize()), serverConfig_(config),
+      lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
     setFd(fd);
     setNonBlocking();
     setCloseOnExec();

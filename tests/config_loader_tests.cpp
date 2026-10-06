@@ -161,6 +161,17 @@ namespace {
         ASSERT_EQ(config.servers.front().listen.size(), 2u);
     }
 
+    TEST_F(ConfigLoaderTest, MaxBodySizeIsLargestOfServerAndLocations) {
+        const auto config = loadText(makeConfig(
+            "listen 127.0.0.1:8080;\nroot ./public;\nclient_max_body_size 8;\n",
+            "location / { methods GET; }\n"
+            "location /upload { methods POST; client_max_body_size 64; }\n"
+            "location /small { methods POST; client_max_body_size 2; }\n"
+        ));
+
+        EXPECT_EQ(config.servers.front().maxBodySize(), 64u);
+    }
+
     TEST_F(ConfigLoaderTest, IgnoresCommentsAndWhitespace) {
         const auto config = loadText(R"(
         # Comment before the server

@@ -11,7 +11,6 @@
 namespace {
     constexpr std::size_t MAX_START_LINE_SIZE = 8192;
     constexpr std::size_t MAX_HEADERS_SIZE = 32768;
-    constexpr std::size_t MAX_BODY_SIZE = 10485760;
     constexpr std::size_t MAX_CHUNK_SIZE_LINE_SIZE = 1024;
 
     bool exceedsLimit(std::string_view buffer, std::size_t limit, std::string_view delimiter) {
@@ -41,8 +40,9 @@ namespace {
 
 } // namespace
 
-HttpParser::HttpParser()
-    : _buffer(), _state(ParserState::StartLine), _failure(), _request(), _contentLength(0), _currentChunkSize(0) {
+HttpParser::HttpParser(std::size_t maxBodySize)
+    : _buffer(), _state(ParserState::StartLine), _failure(), _request(), _contentLength(0), _currentChunkSize(0),
+      _maxBodySize(maxBodySize) {
 }
 
 HttpParser::Step HttpParser::fail(HttpStatus status) {
@@ -164,7 +164,7 @@ HttpParser::Step HttpParser::handleHeaders() {
     }
     _contentLength = *contentLength;
 
-    if (_contentLength > MAX_BODY_SIZE) {
+    if (!fits(_contentLength)) {
         return fail(HttpStatus::PayloadTooLarge);
     }
     if (_contentLength > 0) {
@@ -216,7 +216,7 @@ HttpParser::Step HttpParser::handleChunkSize() {
         return fail(HttpStatus::BadRequest);
     }
     _currentChunkSize = *chunkSize;
-    if (_currentChunkSize > MAX_BODY_SIZE - _request.body.size()) {
+    if (!fits(_currentChunkSize)) {
         return fail(HttpStatus::PayloadTooLarge);
     }
 
@@ -267,6 +267,13 @@ std::optional<std::size_t> HttpParser::parseContentLength() const {
     }
 
     return parseUnsigned(*value, 10);
+}
+
+bool HttpParser::fits(std::size_t size) const {
+    // TODO: WEB-34 when the body is read in chunks, count received bytes instead of body.size()
+    const std::size_t received = _request.body.size();
+
+    return received <= _maxBodySize && size <= _maxBodySize - received;
 }
 
 void HttpParser::reset() {

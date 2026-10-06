@@ -20,4 +20,6 @@ struct ServerConfig {
     std::unordered_map<HttpStatus, std::filesystem::path> errorPages;
 
     std::vector<LocationConfig> locations;
+
+    std::size_t maxBodySize() const;
 };
