@@ -65,7 +65,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         return;
     }
     //handle errors and disconnects (POLLERR and POLLHUP)
-    if (events & (POLLERR | POLLHUP)) {
+    if ((events & POLLERR) || ((events & POLLHUP) && !(events & POLLIN))) {
         closeConnection(clientFd);
         return;
     }

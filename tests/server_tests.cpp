@@ -214,6 +214,12 @@ namespace {
             socket_.close();
         }
 
+        void closeWrite() {
+            if (::shutdown(socket_.get(), SHUT_WR) < 0) {
+                systemError("shutdown");
+            }
+        }
+
         void expectEof() {
             if (!pending_.empty()) {
                 throw std::runtime_error("Unexpected bytes after response");
@@ -523,6 +529,30 @@ namespace {
         survivor.expectEof();
 
         expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, AnswersRequestAfterClientClosesWriteSide) {
+        for (int i = 0; i < 20; ++i) {
+            SCOPED_TRACE(i);
+            TestClient client(port_);
+
+            client.sendAll(Requests::rawGet("/other.txt"));
+            client.closeWrite();
+
+            expectOK(client, otherBody_);
+            client.expectEof();
+        }
+    }
+
+    TEST_F(ServerTest, SendsLargeResponseAfterClientClosesWriteSide) {
+        const std::string body = createLargeFile();
+        TestClient client(port_);
+
+        client.sendAll(Requests::rawGet("/large.bin"));
+        client.closeWrite();
+
+        expectOK(client, body);
+        client.expectEof();
     }
 
     TEST_F(ServerTest, SendsCompleteLargeBinaryResponseAndReusesConnection) {
