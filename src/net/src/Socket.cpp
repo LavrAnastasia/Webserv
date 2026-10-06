@@ -1,6 +1,7 @@
 #include "net/Socket.hpp"
 
-#include <stdexcept>
+#include <cerrno>
+#include <system_error>
 
 Socket::Socket() = default;
 
@@ -20,12 +21,12 @@ int Socket::getFd() const {
 
 void Socket::setNonBlocking() {
     if (!fd_.setNonBlocking()) {
-        throw std::runtime_error("NetError: Failed to set socket to non-blocking.");
+        throw std::system_error(errno, std::generic_category(), "fcntl(O_NONBLOCK)");
     }
 }
 
 void Socket::setCloseOnExec() {
     if (!fd_.setCloseOnExec()) {
-        throw std::runtime_error("NetError: Failed to set socket to close-on-exec.");
+        throw std::system_error(errno, std::generic_category(), "fcntl(FD_CLOEXEC)");
     }
 }
