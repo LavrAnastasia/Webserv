@@ -36,14 +36,25 @@ bool HttpHeaders::has(std::string_view name) const {
 
 bool HttpHeaders::has(std::string_view name, std::string_view token) const {
     const std::optional<std::string> value = get(name);
-
-    if (!value) {
+        if (!value) {
         return false;
-    }
+        }
 
-    return std::ranges::any_of(std::views::split(*value, Http::Syntax::ListSeparator), [token](const auto& part) {
-        return equals(Http::Ascii::trim(std::string(part.begin(), part.end())), token);
-    });
+        std::string_view rest = *value;
+
+        while (true) {
+        const std::size_t separator = rest.find(Http::Syntax::ListSeparator);
+
+        if (equals(Http::Ascii::trim(std::string(rest.substr(0, separator))), token)) {
+            return true;
+        }
+
+        if (separator == std::string_view::npos) {
+            return false;
+        }
+
+        rest.remove_prefix(separator + 1);
+        }
 }
 
 std::optional<std::string> HttpHeaders::get(std::string_view name) const {
