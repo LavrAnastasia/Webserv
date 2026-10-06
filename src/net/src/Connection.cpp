@@ -14,7 +14,14 @@ Connection::Connection(int fd, const std::string& ip, const ServerConfig& config
 
 // called by server, serializes the response into sendBuffer_ and updates state
 void Connection::appendResponse(const HttpResponse& response) {
-    sendBuffer_.append(HttpSerializer::serialize(response, {.close = shouldClose_}));
+    std::string serialized = HttpSerializer::serialize(response, {.close = shouldClose_});
+
+    if (sendBuffer_.empty()) {
+        sendBuffer_ = std::move(serialized);
+    } else {
+        sendBuffer_.append(serialized);
+    }
+
     lastActivity_ = std::chrono::steady_clock::now();
 }
 
@@ -55,7 +62,7 @@ bool Connection::sendResponse() {
         return true;
     }
 
-    ssize_t bytesSent = send(getFd(), sendBuffer_.data(), sendBuffer_.length(), 0);
+    ssize_t bytesSent = send(getFd(), sendBuffer_.data() + sendOffset_, sendBuffer_.size() - sendOffset_, 0);
 
     //treat all negative returns as OS buffer full, try again
     if (bytesSent < 0) {
@@ -67,8 +74,12 @@ bool Connection::sendResponse() {
         return false;
     }
 
-    //bytes successfully sent, remove them from outgoing buffer
-    sendBuffer_.erase(0, bytesSent);
+    sendOffset_ += static_cast<std::size_t>(bytesSent);
+
+    if (sendOffset_ == sendBuffer_.size()) {
+        sendBuffer_ = std::string();
+        sendOffset_ = 0;
+    }
 
     //update timeout timer whenever bytes sent: prevent timeout during large transfers
     lastActivity_ = std::chrono::steady_clock::now();

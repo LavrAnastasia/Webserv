@@ -21,6 +21,7 @@ private:
     std::string clientIp_;
     HttpParser parser_;
     std::string sendBuffer_;
+    std::size_t sendOffset_ = 0;
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
     bool shouldClose_;
