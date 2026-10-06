@@ -6,8 +6,10 @@
 
 #include "http/HttpRequest.hpp"
 
-namespace CgiEnvironment {
+struct ConnectionInfo;
 
-    std::vector<std::string> build(const HttpRequest& request, const std::filesystem::path& script);
-
-} // namespace CgiEnvironment
+class CgiEnvironment {
+public:
+    static std::vector<std::string>
+    build(const HttpRequest& request, const std::filesystem::path& script, const ConnectionInfo& connectionInfo);
+};

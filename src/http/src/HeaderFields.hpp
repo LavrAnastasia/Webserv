@@ -13,6 +13,7 @@ namespace Http::Headers {
     constexpr std::string_view Location = "Location";
     constexpr std::string_view Server = "Server";
     constexpr std::string_view Status = "Status";
+    constexpr std::string_view Proxy = "Proxy";
 
     namespace ConnectionOption {
         constexpr std::string_view Close = "close";

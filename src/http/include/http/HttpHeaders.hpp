@@ -24,6 +24,5 @@ public:
     bool has(std::string_view name, std::string_view token) const;
     std::optional<std::string> get(std::string_view name) const;
     std::string serialize() const;
-    auto begin() const noexcept { return _headers.begin(); }
-    auto end() const noexcept { return _headers.end(); }
+    std::vector<std::string> names() const;
 };

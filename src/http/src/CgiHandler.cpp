@@ -7,7 +7,8 @@
 
 namespace fs = std::filesystem;
 
-HandlerResult CgiHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
+HandlerResult
+CgiHandler::handle(const HttpRequest& request, const ResolvedRoute& route, const ConnectionInfo& connectionInfo) {
     try {
         const fs::path root = fs::weakly_canonical(route.root);
         const fs::path script = fs::weakly_canonical(Fs::resolve(root, request.path));
@@ -29,7 +30,7 @@ HandlerResult CgiHandler::handle(const HttpRequest& request, const ResolvedRoute
         return CgiRequest{
             .interpreter = route.cgi->interpreter,
             .script = script,
-            .env = CgiEnvironment::build(request, script),
+            .env = CgiEnvironment::build(request, script, connectionInfo),
             .body = request.body
         };
     } catch (const fs::filesystem_error& error) {
