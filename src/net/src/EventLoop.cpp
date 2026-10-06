@@ -233,21 +233,32 @@ void EventLoop::run() {
         // poller returns vector<pollfd> of active sockets (incl. *what* activity)
         auto activeSockets = poller_.waitForEvents();
         for (pollfd& event : activeSockets) {
-            auto it = std::find(listeningFds_.begin(), listeningFds_.end(), event.fd);
+            const bool listening = std::ranges::find(listeningFds_, event.fd) != listeningFds_.end();
+            const std::optional<int> client = listening ? std::nullopt : cgiRegistry_.client(event.fd);
 
-            //if active fd is in listeningFds_, it's a new connection
-            if (it != listeningFds_.end()) {
-                handleNewConnection(event.fd);
-            } else if (std::optional<int> client = cgiRegistry_.client(event.fd)) {
-                handleCgiActivity(*client, event.fd);
-            }
-            //if not, it's an existing client
-            else {
-                handleClientActivity(event.fd, event.revents);
+            try {
+                if (listening) {
+                    handleNewConnection(event.fd);
+                } else if (client) {
+                    handleCgiActivity(*client, event.fd);
+                } else {
+                    handleClientActivity(event.fd, event.revents);
+                }
+            } catch (const std::exception& error) {
+                std::cerr << "webserv: error: " << error.what() << std::endl;
+
+                if (!listening) {
+                    closeConnection(client.value_or(event.fd));
+                }
             }
         }
-        cleanupTimedOutConnections();
-        cleanupTimedOutCgi();
+
+        try {
+            cleanupTimedOutConnections();
+            cleanupTimedOutCgi();
+        } catch (const std::exception& error) {
+            std::cerr << "webserv: error: " << error.what() << std::endl;
+        }
     }
 }
 
