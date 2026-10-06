@@ -16,6 +16,8 @@
 
 namespace {
     constexpr std::chrono::seconds kCgiTimeout{60};
+    constexpr std::size_t kMaxConnections = 1000;
+    constexpr std::chrono::milliseconds kAcceptPause{500};
 } // namespace
 
 volatile std::sig_atomic_t EventLoop::stopRequested_ = 0;
@@ -54,8 +56,11 @@ void EventLoop::handleNewConnection(int listenFd) {
             // if config for accepted client not found, close connection
             close(clientInfo->fd);
         }
+    } else {
+        acceptAgainAt_ = std::chrono::steady_clock::now() + kAcceptPause;
     }
-    //if connection was dropped, do nothing
+
+    updateAcceptEvents();
 }
 
 void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
@@ -259,6 +264,8 @@ void EventLoop::run() {
         } catch (const std::exception& error) {
             std::cerr << "webserv: error: " << error.what() << std::endl;
         }
+
+        updateAcceptEvents();
     }
 }
 
@@ -318,5 +325,20 @@ void EventLoop::cleanupTimedOutCgi() {
 
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::GatewayTimeout, connection->getServerConfig()));
         poller_.modifySocket(clientFd, POLLOUT);
+    }
+}
+
+void EventLoop::updateAcceptEvents() {
+    const bool enabled =
+        connectionRegistry_.size() < kMaxConnections && std::chrono::steady_clock::now() >= acceptAgainAt_;
+
+    if (enabled == acceptEventsEnabled_) {
+        return;
+    }
+
+    acceptEventsEnabled_ = enabled;
+
+    for (int fd : listeningFds_) {
+        poller_.modifySocket(fd, enabled ? POLLIN : 0);
     }
 }
