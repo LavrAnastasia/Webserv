@@ -1,15 +1,17 @@
 #include "net/ServerSocket.hpp"
 
 #include <arpa/inet.h> // inet_pton()
+#include <cerrno>
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h> // socket(), AF_INET, SOCK_STREAM
+#include <system_error>
 #include <unistd.h>
 
 ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(port) {
     int newFd = socket(AF_INET, SOCK_STREAM, 0);
     if (newFd < 0) {
-        throw std::runtime_error("NetError: Failed to create socket.");
+        throw std::system_error(errno, std::generic_category(), "socket()");
     }
 
     setFd(newFd);
@@ -17,25 +19,25 @@ ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(
     socketAddress_.sin_family = AF_INET; //external IPv4 address
     socketAddress_.sin_port = htons(port_); //convert port_ from machine to server byte order
 
-    if (host.empty() || host == "0.0.0.0") {
+    if (host == "0.0.0.0") {
         socketAddress_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
     } else {
         // convert string to uint32_t to be usable by OS
         if (inet_pton(AF_INET, host.c_str(), &socketAddress_.sin_addr) <= 0) {
-            throw std::runtime_error("NetError: Invalid host IP address: " + host);
+            throw std::invalid_argument("invalid host address: " + host);
         }
     }
     int opt = 1;
     if (setsockopt(getFd(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
-        throw std::runtime_error("NetError: Failed to set SO_REUSEADDR.");
+        throw std::system_error(errno, std::generic_category(), "setsockopt(SO_REUSEADDR)");
     } //override port's TIME_WAIT, allowing instant reconnection
 
     if (bind(getFd(), (struct sockaddr*)&socketAddress_, sizeof(socketAddress_)) == -1) {
-        throw std::runtime_error("NetError: Failed to bind to port.");
+        throw std::system_error(errno, std::generic_category(), "bind()");
     } //bind() can fail if port is already in use, or if permission is denied
 
     if (listen(getFd(), SOMAXCONN) == -1) {
-        throw std::runtime_error("NetError: Failed to listen on socket.");
+        throw std::system_error(errno, std::generic_category(), "listen()");
     } //set network socket to listen mode, SOMAXCONN = max allowed connection queue size
 }
 

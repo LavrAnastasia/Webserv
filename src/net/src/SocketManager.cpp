@@ -1,8 +1,11 @@
 #include "net/SocketManager.hpp"
 #include "config/ServerConfig.hpp"
+#include "log/Log.hpp"
 #include "net/ServerSocket.hpp"
 
-#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <system_error>
 
 //destructor impementation not needed with smart pointers
 
@@ -22,17 +25,18 @@ void SocketManager::createServers(const std::vector<ServerConfig>& configs) {
                 fdToConfig_[fd] = &config;
                 //6. unique pointer cannot be copied and must be moved into vector
                 servers_.push_back(std::move(newSocket));
-            } catch (const std::exception& e) {
+                Log::info("listening on " + listenBlock.host + ":" + std::to_string(listenBlock.port));
+            } catch (const std::system_error& e) {
                 // error is logged, but valid ports start up normally
-                std::cerr << "NetError: failed to start listener on " << listenBlock.host;
-                std::cerr << ":" << listenBlock.port << " - " << e.what() << std::endl;
+                Log::warn(
+                    "failed to start listener on " + listenBlock.host + ":" + std::to_string(listenBlock.port) + ": " +
+                    e.what()
+                );
             }
         }
     }
     if (servers_.empty()) {
-        throw std::runtime_error(
-            "Critical error: No sockets could be opened. Please check if ports are already in use."
-        );
+        throw std::runtime_error("no listening sockets could be opened");
     }
 }
 

@@ -25,11 +25,13 @@ namespace {
     std::optional<std::string> httpDate() {
         const std::time_t now = std::time(nullptr);
 
-        std::tm time{};
+        const std::tm* utc = std::gmtime(&now);
 
-        if (gmtime_r(&now, &time) == nullptr) {
+        if (utc == nullptr) {
             return std::nullopt;
         }
+
+        const std::tm time = *utc;
 
         std::string date;
         date.reserve(29);

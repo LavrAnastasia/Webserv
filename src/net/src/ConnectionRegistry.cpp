@@ -54,3 +54,7 @@ ConnectionRegistry::getTimedOutConnections(int timeoutSeconds, std::chrono::stea
     }
     return timedOutFds;
 }
+
+std::size_t ConnectionRegistry::size() const {
+    return activeConnections_.size();
+}

@@ -1,5 +1,6 @@
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "ConfigSpecification.hpp"
 #include "ConfigValidationError.hpp"
@@ -10,6 +11,16 @@ namespace {
         {"server", Config::Block::Server},
         {"location", Config::Block::Location},
     };
+
+    constexpr std::string_view kAnyHost = "0.0.0.0";
+
+    std::string endpoint(const ListenConfig& listen) {
+        return listen.host + ":" + std::to_string(listen.port);
+    }
+
+    bool overlaps(const ListenConfig& a, const ListenConfig& b) {
+        return a.port == b.port && (a.host == b.host || a.host == kAnyHost || b.host == kAnyHost);
+    }
 } // namespace
 
 // Private
@@ -37,17 +48,28 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
 // Public
 
 void ConfigValidator::validate(const Configuration& config) {
-    std::unordered_set<std::string> endpoints;
+    std::vector<ListenConfig> seen;
 
     for (const ServerConfig& server : config.servers) {
         for (const ListenConfig& listen : server.listen) {
-            const std::string endpoint = listen.host + ":" + std::to_string(listen.port);
+            for (const ListenConfig& other : seen) {
+                if (!overlaps(listen, other)) {
+                    continue;
+                }
 
-            if (!endpoints.insert(endpoint).second) {
+                if (other.host == listen.host) {
+                    throw ConfigValidationError(
+                        ConfigValidationError::Reason::DuplicateValue, "listen endpoint: " + endpoint(listen)
+                    );
+                }
+
                 throw ConfigValidationError(
-                    ConfigValidationError::Reason::DuplicateValue, "listen endpoint: " + endpoint
+                    ConfigValidationError::Reason::ConflictingValue,
+                    "listen endpoints: " + endpoint(other) + " and " + endpoint(listen)
                 );
             }
+
+            seen.push_back(listen);
         }
     }
 }

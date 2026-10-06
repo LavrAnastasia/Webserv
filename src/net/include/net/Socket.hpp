@@ -7,7 +7,6 @@ private:
     FileDescriptor fd_;
 
 protected:
-    bool isValidFd() const;
     void setFd(int fd);
 
 public:

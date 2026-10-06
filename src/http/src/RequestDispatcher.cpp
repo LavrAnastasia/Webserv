@@ -11,7 +11,7 @@ HandlerResult RequestDispatcher::dispatch(const HttpRequest& request, const Serv
     const std::optional<ResolvedRoute> route = Router::resolve(request, server);
 
     if (!route) {
-        return ErrorResponseFactory::create(HttpStatus::NotFound, server);
+        return ErrorResponseFactory::create(HttpStatus::NotFound, Router::mapErrorPages(server));
     }
 
     if (route->redirect) {
@@ -42,5 +42,5 @@ HandlerResult RequestDispatcher::dispatch(const HttpRequest& request, const Serv
 }
 
 HttpResponse RequestDispatcher::fail(HttpStatus status, const ServerConfig& server) {
-    return ErrorResponseFactory::create(status, server);
+    return ErrorResponseFactory::create(status, Router::mapErrorPages(server));
 }

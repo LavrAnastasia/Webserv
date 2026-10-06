@@ -1,7 +1,6 @@
 #include "net/Poller.hpp"
 #include <cerrno> // for 'errno' variable and EINTR constant
-#include <cstring> // for std::strerror()
-#include <stdexcept> // for std::runtime_error
+#include <system_error>
 
 void Poller::addSocket(int fd) {
     pollfd newEvent;
@@ -37,7 +36,7 @@ std::vector<pollfd> Poller::waitForEvents() {
         if (errno == EINTR) {
             return {}; // benign OS interruption -no need to crash server
         }
-        throw std::runtime_error("NetError: poll() failed: " + std::string(std::strerror(errno)));
+        throw std::system_error(errno, std::generic_category(), "poll()");
     }
     std::vector<pollfd> activeSockets;
     for (const pollfd& p : pollFds_) {
@@ -53,7 +52,7 @@ std::vector<pollfd> Poller::waitForEvents() {
     how pollfd.revents flags are checked: if (p.revents & POLLIN) etc.
     common pollfd.revents flags:    POLLIN (data ready to read)
                                     POLLOUT (data ready to write)
-                                    POLLHUP (client closed connection)
+                                    POLLHUP (client hung up; on macOS can mean it only stopped sending)
                                     POLLERR (abrupt failure ex. crashed router)
 
     erase_if syntax:    pollFds_ = the list to look at

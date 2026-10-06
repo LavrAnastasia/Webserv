@@ -155,6 +155,23 @@ namespace {
         EXPECT_EQ(second.root, fs::path("./second"));
     }
 
+    TEST_F(ConfigLoaderTest, LoadsDifferentHostsOnSamePort) {
+        const auto config = loadText(makeConfig("listen 127.0.0.1:8080;\nlisten 127.0.0.2:8080;\nroot ./public;\n"));
+
+        ASSERT_EQ(config.servers.front().listen.size(), 2u);
+    }
+
+    TEST_F(ConfigLoaderTest, MaxBodySizeIsLargestOfServerAndLocations) {
+        const auto config = loadText(makeConfig(
+            "listen 127.0.0.1:8080;\nroot ./public;\nclient_max_body_size 8;\n",
+            "location / { methods GET; }\n"
+            "location /upload { methods POST; client_max_body_size 64; }\n"
+            "location /small { methods POST; client_max_body_size 2; }\n"
+        ));
+
+        EXPECT_EQ(config.servers.front().maxBodySize(), 64u);
+    }
+
     TEST_F(ConfigLoaderTest, IgnoresCommentsAndWhitespace) {
         const auto config = loadText(R"(
         # Comment before the server
@@ -231,11 +248,14 @@ namespace {
 
         {"DuplicateRoot", makeConfig(SERVER_DIRECTIVES + "root ./other;\n")},
         {"DuplicateEndpoint", makeConfig(SERVER_DIRECTIVES + "listen localhost:8080;\n")},
+        {"AnyHostAfterEndpoint", makeConfig(SERVER_DIRECTIVES + "listen 0.0.0.0:8080;\n")},
+        {"AnyHostBeforeEndpointInOtherServer", makeConfig("listen 0.0.0.0:8080;\nroot ./other;\n") + makeConfig()},
         {"DuplicateLocation", makeConfig(SERVER_DIRECTIVES, LOCATION + LOCATION)},
 
         {"MethodsInServerBlock", makeConfig(SERVER_DIRECTIVES + "methods GET;\n")},
         {"TooManyIndexArguments", makeConfig(SERVER_DIRECTIVES + "index first.html second.html;\n")},
         {"IndexWithoutArgument", makeConfig(SERVER_DIRECTIVES + "index;\n")},
+        {"ErrorPageWithoutLeadingSlash", makeConfig(SERVER_DIRECTIVES + "error_page 404 errors/404.html;\n")},
 
         {"UnsupportedMethod", makeConfig(SERVER_DIRECTIVES, "location / { methods PUT; }\n")},
         {"DuplicateMethod", makeConfig(SERVER_DIRECTIVES, "location / { methods GET GET; }\n")},

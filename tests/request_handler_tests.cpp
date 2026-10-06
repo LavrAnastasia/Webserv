@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "config/ServerConfig.hpp"
+#include "http/HttpParser.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
@@ -37,6 +38,25 @@ namespace {
             Files::write(root_ / "index.html", fileBody_);
         }
     };
+
+    TEST_F(RequestHandlerTest, LocationLimitStillAppliesWhenParserAcceptsMore) {
+        LocationConfig upload{};
+        upload.path = "/upload";
+        upload.allowedMethods = {HttpMethod::Post};
+        upload.clientMaxBodySize = 64;
+        server_.locations.push_back(upload);
+
+        HttpParser parser(server_.maxBodySize());
+        const std::string request =
+            "GET /index.html HTTP/1.1\r\nHost: localhost\r\nContent-Length: 16\r\n\r\n" + std::string(16, 'a');
+        const ParseResult parsed = parser.append(request.data(), request.size());
+
+        ASSERT_TRUE(std::holds_alternative<Complete>(parsed));
+        const auto result = RequestDispatcher::dispatch(std::get<Complete>(parsed).request, server_);
+
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        EXPECT_EQ(std::get<HttpResponse>(result).status, HttpStatus::PayloadTooLarge);
+    }
 
     TEST_F(RequestHandlerTest, Returns200ForExistingFile) {
         const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_);

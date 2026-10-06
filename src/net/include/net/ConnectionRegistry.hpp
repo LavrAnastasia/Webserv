@@ -3,6 +3,7 @@
 #include "net/Connection.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -40,6 +41,8 @@ public:
     in case of abrupt client disconnection
 */
     Connection* getConnection(int fd);
+
+    std::size_t size() const;
 
     /*
     checks activeConnections_ for timed out connections, returns a vector containing

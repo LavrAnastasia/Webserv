@@ -16,6 +16,7 @@ public:
         MissingBody,
         UnexpectedBody,
         ConflictingBehavior,
+        ConflictingValue,
         EmptyConfig,
     };
 

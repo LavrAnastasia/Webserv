@@ -6,7 +6,6 @@
 #include <string>
 #include <utility>
 
-#include "fs/Path.hpp"
 #include "http/HttpMethod.hpp"
 #include "http/HttpStatus.hpp"
 
@@ -50,8 +49,7 @@ namespace {
         return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
     }
 
-    HttpResponse
-    buildResponse(HttpStatus status, const std::unordered_map<HttpStatus, std::filesystem::path>& errorPages) {
+    HttpResponse buildResponse(HttpStatus status, const ErrorPages& errorPages) {
         const auto it = errorPages.find(status);
 
         if (it == errorPages.end()) {
@@ -78,14 +76,6 @@ HttpResponse ErrorResponseFactory::create(HttpStatus status, const ResolvedRoute
     return response;
 }
 
-HttpResponse ErrorResponseFactory::create(HttpStatus status, const ServerConfig& server) {
-    std::unordered_map<HttpStatus, std::filesystem::path> errorPages;
-
-    for (const auto& [code, page] : server.errorPages) {
-        errorPages.emplace(code, Fs::resolve(server.root, page));
-    }
-
-    HttpResponse response = buildResponse(status, errorPages);
-
-    return response;
+HttpResponse ErrorResponseFactory::create(HttpStatus status, const ErrorPages& pages) {
+    return buildResponse(status, pages);
 }

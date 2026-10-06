@@ -1,12 +1,14 @@
 #include "net/Connection.hpp"
 
+#include "config/ServerConfig.hpp"
 #include "http/HttpSerializer.hpp"
 
 #include <sys/socket.h>
 
 
 Connection::Connection(int fd, const std::string& ip, const ServerConfig& config)
-    : clientIp_(ip), serverConfig_(config), lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
+    : clientIp_(ip), parser_(config.maxBodySize()), serverConfig_(config),
+      lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
     setFd(fd);
     setNonBlocking();
     setCloseOnExec();
@@ -14,7 +16,14 @@ Connection::Connection(int fd, const std::string& ip, const ServerConfig& config
 
 // called by server, serializes the response into sendBuffer_ and updates state
 void Connection::appendResponse(const HttpResponse& response) {
-    sendBuffer_.append(HttpSerializer::serialize(response, {.close = shouldClose_}));
+    std::string serialized = HttpSerializer::serialize(response, {.close = shouldClose_});
+
+    if (sendBuffer_.empty()) {
+        sendBuffer_ = std::move(serialized);
+    } else {
+        sendBuffer_.append(serialized);
+    }
+
     lastActivity_ = std::chrono::steady_clock::now();
 }
 
@@ -45,17 +54,13 @@ std::optional<ParseResult> Connection::receiveRequest() {
     return parser_.append(buffer, bytesReceived);
 }
 
-/*
-    called by server when status == POLLOUT, calls send() and removes bytes from sendBuffer_
-    send function signature: ssize_t send(int sockfd, const void *buf, size_t len, int flags);
-*/
 bool Connection::sendResponse() {
     //early exit if buffer is empty
     if (sendBuffer_.empty()) {
         return true;
     }
 
-    ssize_t bytesSent = send(getFd(), sendBuffer_.data(), sendBuffer_.length(), 0);
+    ssize_t bytesSent = send(getFd(), sendBuffer_.data() + sendOffset_, sendBuffer_.size() - sendOffset_, 0);
 
     //treat all negative returns as OS buffer full, try again
     if (bytesSent < 0) {
@@ -67,8 +72,12 @@ bool Connection::sendResponse() {
         return false;
     }
 
-    //bytes successfully sent, remove them from outgoing buffer
-    sendBuffer_.erase(0, bytesSent);
+    sendOffset_ += static_cast<std::size_t>(bytesSent);
+
+    if (sendOffset_ == sendBuffer_.size()) {
+        std::string().swap(sendBuffer_);
+        sendOffset_ = 0;
+    }
 
     //update timeout timer whenever bytes sent: prevent timeout during large transfers
     lastActivity_ = std::chrono::steady_clock::now();

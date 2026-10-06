@@ -2,20 +2,24 @@
 #include "http/CgiResponseParser.hpp"
 #include "http/HttpResponse.hpp"
 #include "http/RequestDispatcher.hpp"
+#include "log/Log.hpp"
 #include "net/TcpServer.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <csignal>
 #include <exception>
-#include <iostream>
 #include <optional>
+#include <string>
 #include <unistd.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
     constexpr std::chrono::seconds kCgiTimeout{60};
+    constexpr std::size_t kMaxConnections = 1000;
+    constexpr std::chrono::milliseconds kAcceptPause{500};
 } // namespace
 
 volatile std::sig_atomic_t EventLoop::stopRequested_ = 0;
@@ -31,31 +35,39 @@ void EventLoop::handleSignal(int sig) {
 }
 
 void EventLoop::handleNewConnection(int listenFd) {
-    //auto allows nullopt return
-    auto clientInfo = tcpServer_.acceptClient(listenFd);
+    const auto accepted = tcpServer_.acceptClient(listenFd);
 
-    //check for dropped connection
-    if (clientInfo) {
-        //get config block for this fd
-        const ServerConfig* config = tcpServer_.getConfigForFd(listenFd);
-        if (config) {
-            try {
-                //add new connection to registry, including config block
-                connectionRegistry_.addConnection(clientInfo->fd, clientInfo->ip, config);
-                //tell poller to track it (watch for incoming http request)
-                poller_.addSocket(clientInfo->fd);
-            } catch (const std::exception& e) {
-                // in case of setNonBlocking() failure, log error and remove connection + socket
-                std::cerr << "NetError: Failed to initialize client " << clientInfo->ip << " - " << e.what()
-                          << std::endl;
-                closeConnection(clientInfo->fd);
-            }
-        } else {
-            // if config for accepted client not found, close connection
-            close(clientInfo->fd);
+    if (const TcpServer::AcceptError* error = std::get_if<TcpServer::AcceptError>(&accepted)) {
+        if (*error == TcpServer::AcceptError::NoDescriptors) {
+            Log::warn("accept() failed: too many open files, pausing new connections");
+            acceptAgainAt_ = std::chrono::steady_clock::now() + kAcceptPause;
         }
+
+        updateAcceptEvents();
+        return;
     }
-    //if connection was dropped, do nothing
+
+    const TcpServer::ClientInfo& clientInfo = std::get<TcpServer::ClientInfo>(accepted);
+
+    //get config block for this fd
+    const ServerConfig* config = tcpServer_.getConfigForFd(listenFd);
+    if (config) {
+        try {
+            //add new connection to registry, including config block
+            connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, config);
+            //tell poller to track it (watch for incoming http request)
+            poller_.addSocket(clientInfo.fd);
+        } catch (const std::exception& e) {
+            // in case of setNonBlocking() failure, log error and remove connection + socket
+            Log::error(std::string("failed to set up connection: ") + e.what() + ", client: " + clientInfo.ip);
+            closeConnection(clientInfo.fd);
+        }
+    } else {
+        // if config for accepted client not found, close connection
+        close(clientInfo.fd);
+    }
+
+    updateAcceptEvents();
 }
 
 void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
@@ -64,8 +76,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     if (connection == nullptr) {
         return;
     }
-    //handle errors and disconnects (POLLERR and POLLHUP)
-    if (events & (POLLERR | POLLHUP)) {
+    // close on error, or on hangup with nothing left to read
+    if ((events & POLLERR) || ((events & POLLHUP) && !(events & POLLIN))) {
         closeConnection(clientFd);
         return;
     }
@@ -141,6 +153,7 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     std::optional<CgiProcess> process = CgiProcess::launch(request);
 
     if (!process) {
+        Log::error("failed to start CGI " + request.script.string() + ", client: " + connection.getClientIp());
         connection.appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection.getServerConfig()));
         poller_.modifySocket(connection.getFd(), POLLOUT);
         return;
@@ -198,6 +211,8 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     if (response) {
         connection->appendResponse(*response);
     } else {
+        const std::string problem = process->output().empty() ? "CGI exited without output" : "CGI sent invalid header";
+        Log::error(problem + " while reading response header, client: " + connection->getClientIp());
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection->getServerConfig()));
     }
 
@@ -233,21 +248,40 @@ void EventLoop::run() {
         // poller returns vector<pollfd> of active sockets (incl. *what* activity)
         auto activeSockets = poller_.waitForEvents();
         for (pollfd& event : activeSockets) {
-            auto it = std::find(listeningFds_.begin(), listeningFds_.end(), event.fd);
+            const bool listening = std::ranges::find(listeningFds_, event.fd) != listeningFds_.end();
+            const std::optional<int> client = listening ? std::nullopt : cgiRegistry_.client(event.fd);
 
-            //if active fd is in listeningFds_, it's a new connection
-            if (it != listeningFds_.end()) {
-                handleNewConnection(event.fd);
-            } else if (std::optional<int> client = cgiRegistry_.client(event.fd)) {
-                handleCgiActivity(*client, event.fd);
-            }
-            //if not, it's an existing client
-            else {
-                handleClientActivity(event.fd, event.revents);
+            try {
+                if (listening) {
+                    handleNewConnection(event.fd);
+                } else if (client) {
+                    handleCgiActivity(*client, event.fd);
+                } else {
+                    handleClientActivity(event.fd, event.revents);
+                }
+            } catch (const std::exception& error) {
+                if (listening) {
+                    Log::error(std::string("failed to accept connection: ") + error.what());
+                    continue;
+                }
+
+                const int fd = client.value_or(event.fd);
+                const Connection* connection = connectionRegistry_.getConnection(fd);
+                const std::string ip = connection != nullptr ? connection->getClientIp() : "unknown";
+
+                closeConnection(fd);
+                Log::error(std::string(error.what()) + " while processing request, connection closed, client: " + ip);
             }
         }
-        cleanupTimedOutConnections();
-        cleanupTimedOutCgi();
+
+        try {
+            cleanupTimedOutConnections();
+            cleanupTimedOutCgi();
+        } catch (const std::exception& error) {
+            Log::error(std::string(error.what()) + " while checking timeouts");
+        }
+
+        updateAcceptEvents();
     }
 }
 
@@ -265,20 +299,9 @@ void EventLoop::cleanupTimedOutConnections() {
             continue;
         }
 
-        // connection already flagged to close, but timed out before closing
-        // close immediately, do not queue another 408
-        if (connection->shouldClose()) {
-            std::cout << "webserv: info: fd " << fd << " timed out while waiting to close. Closing immediately."
-                      << std::endl;
-            closeConnection(fd);
-            continue;
-        }
-
-        // response still pending after inactivity timeout
-        // close immediately, do not queue 408
-        if (!connection->isSendComplete()) {
-            std::cout << "webserv: info: fd " << fd << " timed out while sending response. Closing immediately."
-                      << std::endl;
+        // response pending or connection flagged to close: close immediately, do not queue 408
+        if (connection->shouldClose() || !connection->isSendComplete()) {
+            Log::info("client timed out while sending response, client: " + connection->getClientIp());
             closeConnection(fd);
             continue;
         }
@@ -287,12 +310,8 @@ void EventLoop::cleanupTimedOutConnections() {
         connection->setShouldClose(true);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
         poller_.modifySocket(fd, POLLOUT);
-        std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
+        Log::info("client timed out while waiting for request, client: " + connection->getClientIp());
     }
-}
-
-void EventLoop::stop() {
-    stopRequested_ = 1;
 }
 
 void EventLoop::cleanupTimedOutCgi() {
@@ -305,7 +324,26 @@ void EventLoop::cleanupTimedOutCgi() {
             continue;
         }
 
+        Log::error(
+            "CGI timed out after " + std::to_string(kCgiTimeout.count()) +
+            " s while reading response, client: " + connection->getClientIp()
+        );
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::GatewayTimeout, connection->getServerConfig()));
         poller_.modifySocket(clientFd, POLLOUT);
+    }
+}
+
+void EventLoop::updateAcceptEvents() {
+    const bool enabled =
+        connectionRegistry_.size() < kMaxConnections && std::chrono::steady_clock::now() >= acceptAgainAt_;
+
+    if (enabled == acceptEventsEnabled_) {
+        return;
+    }
+
+    acceptEventsEnabled_ = enabled;
+
+    for (int fd : listeningFds_) {
+        poller_.modifySocket(fd, enabled ? POLLIN : 0);
     }
 }
