@@ -313,10 +313,6 @@ void EventLoop::cleanupTimedOutConnections() {
     }
 }
 
-void EventLoop::stop() {
-    stopRequested_ = 1;
-}
-
 void EventLoop::cleanupTimedOutCgi() {
     for (int clientFd : cgiRegistry_.expired(kCgiTimeout, std::chrono::steady_clock::now())) {
         closeCgi(clientFd);

@@ -7,10 +7,6 @@ Socket::Socket() = default;
 
 Socket::~Socket() = default;
 
-bool Socket::isValidFd() const {
-    return fd_.isOpen();
-}
-
 void Socket::setFd(int fd) {
     fd_ = FileDescriptor(fd);
 }

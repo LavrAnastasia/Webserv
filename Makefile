@@ -109,11 +109,13 @@ fclean: clean
 
 re: fclean all
 
-format: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 clang-format -i
+format:
+	find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 clang-format -i
 
-format-check: find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 clang-format --dry-run --Werror
+format-check:
+	find src \( -name "*.cpp" -o -name "*.hpp" \) -print0 | xargs -0 clang-format --dry-run --Werror
 
-.PHONY: all clean fclean re
+.PHONY: all clean fclean re format format-check
 .SECONDARY: $(BUILD_DIR) $(OBJ)
 
 include tests/tests.mk

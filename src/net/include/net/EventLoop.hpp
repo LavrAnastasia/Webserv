@@ -42,5 +42,4 @@ public:
 
     void initialize();
     void run();
-    void stop();
 };
