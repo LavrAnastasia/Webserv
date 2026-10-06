@@ -7,7 +7,8 @@ INCLUDES := \
 	-Isrc/config/include \
 	-Isrc/net/include \
 	-Isrc/fs/include \
-	-Isrc/cgi/include
+	-Isrc/cgi/include \
+	-Isrc/log/include
 
 DEPFLAGS := -MMD -MP
 
@@ -29,6 +30,10 @@ CONFIG_SRC := $(addprefix src/config/src/, \
 FS_SRC := $(addprefix src/fs/src/, \
 	Path.cpp \
 	FileDescriptor.cpp \
+)
+
+LOG_SRC := $(addprefix src/log/src/, \
+	Log.cpp \
 )
 
 CGI_SRC := $(addprefix src/cgi/src/, \
@@ -77,7 +82,8 @@ SRC := \
 	${HTTP_SRC} \
 	${NET_SRC} \
 	${CGI_SRC} \
-	${FS_SRC}
+	${FS_SRC} \
+	${LOG_SRC}
 
 BUILD_DIR := build
 

@@ -2,14 +2,15 @@
 #include "http/CgiResponseParser.hpp"
 #include "http/HttpResponse.hpp"
 #include "http/RequestDispatcher.hpp"
+#include "log/Log.hpp"
 #include "net/TcpServer.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <csignal>
 #include <exception>
-#include <iostream>
 #include <optional>
+#include <string>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -48,8 +49,7 @@ void EventLoop::handleNewConnection(int listenFd) {
                 poller_.addSocket(clientInfo->fd);
             } catch (const std::exception& e) {
                 // in case of setNonBlocking() failure, log error and remove connection + socket
-                std::cerr << "NetError: Failed to initialize client " << clientInfo->ip << " - " << e.what()
-                          << std::endl;
+                Log::error(std::string("failed to set up connection: ") + e.what() + ", client: " + clientInfo->ip);
                 closeConnection(clientInfo->fd);
             }
         } else {
@@ -250,11 +250,17 @@ void EventLoop::run() {
                     handleClientActivity(event.fd, event.revents);
                 }
             } catch (const std::exception& error) {
-                std::cerr << "webserv: error: " << error.what() << std::endl;
-
-                if (!listening) {
-                    closeConnection(client.value_or(event.fd));
+                if (listening) {
+                    Log::error(std::string("failed to accept connection: ") + error.what());
+                    continue;
                 }
+
+                const int fd = client.value_or(event.fd);
+                const Connection* connection = connectionRegistry_.getConnection(fd);
+                const std::string ip = connection != nullptr ? connection->getClientIp() : "unknown";
+
+                closeConnection(fd);
+                Log::error(std::string(error.what()) + " while processing request, connection closed, client: " + ip);
             }
         }
 
@@ -262,7 +268,7 @@ void EventLoop::run() {
             cleanupTimedOutConnections();
             cleanupTimedOutCgi();
         } catch (const std::exception& error) {
-            std::cerr << "webserv: error: " << error.what() << std::endl;
+            Log::error(std::string(error.what()) + " while checking timeouts");
         }
 
         updateAcceptEvents();
@@ -286,8 +292,7 @@ void EventLoop::cleanupTimedOutConnections() {
         // connection already flagged to close, but timed out before closing
         // close immediately, do not queue another 408
         if (connection->shouldClose()) {
-            std::cout << "webserv: info: fd " << fd << " timed out while waiting to close. Closing immediately."
-                      << std::endl;
+            Log::info("client timed out while sending response, client: " + connection->getClientIp());
             closeConnection(fd);
             continue;
         }
@@ -295,8 +300,7 @@ void EventLoop::cleanupTimedOutConnections() {
         // response still pending after inactivity timeout
         // close immediately, do not queue 408
         if (!connection->isSendComplete()) {
-            std::cout << "webserv: info: fd " << fd << " timed out while sending response. Closing immediately."
-                      << std::endl;
+            Log::info("client timed out while sending response, client: " + connection->getClientIp());
             closeConnection(fd);
             continue;
         }
@@ -305,7 +309,7 @@ void EventLoop::cleanupTimedOutConnections() {
         connection->setShouldClose(true);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
         poller_.modifySocket(fd, POLLOUT);
-        std::cout << "webserv: info: fd " << fd << " timed out. Sending 408." << std::endl;
+        Log::info("client timed out while waiting for request, sending 408, client: " + connection->getClientIp());
     }
 }
 

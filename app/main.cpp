@@ -1,19 +1,14 @@
 #include "config/ConfigLoader.hpp"
+#include "log/Log.hpp"
 #include "net/EventLoop.hpp"
 #include "net/TcpServer.hpp"
 #include <cstdlib>
 #include <exception>
-#include <iostream>
-
-namespace {
-    void printError(const std::string& message) {
-        std::cerr << "webserv: error: " << message << '\n';
-    }
-} // namespace
+#include <string>
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        printError("expected exactly one config file");
+        Log::error("usage: webserv <config file>");
         return EXIT_FAILURE;
     }
 
@@ -28,16 +23,16 @@ int main(int argc, char* argv[]) {
 
         loop.initialize();
 
-        std::cout << "webserv: info: server listening -press Ctrl+C to shut down" << std::endl;
+        Log::info("server started, press Ctrl+C to stop");
 
         loop.run();
 
     } catch (const std::exception& error) {
-        printError(error.what());
+        Log::error(std::string("cannot start: ") + error.what());
         return EXIT_FAILURE;
     }
 
-    std::cout << "webserv: info: graceful shutdown complete" << std::endl;
+    Log::info("server stopped");
 
     return EXIT_SUCCESS;
 }
