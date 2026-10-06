@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 /*
@@ -45,5 +46,7 @@ public:
     Finds the corresponding ServerSocket object and tells it to accept the new client.
     Obtains client info from the ServerSocket and returns it as a ClientInfo object.
     */
-    std::optional<TcpServer::ClientInfo> acceptClient(int listenFd);
+    enum class AcceptError { Retry, NoDescriptors };
+
+    std::variant<ClientInfo, AcceptError> acceptClient(int listenFd);
 };

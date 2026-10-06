@@ -13,6 +13,7 @@
 #include <string>
 #include <unistd.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -34,30 +35,36 @@ void EventLoop::handleSignal(int sig) {
 }
 
 void EventLoop::handleNewConnection(int listenFd) {
-    //auto allows nullopt return
-    auto clientInfo = tcpServer_.acceptClient(listenFd);
+    const auto accepted = tcpServer_.acceptClient(listenFd);
 
-    //check for dropped connection
-    if (clientInfo) {
-        //get config block for this fd
-        const ServerConfig* config = tcpServer_.getConfigForFd(listenFd);
-        if (config) {
-            try {
-                //add new connection to registry, including config block
-                connectionRegistry_.addConnection(clientInfo->fd, clientInfo->ip, config);
-                //tell poller to track it (watch for incoming http request)
-                poller_.addSocket(clientInfo->fd);
-            } catch (const std::exception& e) {
-                // in case of setNonBlocking() failure, log error and remove connection + socket
-                Log::error(std::string("failed to set up connection: ") + e.what() + ", client: " + clientInfo->ip);
-                closeConnection(clientInfo->fd);
-            }
-        } else {
-            // if config for accepted client not found, close connection
-            close(clientInfo->fd);
+    if (const TcpServer::AcceptError* error = std::get_if<TcpServer::AcceptError>(&accepted)) {
+        if (*error == TcpServer::AcceptError::NoDescriptors) {
+            Log::warn("accept() failed: too many open files, pausing new connections");
+            acceptAgainAt_ = std::chrono::steady_clock::now() + kAcceptPause;
+        }
+
+        updateAcceptEvents();
+        return;
+    }
+
+    const TcpServer::ClientInfo& clientInfo = std::get<TcpServer::ClientInfo>(accepted);
+
+    //get config block for this fd
+    const ServerConfig* config = tcpServer_.getConfigForFd(listenFd);
+    if (config) {
+        try {
+            //add new connection to registry, including config block
+            connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, config);
+            //tell poller to track it (watch for incoming http request)
+            poller_.addSocket(clientInfo.fd);
+        } catch (const std::exception& e) {
+            // in case of setNonBlocking() failure, log error and remove connection + socket
+            Log::error(std::string("failed to set up connection: ") + e.what() + ", client: " + clientInfo.ip);
+            closeConnection(clientInfo.fd);
         }
     } else {
-        acceptAgainAt_ = std::chrono::steady_clock::now() + kAcceptPause;
+        // if config for accepted client not found, close connection
+        close(clientInfo.fd);
     }
 
     updateAcceptEvents();
@@ -292,17 +299,8 @@ void EventLoop::cleanupTimedOutConnections() {
             continue;
         }
 
-        // connection already flagged to close, but timed out before closing
-        // close immediately, do not queue another 408
-        if (connection->shouldClose()) {
-            Log::info("client timed out while sending response, client: " + connection->getClientIp());
-            closeConnection(fd);
-            continue;
-        }
-
-        // response still pending after inactivity timeout
-        // close immediately, do not queue 408
-        if (!connection->isSendComplete()) {
+        // response pending or connection flagged to close: close immediately, do not queue 408
+        if (connection->shouldClose() || !connection->isSendComplete()) {
             Log::info("client timed out while sending response, client: " + connection->getClientIp());
             closeConnection(fd);
             continue;

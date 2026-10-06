@@ -19,7 +19,7 @@ ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(
     socketAddress_.sin_family = AF_INET; //external IPv4 address
     socketAddress_.sin_port = htons(port_); //convert port_ from machine to server byte order
 
-    if (host.empty() || host == "0.0.0.0") {
+    if (host == "0.0.0.0") {
         socketAddress_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
     } else {
         // convert string to uint32_t to be usable by OS

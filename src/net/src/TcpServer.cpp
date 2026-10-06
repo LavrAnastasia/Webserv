@@ -1,6 +1,8 @@
 #include "net/TcpServer.hpp"
 #include "net/ServerSocket.hpp"
 
+#include <cerrno>
+
 TcpServer::TcpServer(const Configuration& config) {
     socketManager_.createServers(config.servers);
 }
@@ -27,18 +29,18 @@ const ServerConfig* TcpServer::getConfigForFd(int listenFd) const {
     ClientInfo ip and port variables are passed by reference and populated by
     acceptConnection()
 */
-std::optional<TcpServer::ClientInfo> TcpServer::acceptClient(int listenFd) {
+std::variant<TcpServer::ClientInfo, TcpServer::AcceptError> TcpServer::acceptClient(int listenFd) {
     ServerSocket* server = socketManager_.getServerByFd(listenFd);
     if (!server) {
-        //magic number replaced by nullopt
-        return std::nullopt;
+        return AcceptError::Retry;
     }
 
     ClientInfo info;
     info.fd = server->acceptConnection(info.ip, info.port);
 
     if (info.fd < 0) {
-        return std::nullopt;
+        // errno after accept() is allowed: the subject forbids it only after read/write
+        return errno == EMFILE || errno == ENFILE ? AcceptError::NoDescriptors : AcceptError::Retry;
     }
 
     info.serverPort = server->getPort();

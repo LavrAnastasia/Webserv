@@ -25,8 +25,12 @@ int main(int argc, char* argv[]) {
 
         Log::info("server started, press Ctrl+C to stop");
 
-        loop.run();
-
+        try {
+            loop.run();
+        } catch (const std::exception& error) {
+            Log::error(std::string("server stopped: ") + error.what());
+            return EXIT_FAILURE;
+        }
     } catch (const std::exception& error) {
         Log::error(std::string("cannot start: ") + error.what());
         return EXIT_FAILURE;
