@@ -36,6 +36,9 @@ std::string ConfigValidationError::formatMessage(Reason reason, const std::strin
         case Reason::UnexpectedBody:
             return context + " must not have a body";
 
+        case Reason::ConflictingValue:
+            return "conflicting " + context;
+
         case Reason::ConflictingBehavior:
             return "location cannot define multiple handler behaviors";
 

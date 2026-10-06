@@ -155,6 +155,12 @@ namespace {
         EXPECT_EQ(second.root, fs::path("./second"));
     }
 
+    TEST_F(ConfigLoaderTest, LoadsDifferentHostsOnSamePort) {
+        const auto config = loadText(makeConfig("listen 127.0.0.1:8080;\nlisten 127.0.0.2:8080;\nroot ./public;\n"));
+
+        ASSERT_EQ(config.servers.front().listen.size(), 2u);
+    }
+
     TEST_F(ConfigLoaderTest, IgnoresCommentsAndWhitespace) {
         const auto config = loadText(R"(
         # Comment before the server
@@ -231,6 +237,8 @@ namespace {
 
         {"DuplicateRoot", makeConfig(SERVER_DIRECTIVES + "root ./other;\n")},
         {"DuplicateEndpoint", makeConfig(SERVER_DIRECTIVES + "listen localhost:8080;\n")},
+        {"AnyHostAfterEndpoint", makeConfig(SERVER_DIRECTIVES + "listen 0.0.0.0:8080;\n")},
+        {"AnyHostBeforeEndpointInOtherServer", makeConfig("listen 0.0.0.0:8080;\nroot ./other;\n") + makeConfig()},
         {"DuplicateLocation", makeConfig(SERVER_DIRECTIVES, LOCATION + LOCATION)},
 
         {"MethodsInServerBlock", makeConfig(SERVER_DIRECTIVES + "methods GET;\n")},
