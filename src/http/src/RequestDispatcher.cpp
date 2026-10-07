@@ -16,16 +16,16 @@ HandlerResult RequestDispatcher::dispatch(
         return ErrorResponseFactory::create(HttpStatus::NotFound, Router::mapErrorPages(server));
     }
 
+    if (request.body.size() > route->clientMaxBodySize) {
+        return ErrorResponseFactory::create(HttpStatus::PayloadTooLarge, *route);
+    }
+
     if (route->redirect) {
         return RedirectHandler::handle(*route->redirect, *route);
     }
 
     if (!route->allowedMethods.contains(request.method)) {
         return ErrorResponseFactory::create(HttpStatus::MethodNotAllowed, *route);
-    }
-
-    if (request.body.size() > route->clientMaxBodySize) {
-        return ErrorResponseFactory::create(HttpStatus::PayloadTooLarge, *route);
     }
 
     if (route->cgi) {

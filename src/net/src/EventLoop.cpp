@@ -236,7 +236,8 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     if (response) {
         connection->appendResponse(*response);
     } else {
-        const std::string problem = process->output().empty() ? "CGI exited without output" : "CGI sent invalid header";
+        const std::string problem =
+            process->output().empty() ? "CGI produced no usable output" : "CGI sent invalid header";
         Log::error(problem + " while reading response header, client: " + connection->info().remoteAddr);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection->getServerConfig()));
     }
