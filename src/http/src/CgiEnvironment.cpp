@@ -5,6 +5,7 @@
 #include "net/Connection.hpp"
 
 #include <cctype>
+#include <cstddef>
 #include <string_view>
 #include <utility>
 
@@ -41,7 +42,13 @@ namespace {
             return "";
         }
 
-        return host->substr(0, host->find(':'));
+        const std::size_t colon = host->rfind(':');
+
+        if (colon != std::string::npos && host->find(']', colon) == std::string::npos) {
+            return host->substr(0, colon);
+        }
+
+        return *host;
     }
 
     void addHttpHeaders(std::vector<std::string>& env, const HttpHeaders& headers) {
