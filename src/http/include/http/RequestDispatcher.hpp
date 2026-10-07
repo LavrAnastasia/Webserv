@@ -7,10 +7,13 @@
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 
+struct ConnectionInfo;
+
 using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 
 class RequestDispatcher {
 public:
-    static HandlerResult dispatch(const HttpRequest& request, const ServerConfig& server);
+    static HandlerResult
+    dispatch(const HttpRequest& request, const ServerConfig& server, const ConnectionInfo& connectionInfo);
     static HttpResponse fail(HttpStatus status, const ServerConfig& server);
 };

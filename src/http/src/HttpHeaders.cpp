@@ -36,13 +36,13 @@ bool HttpHeaders::has(std::string_view name) const {
 
 bool HttpHeaders::has(std::string_view name, std::string_view token) const {
     const std::optional<std::string> value = get(name);
-        if (!value) {
+    if (!value) {
         return false;
-        }
+    }
 
-        std::string_view rest = *value;
+    std::string_view rest = *value;
 
-        while (true) {
+    while (true) {
         const std::size_t separator = rest.find(Http::Syntax::ListSeparator);
 
         if (equals(Http::Ascii::trim(std::string(rest.substr(0, separator))), token)) {
@@ -54,7 +54,7 @@ bool HttpHeaders::has(std::string_view name, std::string_view token) const {
         }
 
         rest.remove_prefix(separator + 1);
-        }
+    }
 }
 
 std::optional<std::string> HttpHeaders::get(std::string_view name) const {
@@ -87,4 +87,26 @@ std::string HttpHeaders::serialize() const {
     }
 
     return output;
+}
+
+std::vector<std::string> HttpHeaders::names() const {
+    std::vector<std::string> result;
+
+    for (const auto& header : _headers) {
+        const std::string& name = header.first;
+        bool alreadyAdded = false;
+
+        for (const std::string& existing : result) {
+            if (equals(existing, name)) {
+                alreadyAdded = true;
+                break;
+            }
+        }
+
+        if (!alreadyAdded) {
+            result.push_back(name);
+        }
+    }
+
+    return result;
 }

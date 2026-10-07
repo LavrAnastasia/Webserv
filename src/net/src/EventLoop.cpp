@@ -54,7 +54,7 @@ void EventLoop::handleNewConnection(int listenFd) {
     if (config) {
         try {
             //add new connection to registry, including config block
-            connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, config);
+            connectionRegistry_.addConnection(clientInfo.fd, clientInfo.ip, clientInfo.serverPort, config);
             //tell poller to track it (watch for incoming http request)
             poller_.addSocket(clientInfo.fd);
         } catch (const std::exception& e) {
@@ -97,7 +97,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         // Parsing complete -> build response from HttpRequest
         if (const Complete* complete = std::get_if<Complete>(&result)) {
             const ServerConfig& server = connection->getServerConfig();
-            HandlerResult handlerResult = RequestDispatcher::dispatch(complete->request, server);
+            HandlerResult handlerResult = RequestDispatcher::dispatch(complete->request, server, connection->info());
 
             connection->setShouldClose(!complete->request.isPersistent());
 
@@ -141,7 +141,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
                     If client has sent multiple requests and parser buffer still
                     has data in it after reset, parser should be re-run immediately.
                     Requests already in buffer need to be processed before setting
-                    sockete to POLLIN.
+                    socket to POLLIN.
                 */
                 poller_.modifySocket(clientFd, POLLIN);
             }

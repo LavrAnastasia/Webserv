@@ -12,6 +12,7 @@
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
 #include "includes/TempDirectory.hpp"
+#include "net/Connection.hpp"
 
 namespace {
 
@@ -53,14 +54,14 @@ namespace {
         const ParseResult parsed = parser.append(request.data(), request.size());
 
         ASSERT_TRUE(std::holds_alternative<Complete>(parsed));
-        auto result = RequestDispatcher::dispatch(std::get<Complete>(parsed).request, server_);
+        const auto result = RequestDispatcher::dispatch(std::get<Complete>(parsed).request, server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         EXPECT_EQ(std::get<HttpResponse>(result).status, HttpStatus::PayloadTooLarge);
     }
 
     TEST_F(RequestHandlerTest, Returns200ForExistingFile) {
-        auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -71,7 +72,7 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns404ForMissingFile) {
-        auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -84,7 +85,7 @@ namespace {
     TEST_F(RequestHandlerTest, Returns404WhenNoLocationMatches) {
         server_.locations.front().path = "/private";
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -93,7 +94,7 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns405WithAllowHeader) {
-        auto result = RequestDispatcher::dispatch(Requests::post("/index.html"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::post("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -117,8 +118,9 @@ namespace {
     TEST_P(RequestHandlerBodyLimitTest, ChecksBodySize) {
         const auto& test = GetParam();
 
-        auto result =
-            RequestDispatcher::dispatch(Requests::get("/index.html", std::string(test.bodySize, 'a')), server_);
+        const auto result = RequestDispatcher::dispatch(
+            Requests::get("/index.html", std::string(test.bodySize, 'a')), server_, ConnectionInfo{}
+        );
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -146,7 +148,8 @@ namespace {
     TEST_F(RequestHandlerTest, UsesSmallerLocationBodyLimit) {
         server_.locations.front().clientMaxBodySize = 4;
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_);
+        const auto result =
+            RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -158,7 +161,8 @@ namespace {
         server_.clientMaxBodySize = 4;
         server_.locations.front().clientMaxBodySize = 8;
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_);
+        const auto result =
+            RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -181,7 +185,7 @@ namespace {
 
         server_.locations.front().redirect = RedirectConfig{test.status, std::string(test.target)};
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/old"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/old"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);

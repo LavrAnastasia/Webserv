@@ -4,6 +4,7 @@
 #include "http/HttpResponse.hpp"
 #include "net/Socket.hpp"
 #include <chrono>
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -16,9 +17,14 @@
 //forward declaration sufficient for pointer
 struct ServerConfig;
 
+struct ConnectionInfo {
+    std::string remoteAddr;
+    std::uint16_t serverPort;
+};
+
 class Connection : public Socket {
 private:
-    std::string clientIp_;
+    ConnectionInfo info_;
     HttpParser parser_;
     std::string sendBuffer_;
     std::size_t sendOffset_ = 0;
@@ -28,9 +34,10 @@ private:
     bool shouldClose_;
 
 public:
-    Connection(int fd, const std::string& ip, const ServerConfig& config);
+    Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config);
 
-    const std::string& getClientIp() const { return clientIp_; }
+    const std::string& getClientIp() const { return info_.remoteAddr; }
+    const ConnectionInfo& info() const { return info_; }
 
     //get server configuration to access rule sets
     const ServerConfig& getServerConfig() const { return serverConfig_; }

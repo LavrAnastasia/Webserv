@@ -14,6 +14,7 @@
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
 #include "includes/TempDirectory.hpp"
+#include "net/Connection.hpp"
 
 namespace {
 
@@ -58,7 +59,7 @@ namespace {
         void expectResponse(
             const HttpRequest& request, HttpStatus status, const std::optional<std::string>& body = std::nullopt
         ) const {
-            auto result = RequestDispatcher::dispatch(request, server_);
+            const auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -71,7 +72,7 @@ namespace {
         void expectRedirect(
             const std::string& path, const std::string& target, HttpStatus status = HttpStatus::Found
         ) const {
-            auto result = RequestDispatcher::dispatch(Requests::get(path), server_);
+            const auto result = RequestDispatcher::dispatch(Requests::get(path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -253,7 +254,8 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        auto result = RequestDispatcher::dispatch(Requests::post("/files/document.txt"), server_);
+        const auto result =
+            RequestDispatcher::dispatch(Requests::post("/files/document.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -273,7 +275,7 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -366,7 +368,8 @@ namespace {
         server_.locations.push_back(location);
 
         const std::string body = "payload";
-        auto result = RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_);
+        const auto result =
+            RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -398,7 +401,7 @@ namespace {
             Files::write(script, "script contents");
 
             const std::string path = std::string("/scripts/") + test.filename;
-            auto result = RequestDispatcher::dispatch(Requests::post(path, "input"), server_);
+            const auto result = RequestDispatcher::dispatch(Requests::post(path, "input"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<CgiRequest>(result));
             const auto& cgi = std::get<CgiRequest>(result);
 
@@ -429,7 +432,7 @@ namespace {
     }
 
     TEST_F(RouterTest, Returns405WithAllowWhenMethodIsNotAllowed) {
-        auto result = RequestDispatcher::dispatch(Requests::post("/"), server_);
+        const auto result = RequestDispatcher::dispatch(Requests::post("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
