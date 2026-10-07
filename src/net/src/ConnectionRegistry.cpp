@@ -5,16 +5,18 @@
     -creates a key/value pair in activeConnections_,
     where the fd is the key and a Connection object is the value
 
-    try_emplace(fd, fd, ip, config);
+    try_emplace(fd, fd, ip, serverPort, config);
     1. fd = map key
-    2. - 4. = constructor arguments passed to Connection constructor
+    2. - 5. = constructor arguments passed to Connection constructor
     "Calculate hash for File Descriptor *** and find the correct memory bucket,
     then pass the rest of the arguments to the Connection constructor and build the object
     directly in that bucket without copying -> EFFICIENT!"
 */
-void ConnectionRegistry::addConnection(int fd, const std::string& ip, const ServerConfig* config) {
+void ConnectionRegistry::addConnection(
+    int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig* config
+) {
     // dereference config to pass as reference to Connection constructor
-    activeConnections_.try_emplace(fd, fd, ip, *config);
+    activeConnections_.try_emplace(fd, fd, ip, serverPort, *config);
 }
 
 /*

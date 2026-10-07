@@ -6,8 +6,8 @@
 #include <sys/socket.h>
 
 
-Connection::Connection(int fd, const std::string& ip, const ServerConfig& config)
-    : clientIp_(ip), parser_(config.maxBodySize()), serverConfig_(config),
+Connection::Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config)
+    : info_{ip, serverPort}, parser_(config.maxBodySize()), serverConfig_(config),
       lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
     setFd(fd);
     setNonBlocking();

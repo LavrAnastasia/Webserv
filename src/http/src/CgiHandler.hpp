@@ -5,7 +5,10 @@
 
 #include "ResolvedRoute.hpp"
 
+struct ConnectionInfo;
+
 class CgiHandler {
 public:
-    static HandlerResult handle(const HttpRequest& request, const ResolvedRoute& route);
+    static HandlerResult
+    handle(const HttpRequest& request, const ResolvedRoute& route, const ConnectionInfo& connectionInfo);
 };

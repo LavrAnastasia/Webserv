@@ -7,7 +7,9 @@
 #include "StaticHandler.hpp"
 #include "UploadHandler.hpp"
 
-HandlerResult RequestDispatcher::dispatch(const HttpRequest& request, const ServerConfig& server) {
+HandlerResult RequestDispatcher::dispatch(
+    const HttpRequest& request, const ServerConfig& server, const ConnectionInfo& connectionInfo
+) {
     const std::optional<ResolvedRoute> route = Router::resolve(request, server);
 
     if (!route) {
@@ -27,7 +29,7 @@ HandlerResult RequestDispatcher::dispatch(const HttpRequest& request, const Serv
     }
 
     if (route->cgi) {
-        return CgiHandler::handle(request, *route);
+        return CgiHandler::handle(request, *route, connectionInfo);
     }
 
     if (route->upload && request.method == HttpMethod::Post) {
