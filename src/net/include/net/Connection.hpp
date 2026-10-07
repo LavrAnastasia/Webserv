@@ -22,6 +22,7 @@ private:
     HttpParser parser_;
     std::string sendBuffer_;
     std::size_t sendOffset_ = 0;
+    std::optional<ResponseBody> body_;
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
     bool shouldClose_;
@@ -39,10 +40,10 @@ public:
     void resetParser() { parser_.reset(); }
 
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN
-    bool isSendComplete() const { return sendBuffer_.empty(); }
+    bool isSendComplete() const;
 
     // called by server, serializes the response into sendBuffer_
-    void appendResponse(const HttpResponse& response);
+    void appendResponse(HttpResponse response);
 
     //called by server when POLLIN detected -reads raw bytes from socket -> HttpParser
     std::optional<ParseResult> receiveRequest();

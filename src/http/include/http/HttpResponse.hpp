@@ -2,10 +2,10 @@
 
 #include <http/HttpHeaders.hpp>
 #include <http/HttpStatus.hpp>
-#include <string>
+#include <http/ResponseBody.hpp>
 
 struct HttpResponse {
     HttpStatus status;
     HttpHeaders headers = {};
-    std::string body = {};
+    ResponseBody body = {};
 };

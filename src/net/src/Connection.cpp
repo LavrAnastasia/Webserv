@@ -4,6 +4,7 @@
 #include "http/HttpSerializer.hpp"
 
 #include <sys/socket.h>
+#include <utility>
 
 
 Connection::Connection(int fd, const std::string& ip, const ServerConfig& config)
@@ -14,17 +15,18 @@ Connection::Connection(int fd, const std::string& ip, const ServerConfig& config
     setCloseOnExec();
 }
 
-// called by server, serializes the response into sendBuffer_ and updates state
-void Connection::appendResponse(const HttpResponse& response) {
-    std::string serialized = HttpSerializer::serialize(response, {.close = shouldClose_});
+void Connection::appendResponse(HttpResponse response) {
+    auto output = HttpSerializer::serialize(std::move(response), {.close = shouldClose_});
 
-    if (sendBuffer_.empty()) {
-        sendBuffer_ = std::move(serialized);
-    } else {
-        sendBuffer_.append(serialized);
-    }
+    sendBuffer_ = std::move(output.headers);
+    sendOffset_ = 0;
+    body_ = std::move(output.body);
 
     lastActivity_ = std::chrono::steady_clock::now();
+}
+
+bool Connection::isSendComplete() const {
+    return sendBuffer_.empty() && !body_;
 }
 
 /*
@@ -55,9 +57,27 @@ std::optional<ParseResult> Connection::receiveRequest() {
 }
 
 bool Connection::sendResponse() {
-    //early exit if buffer is empty
     if (sendBuffer_.empty()) {
-        return true;
+        if (!body_) {
+            return true;
+        }
+
+        auto chunk = body_->next(64 * 1024);
+
+        if (!chunk) {
+            return false;
+        }
+
+        sendBuffer_ = std::move(*chunk);
+        sendOffset_ = 0;
+
+        if (body_->done()) {
+            body_.reset();
+        }
+
+        if (sendBuffer_.empty()) {
+            return true;
+        }
     }
 
     ssize_t bytesSent = send(getFd(), sendBuffer_.data() + sendOffset_, sendBuffer_.size() - sendOffset_, 0);

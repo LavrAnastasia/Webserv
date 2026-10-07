@@ -12,9 +12,7 @@
 #include "fs/Path.hpp"
 
 #include <algorithm>
-#include <array>
-#include <cerrno>
-#include <fstream>
+#include <utility>
 #include <vector>
 
 
@@ -84,46 +82,18 @@ namespace {
         return HttpResponseFactory::create(HttpStatus::OK, std::move(body), std::string(Http::Mime::Html));
     }
 
-    // TODO: WEB-34 Do not load the whole file into memory
     HttpResponse handleFileRequest(const fs::path& path, const ResolvedRoute& route) {
-        std::ifstream file;
+        auto body = ResponseBody::open(path);
 
-        errno = 0;
-        file.open(path, std::ios::binary);
-
-        const int openError = errno;
-
-        if (!file.is_open()) {
-            const std::error_code error(openError, std::generic_category());
-            return ErrorResponseFactory::create(Http::Status::from(error), route);
+        if (const auto* error = std::get_if<std::error_code>(&body)) {
+            return ErrorResponseFactory::create(Http::Status::from(*error), route);
         }
 
-        std::string body;
-        std::array<char, 64 * 1024> buffer{};
-
-        while (true) {
-            file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-
-            const std::streamsize bytesRead = file.gcount();
-
-            if (bytesRead > 0) {
-                body.append(buffer.data(), static_cast<std::size_t>(bytesRead));
-            }
-
-            if (file.bad()) {
-                return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
-            }
-
-            if (file.eof()) {
-                break;
-            }
-
-            if (file.fail()) {
-                return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
-            }
-        }
-
-        return HttpResponseFactory::create(HttpStatus::OK, std::move(body), Http::Mime::from(path));
+        return HttpResponse{
+            .status = HttpStatus::OK,
+            .headers = HttpHeaders{{Http::Headers::ContentType, Http::Mime::from(path)}},
+            .body = std::move(std::get<ResponseBody>(body))
+        };
     }
 
     HttpResponse handleRedirectRequest(const HttpRequest& request) {

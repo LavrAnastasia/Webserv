@@ -1,5 +1,6 @@
 #include <charconv>
 #include <filesystem>
+#include <fstream>
 
 #include <gtest/gtest.h>
 
@@ -8,6 +9,7 @@
 #include "includes/Requests.hpp"
 #include "includes/TempDirectory.hpp"
 #include "net/EventLoop.hpp"
+#include "net/ServerSocket.hpp"
 #include "net/TcpServer.hpp"
 
 namespace {
@@ -204,6 +206,32 @@ namespace {
             }
         }
 
+        std::string readUntilEof() {
+            std::string bytes = std::move(pending_);
+            pending_.clear();
+            const auto deadline = Clock::now() + 15s;
+
+            while (true) {
+                waitReady(socket_.get(), POLLIN, deadline);
+                char buffer[16 * 1024];
+                const ssize_t received = ::recv(socket_.get(), buffer, sizeof(buffer), 0);
+
+                if (received == 0) {
+                    return bytes;
+                }
+
+                if (received > 0) {
+                    bytes.append(buffer, static_cast<std::size_t>(received));
+
+                    if (bytes.size() > 64u * 1024u * 1024u) {
+                        throw std::runtime_error("Response exceeds test limit");
+                    }
+                } else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+                    systemError("recv");
+                }
+            }
+        }
+
         void abortWithReset() {
             linger option{1, 0};
 
@@ -292,6 +320,7 @@ namespace {
 
             ServerConfig serverConfig;
             serverConfig.root = root_;
+            serverConfig.errorPages[HttpStatus::NotFound] = "error.html";
 
             serverConfig.listen = {{"127.0.0.1", 0}};
 
@@ -581,6 +610,149 @@ namespace {
         slow.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(slow, smallBody_);
         slow.expectEof();
+    }
+
+    TEST_F(ServerTest, ServesEmptyAndChunkBoundaryFilesWithContentLength) {
+        TestClient client(port_);
+
+        for (const std::size_t size : {0u, 65535u, 65536u, 65537u}) {
+            SCOPED_TRACE(size);
+            const std::string expected(size, '\0');
+            Files::write(root_ / "boundary.bin", expected);
+            client.sendAll(Requests::rawGet("/boundary.bin"));
+            const auto response = client.readResponse();
+
+            EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+            EXPECT_EQ(response.headers.at("content-length"), std::to_string(size));
+            EXPECT_EQ(response.headers.count("transfer-encoding"), 0u);
+            EXPECT_EQ(response.body, expected);
+        }
+
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, ClosesTruncatedResponseAndKeepsServingOtherClients) {
+        const std::string body = createLargeFile();
+        TestClient client(port_, 64 * 1024);
+        client.sendAll(Requests::rawGet("/large.bin"));
+        client.waitForResponseStart();
+
+        fs::resize_file(root_ / "large.bin", 0);
+        const std::string response = client.readUntilEof();
+        const auto separator = response.find("\r\n\r\n");
+        ASSERT_NE(separator, std::string::npos);
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        EXPECT_NE(response.find("Content-Length: " + std::to_string(body.size()) + "\r\n"), std::string::npos);
+
+        const std::string received = response.substr(separator + 4);
+        ASSERT_LT(received.size(), body.size());
+        EXPECT_TRUE(body.starts_with(received));
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, FileGrowthDoesNotCorruptTheNextResponse) {
+        const std::string body = createLargeFile();
+        TestClient client(port_, 64 * 1024);
+        client.sendAll(Requests::rawGet("/large.bin"));
+        client.waitForResponseStart();
+
+        {
+            std::ofstream file(root_ / "large.bin", std::ios::binary | std::ios::app);
+            file << "bytes beyond Content-Length";
+            ASSERT_TRUE(file);
+        }
+
+        expectOK(client, body);
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, StreamsCustomErrorPageAndReusesConnection) {
+        const std::string expected(3 * 65536 + 17, 'e');
+        Files::write(root_ / "error.html", expected);
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/missing"));
+        const auto response = client.readResponse();
+
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 404 Not Found");
+        EXPECT_EQ(response.headers.at("content-length"), std::to_string(expected.size()));
+        EXPECT_EQ(response.body, expected);
+
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, SlowLargeTransfersKeepMemoryBounded) {
+#ifdef __linux__
+        const auto peakMemory = [&]() {
+            std::ifstream status("/proc/" + std::to_string(child_) + "/status");
+
+            for (std::string line; std::getline(status, line);) {
+                if (line.starts_with("VmHWM:")) {
+                    std::istringstream value(line.substr(6));
+                    std::uintmax_t kib = 0;
+
+                    if (value >> kib) {
+                        return kib * 1024;
+                    }
+                }
+            }
+
+            throw std::runtime_error("Cannot read server peak memory");
+        };
+
+        Files::write(root_ / "huge.bin", "");
+        fs::resize_file(root_ / "huge.bin", 256u * 1024u * 1024u);
+        const auto before = peakMemory();
+        std::vector<std::unique_ptr<TestClient>> clients;
+
+        for (int i = 0; i < 3; ++i) {
+            clients.push_back(std::make_unique<TestClient>(port_, 64 * 1024));
+            clients.back()->sendAll(Requests::rawGet("/huge.bin"));
+            clients.back()->waitForResponseStart();
+            expectFreshConnectionWorks();
+
+            ASSERT_LT(peakMemory(), before + 16u * 1024u * 1024u);
+        }
+
+        for (auto& client : clients) {
+            client->abortWithReset();
+        }
+
+        expectFreshConnectionWorks();
+#else
+        GTEST_SKIP() << "Peak memory check uses Linux /proc";
+#endif
+    }
+
+    TEST(ServerSocketTest, ResolvesNumericHostsAndFormatsAcceptedAddress) {
+        for (const std::string host : {"127.0.0.1", "0.0.0.0"}) {
+            SCOPED_TRACE(host);
+            ServerSocket server(host, 0);
+            server.setNonBlocking();
+            sockaddr_in address{};
+            socklen_t size = sizeof(address);
+            ASSERT_EQ(::getsockname(server.getFd(), reinterpret_cast<sockaddr*>(&address), &size), 0);
+            EXPECT_EQ(ntohl(address.sin_addr.s_addr), host == "0.0.0.0" ? INADDR_ANY : INADDR_LOOPBACK);
+
+            TestClient client(ntohs(address.sin_port));
+            waitReady(server.getFd(), POLLIN, Clock::now() + 5s);
+            std::string ip;
+            std::uint16_t port = 0;
+            FileDescriptor accepted(server.acceptConnection(ip, port));
+
+            ASSERT_TRUE(accepted.isOpen());
+            EXPECT_EQ(ip, "127.0.0.1");
+            EXPECT_NE(port, 0);
+        }
+    }
+
+    TEST(ServerSocketTest, RejectsInvalidNumericHost) {
+        EXPECT_THROW(ServerSocket("999.0.0.1", 0), std::invalid_argument);
     }
 
 } // namespace

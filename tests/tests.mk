@@ -6,6 +6,7 @@ TEST_NAMES := \
 	request_handler \
 	router \
 	serializer \
+	response_body \
 	server \
 	static_handler
 

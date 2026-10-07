@@ -101,8 +101,8 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
             connection->setShouldClose(!complete->request.isPersistent());
 
-            if (const HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
-                connection->appendResponse(*response);
+            if (HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
+                connection->appendResponse(std::move(*response));
                 poller_.modifySocket(clientFd, POLLOUT);
             } else {
                 launchCgi(*connection, std::get<CgiRequest>(handlerResult));
@@ -206,10 +206,10 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
         return;
     }
 
-    const std::optional<HttpResponse> response = CgiResponseParser::parse(process->output());
+    std::optional<HttpResponse> response = CgiResponseParser::parse(process->output());
 
     if (response) {
-        connection->appendResponse(*response);
+        connection->appendResponse(std::move(*response));
     } else {
         const std::string problem = process->output().empty() ? "CGI exited without output" : "CGI sent invalid header";
         Log::error(problem + " while reading response header, client: " + connection->getClientIp());

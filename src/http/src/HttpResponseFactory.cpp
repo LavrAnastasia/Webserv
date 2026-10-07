@@ -12,7 +12,7 @@ HttpResponse HttpResponseFactory::create(HttpStatus status, HttpHeaders headers)
 }
 
 HttpResponse HttpResponseFactory::create(HttpStatus status, HttpHeaders headers, std::string body) {
-    return HttpResponse{.status = status, .headers = std::move(headers), .body = std::move(body)};
+    return HttpResponse{.status = status, .headers = std::move(headers), .body = ResponseBody(std::move(body))};
 }
 
 HttpResponse HttpResponseFactory::create(HttpStatus status, std::string body, std::string contentType) {
