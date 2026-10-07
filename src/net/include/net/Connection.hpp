@@ -1,5 +1,6 @@
 #pragma once
 
+#include "http/ConnectionInfo.hpp"
 #include "http/HttpParser.hpp"
 #include "http/HttpResponse.hpp"
 #include "net/Socket.hpp"
@@ -16,11 +17,6 @@
 
 //forward declaration sufficient for pointer
 struct ServerConfig;
-
-struct ConnectionInfo {
-    std::string remoteAddr;
-    std::uint16_t serverPort;
-};
 
 class Connection : public Socket {
 private:
