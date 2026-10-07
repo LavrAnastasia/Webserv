@@ -1,10 +1,6 @@
 #include "http/HttpStatus.hpp"
 #include "ErrorStatus.hpp"
 
-namespace {
-    constexpr std::string_view unknownStatus = "Unknown Status";
-}
-
 namespace Http::Status {
     std::string toString(HttpStatus status) {
         switch (status) {
@@ -81,13 +77,13 @@ namespace Http::Status {
                 return "Not Modified";
         }
 
-        return std::string(unknownStatus);
+        return "";
     }
 
     std::optional<HttpStatus> fromCode(int code) {
         const HttpStatus status = static_cast<HttpStatus>(code);
 
-        return toString(status) == unknownStatus ? std::nullopt : std::optional<HttpStatus>(status);
+        return toString(status).empty() ? std::nullopt : std::optional<HttpStatus>(status);
     }
 
     HttpStatus from(const std::error_code& error) {

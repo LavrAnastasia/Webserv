@@ -1,6 +1,7 @@
 TEST_DIR := tests
 
 TEST_NAMES := \
+	cgi_response_parser \
 	config_loader \
 	http_parser \
 	request_handler \
