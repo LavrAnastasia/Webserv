@@ -52,5 +52,6 @@ public:
     std::optional<ParseResult> receiveRequest();
 
     bool sendResponse();
+    bool isAlive() const;
     bool hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const;
 };

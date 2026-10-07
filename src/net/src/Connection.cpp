@@ -53,6 +53,12 @@ std::optional<ParseResult> Connection::receiveRequest() {
     return parser_.append(buffer, bytesReceived);
 }
 
+bool Connection::isAlive() const {
+    char byte;
+
+    return recv(getFd(), &byte, 1, MSG_PEEK) > 0;
+}
+
 bool Connection::sendResponse() {
     //early exit if buffer is empty
     if (sendBuffer_.empty()) {

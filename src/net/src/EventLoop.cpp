@@ -19,6 +19,7 @@
 namespace {
     constexpr std::chrono::seconds kCgiTimeout{60};
     constexpr std::size_t kMaxConnections = 1000;
+    constexpr std::size_t kMaxCgi = 128;
     constexpr std::chrono::milliseconds kAcceptPause{500};
 } // namespace
 
@@ -79,6 +80,15 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     // close on error, or on hangup with nothing left to read
     if ((events & POLLERR) || ((events & POLLHUP) && !(events & POLLIN))) {
         closeConnection(clientFd);
+        return;
+    }
+
+    if (cgiRegistry_.find(clientFd) != nullptr) {
+        if (!connection->isAlive()) {
+            closeConnection(clientFd);
+        } else {
+            poller_.modifySocket(clientFd, 0);
+        }
         return;
     }
     //reading phase (OS kernel receive buffer has data)
@@ -152,6 +162,15 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 }
 
 void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
+    if (cgiRegistry_.size() >= kMaxCgi) {
+        Log::warn("too many CGI processes running, client: " + connection.info().remoteAddr);
+        connection.appendResponse(
+            RequestDispatcher::fail(HttpStatus::ServiceUnavailable, connection.getServerConfig())
+        );
+        poller_.modifySocket(connection.getFd(), POLLOUT);
+        return;
+    }
+
     std::optional<CgiProcess> process = CgiProcess::launch(request);
 
     if (!process) {
@@ -170,7 +189,7 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     }
 
     poller_.addSocket(process->outputFd());
-    poller_.modifySocket(connection.getFd(), 0);
+    poller_.modifySocket(connection.getFd(), POLLIN);
     cgiRegistry_.add(connection.getFd(), std::move(*process));
 }
 
