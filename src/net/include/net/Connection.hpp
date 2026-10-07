@@ -27,6 +27,7 @@ private:
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
     bool shouldClose_;
+    bool headersOnly_ = false;
 
 public:
     Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config);
@@ -38,6 +39,7 @@ public:
 
     void setShouldClose(bool state) { shouldClose_ = state; }
     bool shouldClose() const { return shouldClose_; }
+    void setHeadersOnly(bool state);
     void resetParser() { parser_.reset(); }
 
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN

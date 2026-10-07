@@ -100,6 +100,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             HandlerResult handlerResult = RequestDispatcher::dispatch(complete->request, server, connection->info());
 
             connection->setShouldClose(!complete->request.isPersistent());
+            connection->setHeadersOnly(complete->request.method == HttpMethod::Head);
 
             if (const HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
                 connection->appendResponse(*response);
@@ -115,6 +116,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         */
         else if (const Failed* failed = std::get_if<Failed>(&result)) {
             connection->setShouldClose(true);
+            connection->setHeadersOnly(false);
             connection->appendResponse(RequestDispatcher::fail(failed->status, connection->getServerConfig()));
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
