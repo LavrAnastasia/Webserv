@@ -435,7 +435,7 @@ namespace {
         const auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::MethodNotAllowed);
-        expectHeader(response, "Allow", "GET");
+        expectHeader(response, "Allow", "GET, HEAD");
     }
 
 } // namespace

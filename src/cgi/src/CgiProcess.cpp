@@ -160,11 +160,7 @@ void CgiProcess::readOutput() {
     std::array<char, kReadChunkSize> buffer{};
     const ssize_t count = ::read(outputPipe_.get(), buffer.data(), buffer.size());
 
-    if (count < 0) {
-        return;
-    }
-
-    if (count == 0) {
+    if (count <= 0) {
         kill();
         return;
     }
