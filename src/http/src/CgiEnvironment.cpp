@@ -1,8 +1,8 @@
 #include "CgiEnvironment.hpp"
 
 #include "HeaderFields.hpp"
+#include "http/ConnectionInfo.hpp"
 #include "http/HttpMethod.hpp"
-#include "net/Connection.hpp"
 
 #include <cctype>
 #include <cstddef>

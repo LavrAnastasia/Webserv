@@ -13,7 +13,6 @@
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/TempDirectory.hpp"
-#include "net/Connection.hpp"
 
 namespace {
 

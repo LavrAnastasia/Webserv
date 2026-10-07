@@ -14,9 +14,13 @@ Connection::Connection(int fd, const std::string& ip, std::uint16_t serverPort, 
     setCloseOnExec();
 }
 
+void Connection::setHeadersOnly(bool state) {
+    headersOnly_ = state;
+}
+
 // called by server, serializes the response into sendBuffer_ and updates state
 void Connection::appendResponse(const HttpResponse& response) {
-    std::string serialized = HttpSerializer::serialize(response, {.close = shouldClose_});
+    std::string serialized = HttpSerializer::serialize(response, {.close = shouldClose_, .headersOnly = headersOnly_});
 
     if (sendBuffer_.empty()) {
         sendBuffer_ = std::move(serialized);
@@ -38,13 +42,8 @@ std::optional<ParseResult> Connection::receiveRequest() {
     char buffer[4096];
     ssize_t bytesReceived = recv(getFd(), buffer, sizeof(buffer), 0);
 
-    // treat all negative returns as no data, try again next loop
-    if (bytesReceived < 0) {
-        return NeedMoreData{};
-    }
-
-    // host disconnected, so there is nothing to parse
-    if (bytesReceived == 0) {
+    // host disconnected or the socket failed after poll reported it readable
+    if (bytesReceived <= 0) {
         return std::nullopt;
     }
 
@@ -52,6 +51,12 @@ std::optional<ParseResult> Connection::receiveRequest() {
 
     // recv return > 0 indicates number of bytes successfully received
     return parser_.append(buffer, bytesReceived);
+}
+
+bool Connection::isAlive() const {
+    char byte;
+
+    return recv(getFd(), &byte, 1, MSG_PEEK) > 0;
 }
 
 bool Connection::sendResponse() {
@@ -62,13 +67,8 @@ bool Connection::sendResponse() {
 
     ssize_t bytesSent = send(getFd(), sendBuffer_.data() + sendOffset_, sendBuffer_.size() - sendOffset_, 0);
 
-    //treat all negative returns as OS buffer full, try again
-    if (bytesSent < 0) {
-        return true;
-    }
-
-    // return false if client disconnected during send
-    if (bytesSent == 0) {
+    // client disconnected or the socket failed after poll reported it writable
+    if (bytesSent <= 0) {
         return false;
     }
 

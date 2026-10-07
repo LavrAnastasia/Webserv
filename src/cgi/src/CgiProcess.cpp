@@ -3,6 +3,8 @@
 #include <array>
 #include <csignal>
 #include <cstdlib>
+#include <filesystem>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -85,6 +87,13 @@ CgiProcess& CgiProcess::operator=(CgiProcess&& other) noexcept {
 }
 
 std::optional<CgiProcess> CgiProcess::launch(const CgiRequest& request) {
+    std::error_code error;
+
+    if (!std::filesystem::is_regular_file(request.interpreter, error) ||
+        ::access(request.interpreter.c_str(), X_OK) != 0) {
+        return std::nullopt;
+    }
+
     std::optional<Pipe> input = openPipe();
     std::optional<Pipe> output = openPipe();
 
@@ -131,7 +140,7 @@ void CgiProcess::writeInput() {
 
     const ssize_t count = ::write(inputPipe_.get(), body_.data() + written_, body_.size() - written_);
 
-    if (count < 0) {
+    if (count <= 0) {
         inputPipe_.close();
         return;
     }
@@ -152,6 +161,8 @@ void CgiProcess::readOutput() {
     const ssize_t count = ::read(outputPipe_.get(), buffer.data(), buffer.size());
 
     if (count < 0) {
+        output_.clear();
+        kill();
         return;
     }
 

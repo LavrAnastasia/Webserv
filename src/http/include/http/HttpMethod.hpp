@@ -4,7 +4,7 @@
 #include <set>
 #include <string>
 
-enum class HttpMethod { Get, Post, Delete };
+enum class HttpMethod { Get, Head, Post, Delete };
 
 namespace Http::Method {
     std::optional<HttpMethod> fromString(const std::string& value);

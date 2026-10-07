@@ -265,8 +265,10 @@ CgiConfig ConfigDecoder::decodeCgi(std::string_view extension, std::string_view 
 
     const std::filesystem::path interpreterPath{interpreter};
 
-    if (interpreterPath.empty()) {
-        throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "CGI interpreter path");
+    if (!interpreterPath.is_absolute()) {
+        throw ConfigDecodingError(
+            ConfigDecodingError::Reason::InvalidFormat, "CGI interpreter path: " + interpreterPath.string()
+        );
     }
 
     return CgiConfig{.extension = std::string(extension), .interpreter = interpreterPath};

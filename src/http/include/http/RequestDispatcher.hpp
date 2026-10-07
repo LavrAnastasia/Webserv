@@ -4,10 +4,9 @@
 
 #include "config/ServerConfig.hpp"
 #include "http/CgiRequest.hpp"
+#include "http/ConnectionInfo.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
-
-struct ConnectionInfo;
 
 using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 

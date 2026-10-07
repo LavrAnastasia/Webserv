@@ -19,6 +19,7 @@
 namespace {
     constexpr std::chrono::seconds kCgiTimeout{60};
     constexpr std::size_t kMaxConnections = 1000;
+    constexpr std::size_t kMaxCgi = 128;
     constexpr std::chrono::milliseconds kAcceptPause{500};
 } // namespace
 
@@ -81,6 +82,16 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         closeConnection(clientFd);
         return;
     }
+
+    if (cgiRegistry_.find(clientFd) != nullptr) {
+        if (!connection->isAlive()) {
+            Log::info("client closed connection while CGI was running, client: " + connection->info().remoteAddr);
+            closeConnection(clientFd);
+        } else {
+            poller_.modifySocket(clientFd, 0);
+        }
+        return;
+    }
     //reading phase (OS kernel receive buffer has data)
     if (events & POLLIN) {
         //feed bytes from OS kernel's socket buffer into parser and receive status
@@ -100,6 +111,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
             HandlerResult handlerResult = RequestDispatcher::dispatch(complete->request, server, connection->info());
 
             connection->setShouldClose(!complete->request.isPersistent());
+            connection->setHeadersOnly(complete->request.method == HttpMethod::Head);
 
             if (const HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
                 connection->appendResponse(*response);
@@ -136,6 +148,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
                 closeConnection(clientFd);
             } else {
                 connection->resetParser();
+                connection->setHeadersOnly(false);
                 /*
                     TODO: HTTP pipelining support:
                     If client has sent multiple requests and parser buffer still
@@ -150,10 +163,22 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 }
 
 void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
+    if (cgiRegistry_.size() >= kMaxCgi) {
+        Log::warn("too many CGI processes running, client: " + connection.info().remoteAddr);
+        connection.appendResponse(
+            RequestDispatcher::fail(HttpStatus::ServiceUnavailable, connection.getServerConfig())
+        );
+        poller_.modifySocket(connection.getFd(), POLLOUT);
+        return;
+    }
+
     std::optional<CgiProcess> process = CgiProcess::launch(request);
 
     if (!process) {
-        Log::error("failed to start CGI " + request.script.string() + ", client: " + connection.getClientIp());
+        Log::error(
+            "failed to start CGI " + request.script.string() + " with " + request.interpreter.string() +
+            ", client: " + connection.info().remoteAddr
+        );
         connection.appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection.getServerConfig()));
         poller_.modifySocket(connection.getFd(), POLLOUT);
         return;
@@ -165,7 +190,7 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     }
 
     poller_.addSocket(process->outputFd());
-    poller_.modifySocket(connection.getFd(), 0);
+    poller_.modifySocket(connection.getFd(), POLLIN);
     cgiRegistry_.add(connection.getFd(), std::move(*process));
 }
 
@@ -211,8 +236,9 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     if (response) {
         connection->appendResponse(*response);
     } else {
-        const std::string problem = process->output().empty() ? "CGI exited without output" : "CGI sent invalid header";
-        Log::error(problem + " while reading response header, client: " + connection->getClientIp());
+        const std::string problem =
+            process->output().empty() ? "CGI produced no usable output" : "CGI sent invalid header";
+        Log::error(problem + " while reading response header, client: " + connection->info().remoteAddr);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection->getServerConfig()));
     }
 
@@ -267,7 +293,7 @@ void EventLoop::run() {
 
                 const int fd = client.value_or(event.fd);
                 const Connection* connection = connectionRegistry_.getConnection(fd);
-                const std::string ip = connection != nullptr ? connection->getClientIp() : "unknown";
+                const std::string ip = connection != nullptr ? connection->info().remoteAddr : "unknown";
 
                 closeConnection(fd);
                 Log::error(std::string(error.what()) + " while processing request, connection closed, client: " + ip);
@@ -301,7 +327,7 @@ void EventLoop::cleanupTimedOutConnections() {
 
         // response pending or connection flagged to close: close immediately, do not queue 408
         if (connection->shouldClose() || !connection->isSendComplete()) {
-            Log::info("client timed out while sending response, client: " + connection->getClientIp());
+            Log::info("client timed out while sending response, client: " + connection->info().remoteAddr);
             closeConnection(fd);
             continue;
         }
@@ -310,7 +336,7 @@ void EventLoop::cleanupTimedOutConnections() {
         connection->setShouldClose(true);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
         poller_.modifySocket(fd, POLLOUT);
-        Log::info("client timed out while waiting for request, client: " + connection->getClientIp());
+        Log::info("client timed out while waiting for request, client: " + connection->info().remoteAddr);
     }
 }
 
@@ -326,7 +352,7 @@ void EventLoop::cleanupTimedOutCgi() {
 
         Log::error(
             "CGI timed out after " + std::to_string(kCgiTimeout.count()) +
-            " s while reading response, client: " + connection->getClientIp()
+            " s while reading response, client: " + connection->info().remoteAddr
         );
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::GatewayTimeout, connection->getServerConfig()));
         poller_.modifySocket(clientFd, POLLOUT);

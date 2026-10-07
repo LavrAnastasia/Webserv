@@ -14,6 +14,8 @@
 
 namespace {
     constexpr std::size_t kStatusCodeSize = 3;
+    constexpr int kMinStatus = 200;
+    constexpr int kMaxStatus = 599;
 
     struct Sections {
         std::string headers;
@@ -56,7 +58,8 @@ namespace {
             return headers.has(Http::Headers::Location) ? HttpStatus::Found : HttpStatus::OK;
         }
 
-        if (value->size() < kStatusCodeSize) {
+        if (value->size() < kStatusCodeSize ||
+            (value->size() > kStatusCodeSize && (*value)[kStatusCodeSize] != Http::Syntax::SP)) {
             return std::nullopt;
         }
 
@@ -66,11 +69,11 @@ namespace {
 
         const auto [ptr, ec] = std::from_chars(begin, end, code);
 
-        if (ec != std::errc{} || ptr != end) {
+        if (ec != std::errc{} || ptr != end || code < kMinStatus || code > kMaxStatus) {
             return std::nullopt;
         }
 
-        return Http::Status::fromCode(code);
+        return static_cast<HttpStatus>(code);
     }
 } // namespace
 

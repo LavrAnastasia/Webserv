@@ -14,8 +14,9 @@ namespace Http::Method {
             std::string_view name;
         };
 
-        constexpr std::array<Entry, 3> kMethods = {{
+        constexpr std::array<Entry, 4> kMethods = {{
             {HttpMethod::Get, "GET"},
+            {HttpMethod::Head, "HEAD"},
             {HttpMethod::Post, "POST"},
             {HttpMethod::Delete, "DELETE"},
         }};

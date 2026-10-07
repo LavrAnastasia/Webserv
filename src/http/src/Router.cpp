@@ -54,6 +54,16 @@ namespace {
 
         return cgiIt->second;
     }
+
+    std::set<HttpMethod> resolveMethods(const LocationConfig& location, const std::optional<CgiConfig>& cgi) {
+        std::set<HttpMethod> methods = location.allowedMethods;
+
+        if (!location.upload && !cgi) {
+            methods.erase(HttpMethod::Post);
+        }
+
+        return methods;
+    }
 } // namespace
 
 std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const ServerConfig& server) {
@@ -75,11 +85,11 @@ std::optional<ResolvedRoute> Router::resolve(const HttpRequest& request, const S
     route.clientMaxBodySize = location->clientMaxBodySize.value_or(server.clientMaxBodySize);
     route.errorPages = mapErrorPages(server);
 
-    route.allowedMethods = location->allowedMethods;
     route.autoindex = location->autoindex;
     route.redirect = location->redirect;
     route.upload = location->upload;
     route.cgi = resolveCgi(request.path, *location);
+    route.allowedMethods = resolveMethods(*location, route.cgi);
 
     return route;
 }
