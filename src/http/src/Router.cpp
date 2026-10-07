@@ -62,10 +62,6 @@ namespace {
             methods.erase(HttpMethod::Post);
         }
 
-        if (methods.contains(HttpMethod::Get)) {
-            methods.insert(HttpMethod::Head);
-        }
-
         return methods;
     }
 } // namespace

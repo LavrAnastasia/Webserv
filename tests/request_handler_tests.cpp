@@ -99,7 +99,7 @@ namespace {
 
         const auto allow = response.headers.get("Allow");
         ASSERT_TRUE(allow.has_value());
-        EXPECT_EQ(*allow, "GET, HEAD");
+        EXPECT_EQ(*allow, "GET");
     }
 
     struct BodyLimitCase {
