@@ -31,7 +31,6 @@ private:
 public:
     Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config);
 
-    const std::string& getClientIp() const { return info_.remoteAddr; }
     const ConnectionInfo& info() const { return info_; }
 
     //get server configuration to access rule sets

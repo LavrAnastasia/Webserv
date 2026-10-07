@@ -153,7 +153,7 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     std::optional<CgiProcess> process = CgiProcess::launch(request);
 
     if (!process) {
-        Log::error("failed to start CGI " + request.script.string() + ", client: " + connection.getClientIp());
+        Log::error("failed to start CGI " + request.script.string() + ", client: " + connection.info().remoteAddr);
         connection.appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection.getServerConfig()));
         poller_.modifySocket(connection.getFd(), POLLOUT);
         return;
@@ -212,7 +212,7 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
         connection->appendResponse(*response);
     } else {
         const std::string problem = process->output().empty() ? "CGI exited without output" : "CGI sent invalid header";
-        Log::error(problem + " while reading response header, client: " + connection->getClientIp());
+        Log::error(problem + " while reading response header, client: " + connection->info().remoteAddr);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection->getServerConfig()));
     }
 
@@ -267,7 +267,7 @@ void EventLoop::run() {
 
                 const int fd = client.value_or(event.fd);
                 const Connection* connection = connectionRegistry_.getConnection(fd);
-                const std::string ip = connection != nullptr ? connection->getClientIp() : "unknown";
+                const std::string ip = connection != nullptr ? connection->info().remoteAddr : "unknown";
 
                 closeConnection(fd);
                 Log::error(std::string(error.what()) + " while processing request, connection closed, client: " + ip);
@@ -301,7 +301,7 @@ void EventLoop::cleanupTimedOutConnections() {
 
         // response pending or connection flagged to close: close immediately, do not queue 408
         if (connection->shouldClose() || !connection->isSendComplete()) {
-            Log::info("client timed out while sending response, client: " + connection->getClientIp());
+            Log::info("client timed out while sending response, client: " + connection->info().remoteAddr);
             closeConnection(fd);
             continue;
         }
@@ -310,7 +310,7 @@ void EventLoop::cleanupTimedOutConnections() {
         connection->setShouldClose(true);
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
         poller_.modifySocket(fd, POLLOUT);
-        Log::info("client timed out while waiting for request, client: " + connection->getClientIp());
+        Log::info("client timed out while waiting for request, client: " + connection->info().remoteAddr);
     }
 }
 
@@ -326,7 +326,7 @@ void EventLoop::cleanupTimedOutCgi() {
 
         Log::error(
             "CGI timed out after " + std::to_string(kCgiTimeout.count()) +
-            " s while reading response, client: " + connection->getClientIp()
+            " s while reading response, client: " + connection->info().remoteAddr
         );
         connection->appendResponse(RequestDispatcher::fail(HttpStatus::GatewayTimeout, connection->getServerConfig()));
         poller_.modifySocket(clientFd, POLLOUT);
