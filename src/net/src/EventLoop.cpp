@@ -85,6 +85,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
     if (cgiRegistry_.find(clientFd) != nullptr) {
         if (!connection->isAlive()) {
+            Log::info("client closed connection while CGI was running, client: " + connection->info().remoteAddr);
             closeConnection(clientFd);
         } else {
             poller_.modifySocket(clientFd, 0);
@@ -126,7 +127,6 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
         */
         else if (const Failed* failed = std::get_if<Failed>(&result)) {
             connection->setShouldClose(true);
-            connection->setHeadersOnly(false);
             connection->appendResponse(RequestDispatcher::fail(failed->status, connection->getServerConfig()));
             poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
         }
@@ -148,6 +148,7 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
                 closeConnection(clientFd);
             } else {
                 connection->resetParser();
+                connection->setHeadersOnly(false);
                 /*
                     TODO: HTTP pipelining support:
                     If client has sent multiple requests and parser buffer still

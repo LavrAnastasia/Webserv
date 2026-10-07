@@ -140,7 +140,7 @@ void CgiProcess::writeInput() {
 
     const ssize_t count = ::write(inputPipe_.get(), body_.data() + written_, body_.size() - written_);
 
-    if (count < 0) {
+    if (count <= 0) {
         inputPipe_.close();
         return;
     }
@@ -160,7 +160,13 @@ void CgiProcess::readOutput() {
     std::array<char, kReadChunkSize> buffer{};
     const ssize_t count = ::read(outputPipe_.get(), buffer.data(), buffer.size());
 
-    if (count <= 0) {
+    if (count < 0) {
+        output_.clear();
+        kill();
+        return;
+    }
+
+    if (count == 0) {
         kill();
         return;
     }
