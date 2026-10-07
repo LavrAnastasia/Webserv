@@ -153,7 +153,10 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     std::optional<CgiProcess> process = CgiProcess::launch(request);
 
     if (!process) {
-        Log::error("failed to start CGI " + request.script.string() + ", client: " + connection.info().remoteAddr);
+        Log::error(
+            "failed to start CGI " + request.script.string() + " with " + request.interpreter.string() +
+            ", client: " + connection.info().remoteAddr
+        );
         connection.appendResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection.getServerConfig()));
         poller_.modifySocket(connection.getFd(), POLLOUT);
         return;
