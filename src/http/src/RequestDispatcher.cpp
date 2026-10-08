@@ -16,6 +16,10 @@ HandlerResult RequestDispatcher::dispatch(
         return ErrorResponseFactory::create(HttpStatus::NotFound, Router::mapErrorPages(server));
     }
 
+    if (request.body.size() > route->clientMaxBodySize) {
+        return ErrorResponseFactory::create(HttpStatus::PayloadTooLarge, *route);
+    }
+
     if (route->redirect) {
         return RedirectHandler::handle(*route->redirect, *route);
     }
@@ -24,20 +28,12 @@ HandlerResult RequestDispatcher::dispatch(
         return ErrorResponseFactory::create(HttpStatus::MethodNotAllowed, *route);
     }
 
-    if (request.body.size() > route->clientMaxBodySize) {
-        return ErrorResponseFactory::create(HttpStatus::PayloadTooLarge, *route);
-    }
-
     if (route->cgi) {
         return CgiHandler::handle(request, *route, connectionInfo);
     }
 
     if (route->upload && request.method == HttpMethod::Post) {
         return UploadHandler::handle(request, *route);
-    }
-
-    if (request.method == HttpMethod::Post) {
-        return ErrorResponseFactory::create(HttpStatus::MethodNotAllowed, *route);
     }
 
     return StaticHandler::handle(request, *route);

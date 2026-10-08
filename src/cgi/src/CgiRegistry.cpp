@@ -10,6 +10,10 @@ void CgiRegistry::remove(int clientFd) {
     entries_.erase(clientFd);
 }
 
+std::size_t CgiRegistry::size() const {
+    return entries_.size();
+}
+
 CgiProcess* CgiRegistry::find(int clientFd) {
     auto it = entries_.find(clientFd);
 

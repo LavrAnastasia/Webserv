@@ -40,13 +40,8 @@ std::optional<ParseResult> Connection::receiveRequest() {
     char buffer[4096];
     ssize_t bytesReceived = recv(getFd(), buffer, sizeof(buffer), 0);
 
-    // treat all negative returns as no data, try again next loop
-    if (bytesReceived < 0) {
-        return NeedMoreData{};
-    }
-
-    // host disconnected, so there is nothing to parse
-    if (bytesReceived == 0) {
+    // host disconnected or the socket failed after poll reported it readable
+    if (bytesReceived <= 0) {
         return std::nullopt;
     }
 
@@ -54,6 +49,12 @@ std::optional<ParseResult> Connection::receiveRequest() {
 
     // recv return > 0 indicates number of bytes successfully received
     return parser_.append(buffer, bytesReceived);
+}
+
+bool Connection::isAlive() const {
+    char byte;
+
+    return recv(getFd(), &byte, 1, MSG_PEEK) > 0;
 }
 
 bool Connection::sendResponse() {
@@ -82,13 +83,8 @@ bool Connection::sendResponse() {
 
     ssize_t bytesSent = send(getFd(), sendBuffer_.data() + sendOffset_, sendBuffer_.size() - sendOffset_, 0);
 
-    //treat all negative returns as OS buffer full, try again
-    if (bytesSent < 0) {
-        return true;
-    }
-
-    // return false if client disconnected during send
-    if (bytesSent == 0) {
+    // client disconnected or the socket failed after poll reported it writable
+    if (bytesSent <= 0) {
         return false;
     }
 

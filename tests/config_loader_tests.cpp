@@ -172,6 +172,15 @@ namespace {
         EXPECT_EQ(config.servers.front().maxBodySize(), 64u);
     }
 
+    TEST_F(ConfigLoaderTest, LoadsAbsoluteCgiInterpreterWithoutCheckingTheFile) {
+        const auto config =
+            loadText(makeConfig(SERVER_DIRECTIVES, "location / { methods GET; cgi .py /not/installed/python3; }\n"));
+
+        EXPECT_EQ(
+            config.servers.front().locations.front().cgi.at(".py").interpreter, fs::path("/not/installed/python3")
+        );
+    }
+
     TEST_F(ConfigLoaderTest, IgnoresCommentsAndWhitespace) {
         const auto config = loadText(R"(
         # Comment before the server
@@ -247,6 +256,7 @@ namespace {
         {"InvalidIpv4", withListen("256.0.0.1:8080")},
 
         {"DuplicateRoot", makeConfig(SERVER_DIRECTIVES + "root ./other;\n")},
+        {"CgiInterpreterNotAbsolute", makeConfig(SERVER_DIRECTIVES, "location / { methods GET; cgi .py python3; }\n")},
         {"DuplicateEndpoint", makeConfig(SERVER_DIRECTIVES + "listen localhost:8080;\n")},
         {"AnyHostAfterEndpoint", makeConfig(SERVER_DIRECTIVES + "listen 0.0.0.0:8080;\n")},
         {"AnyHostBeforeEndpointInOtherServer", makeConfig("listen 0.0.0.0:8080;\nroot ./other;\n") + makeConfig()},

@@ -10,7 +10,6 @@
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
 #include "includes/TempDirectory.hpp"
-#include "net/Connection.hpp"
 
 namespace {
 

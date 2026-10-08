@@ -103,7 +103,8 @@ namespace {
             StatusLineCase{"NotFound404", HttpStatus::NotFound, "HTTP/1.1 404 Not Found\r\n"},
             StatusLineCase{
                 "InternalServerError500", HttpStatus::InternalServerError, "HTTP/1.1 500 Internal Server Error\r\n"
-            }
+            },
+            StatusLineCase{"UnknownCodeHasEmptyReason422", static_cast<HttpStatus>(422), "HTTP/1.1 422 \r\n"}
         ),
         [](const ::testing::TestParamInfo<StatusLineCase>& info) { return std::string(info.param.name); }
     );
