@@ -44,7 +44,7 @@ namespace {
                 while (!body.done()) {
                     ASSERT_TRUE(body.next(chunk, 65536));
                     ASSERT_FALSE(chunk.empty());
-                    ASSERT_LE(chunk.size(), 65536u);
+                    ASSERT_LE(chunk.size(), file ? 65536u : size);
                     received.append(chunk);
                 }
 

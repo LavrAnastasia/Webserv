@@ -47,33 +47,29 @@ bool ResponseBody::done() const {
     return offset_ == size_;
 }
 
-bool ResponseBody::isInMemory() const {
-    return std::holds_alternative<std::string>(source_);
-}
-
 bool ResponseBody::next(std::string& out, std::size_t limit) {
     if (done()) {
         out.clear();
         return true;
     }
 
-    const auto count = static_cast<std::size_t>(std::min<std::uintmax_t>(limit, size_ - offset_));
-
-    if (const auto* text = std::get_if<std::string>(&source_)) {
-        out.assign(*text, static_cast<std::size_t>(offset_), count);
-    } else {
-        out.resize(count);
-
-        const ssize_t received = ::read(std::get<FileDescriptor>(source_).get(), out.data(), count);
-
-        if (received <= 0) {
-            out.clear();
-            return false;
-        }
-
-        out.resize(static_cast<std::size_t>(received));
+    if (auto* text = std::get_if<std::string>(&source_)) {
+        out = std::move(*text);
+        offset_ = size_;
+        return true;
     }
 
+    const auto count = static_cast<std::size_t>(std::min<std::uintmax_t>(limit, size_ - offset_));
+    out.resize(count);
+
+    const ssize_t received = ::read(std::get<FileDescriptor>(source_).get(), out.data(), count);
+
+    if (received <= 0) {
+        out.clear();
+        return false;
+    }
+
+    out.resize(static_cast<std::size_t>(received));
     offset_ += out.size();
     return true;
 }

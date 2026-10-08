@@ -71,8 +71,7 @@ bool Connection::refill() {
         return true;
     }
 
-    const auto limit = body_->isInMemory() ? static_cast<std::size_t>(body_->size()) : kChunkSize;
-    if (!body_->next(sendBuffer_, limit)) {
+    if (!body_->next(sendBuffer_, kChunkSize)) {
         return false;
     }
 
@@ -104,7 +103,6 @@ Connection::SendResult Connection::sendResponse() {
 
     sendOffset_ += static_cast<std::size_t>(bytesSent);
 
-    // Keep initialized storage between file chunks; release it once the response is complete.
     if (isSendComplete()) {
         std::string().swap(sendBuffer_);
         sendOffset_ = 0;

@@ -18,8 +18,6 @@ public:
 
     std::uintmax_t size() const;
     bool done() const;
-    bool isInMemory() const;
-    // Replaces out with the next chunk; clears it on completion or read failure.
     bool next(std::string& out, std::size_t limit);
 
 private:

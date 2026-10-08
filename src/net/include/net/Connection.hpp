@@ -51,7 +51,6 @@ public:
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN
     bool isSendComplete() const;
 
-    // Replaces the pending response and buffers headers with the first body bytes.
     void setResponse(HttpResponse response);
 
     //called by server when POLLIN detected -reads raw bytes from socket -> HttpParser
