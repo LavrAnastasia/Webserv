@@ -34,15 +34,13 @@ namespace {
 
         auto body = ResponseBody::open(it->second);
 
-        if (std::holds_alternative<std::error_code>(body)) {
+        if (std::get_if<std::error_code>(&body)) {
             return buildResponse(status);
         }
 
-        return HttpResponse{
-            .status = status,
-            .headers = HttpHeaders{{Http::Headers::ContentType, Http::Mime::Html}},
-            .body = std::move(std::get<ResponseBody>(body))
-        };
+        return HttpResponseFactory::create(
+            status, std::move(std::get<ResponseBody>(body)), std::string(Http::Mime::Html)
+        );
     }
 } // namespace
 

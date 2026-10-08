@@ -39,19 +39,19 @@ namespace {
                 ResponseBody body = file ? std::move(std::get<ResponseBody>(opened)) : ResponseBody(expected);
                 EXPECT_EQ(body.size(), size);
                 std::string received;
+                std::string chunk;
 
                 while (!body.done()) {
-                    auto chunk = body.next(65536);
-                    ASSERT_TRUE(chunk);
-                    ASSERT_FALSE(chunk->empty());
-                    ASSERT_LE(chunk->size(), 65536u);
-                    received.append(*chunk);
+                    ASSERT_TRUE(body.next(chunk, 65536));
+                    ASSERT_FALSE(chunk.empty());
+                    ASSERT_LE(chunk.size(), 65536u);
+                    received.append(chunk);
                 }
 
                 EXPECT_EQ(received, expected);
                 EXPECT_EQ(body.size(), size);
-                ASSERT_TRUE(body.next(65536));
-                EXPECT_TRUE(body.next(65536)->empty());
+                ASSERT_TRUE(body.next(chunk, 65536));
+                EXPECT_TRUE(chunk.empty());
             }
         }
     }
@@ -81,7 +81,9 @@ namespace {
         ASSERT_TRUE(output.body);
 
         fs::resize_file(path, 0);
-        EXPECT_FALSE(output.body->next(65536));
+        std::string chunk = "old contents";
+        EXPECT_FALSE(output.body->next(chunk, 65536));
+        EXPECT_TRUE(chunk.empty());
         EXPECT_FALSE(output.body->done());
     }
 
@@ -93,11 +95,12 @@ namespace {
         auto& body = std::get<ResponseBody>(opened);
 
         fs::resize_file(path, 3);
-        auto first = body.next(65536);
-        ASSERT_TRUE(first);
-        EXPECT_EQ(*first, "abc");
+        std::string chunk;
+        ASSERT_TRUE(body.next(chunk, 65536));
+        EXPECT_EQ(chunk, "abc");
         EXPECT_FALSE(body.done());
-        EXPECT_FALSE(body.next(65536));
+        EXPECT_FALSE(body.next(chunk, 65536));
+        EXPECT_TRUE(chunk.empty());
     }
 
     TEST_F(ResponseBodyTest, StopsAtTheOriginalSizeWhenFileGrows) {

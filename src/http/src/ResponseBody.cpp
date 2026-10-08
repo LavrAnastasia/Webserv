@@ -30,9 +30,9 @@ std::variant<ResponseBody, std::error_code> ResponseBody::open(const std::filesy
         return std::make_error_code(std::errc::io_error);
     }
 
-    FileDescriptor file(::open(path.c_str(), O_RDONLY | O_NONBLOCK));
+    FileDescriptor file(::open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC));
 
-    if (!file.isOpen() || !file.setCloseOnExec()) {
+    if (!file.isOpen()) {
         return std::error_code(errno, std::generic_category());
     }
 
@@ -47,32 +47,33 @@ bool ResponseBody::done() const {
     return offset_ == size_;
 }
 
-std::optional<std::string> ResponseBody::next(std::size_t limit) {
-    if (done()) {
-        return std::string{};
-    }
+bool ResponseBody::isInMemory() const {
+    return std::holds_alternative<std::string>(source_);
+}
 
-    if (limit == 0) {
-        return std::nullopt;
+bool ResponseBody::next(std::string& out, std::size_t limit) {
+    if (done()) {
+        out.clear();
+        return true;
     }
 
     const auto count = static_cast<std::size_t>(std::min<std::uintmax_t>(limit, size_ - offset_));
-    std::string chunk;
 
     if (const auto* text = std::get_if<std::string>(&source_)) {
-        chunk = text->substr(static_cast<std::size_t>(offset_), count);
+        out.assign(*text, static_cast<std::size_t>(offset_), count);
     } else {
-        chunk.resize(count);
+        out.resize(count);
 
-        const ssize_t received = ::read(std::get<FileDescriptor>(source_).get(), chunk.data(), count);
+        const ssize_t received = ::read(std::get<FileDescriptor>(source_).get(), out.data(), count);
 
         if (received <= 0) {
-            return std::nullopt;
+            out.clear();
+            return false;
         }
 
-        chunk.resize(static_cast<std::size_t>(received));
+        out.resize(static_cast<std::size_t>(received));
     }
 
-    offset_ += chunk.size();
-    return chunk;
+    offset_ += out.size();
+    return true;
 }

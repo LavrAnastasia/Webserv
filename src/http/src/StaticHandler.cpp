@@ -89,11 +89,9 @@ namespace {
             return ErrorResponseFactory::create(Http::Status::from(*error), route);
         }
 
-        return HttpResponse{
-            .status = HttpStatus::OK,
-            .headers = HttpHeaders{{Http::Headers::ContentType, Http::Mime::from(path)}},
-            .body = std::move(std::get<ResponseBody>(body))
-        };
+        return HttpResponseFactory::create(
+            HttpStatus::OK, std::move(std::get<ResponseBody>(body)), Http::Mime::from(path)
+        );
     }
 
     HttpResponse handleRedirectRequest(const HttpRequest& request) {

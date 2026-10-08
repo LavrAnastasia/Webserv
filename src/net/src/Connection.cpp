@@ -6,6 +6,9 @@
 #include <sys/socket.h>
 #include <utility>
 
+namespace {
+    constexpr std::size_t kChunkSize = 64 * 1024;
+} // namespace
 
 Connection::Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config)
     : info_{ip, serverPort}, parser_(config.maxBodySize()), serverConfig_(config),
@@ -19,18 +22,20 @@ void Connection::setHeadersOnly(bool state) {
     headersOnly_ = state;
 }
 
-void Connection::appendResponse(HttpResponse response) {
+void Connection::setResponse(HttpResponse response) {
     auto output = HttpSerializer::serialize(std::move(response), {.close = shouldClose_, .headersOnly = headersOnly_});
 
-    sendBuffer_ = std::move(output.headers);
+    sendBuffer_.clear();
     sendOffset_ = 0;
     body_ = std::move(output.body);
+    bodyFailed_ = !refill();
+    sendBuffer_.insert(0, output.headers);
 
     lastActivity_ = std::chrono::steady_clock::now();
 }
 
 bool Connection::isSendComplete() const {
-    return sendBuffer_.empty() && !body_;
+    return sendOffset_ == sendBuffer_.size() && !body_;
 }
 
 /*
@@ -61,47 +66,53 @@ bool Connection::isAlive() const {
     return recv(getFd(), &byte, 1, MSG_PEEK) > 0;
 }
 
-bool Connection::sendResponse() {
-    if (sendBuffer_.empty()) {
-        if (!body_) {
-            return true;
-        }
+bool Connection::refill() {
+    if (!body_) {
+        return true;
+    }
 
-        auto chunk = body_->next(64 * 1024);
+    const auto limit = body_->isInMemory() ? static_cast<std::size_t>(body_->size()) : kChunkSize;
+    if (!body_->next(sendBuffer_, limit)) {
+        return false;
+    }
 
-        if (!chunk) {
-            return false;
-        }
+    sendOffset_ = 0;
 
-        sendBuffer_ = std::move(*chunk);
-        sendOffset_ = 0;
+    if (body_->done()) {
+        body_.reset();
+    }
 
-        if (body_->done()) {
-            body_.reset();
-        }
+    return true;
+}
 
-        if (sendBuffer_.empty()) {
-            return true;
-        }
+Connection::SendResult Connection::sendResponse() {
+    if (bodyFailed_ || (sendOffset_ == sendBuffer_.size() && !refill())) {
+        bodyFailed_ = true;
+        return SendResult::BodyError;
+    }
+
+    if (sendOffset_ == sendBuffer_.size()) {
+        return SendResult::Ok;
     }
 
     ssize_t bytesSent = send(getFd(), sendBuffer_.data() + sendOffset_, sendBuffer_.size() - sendOffset_, 0);
 
     // client disconnected or the socket failed after poll reported it writable
     if (bytesSent <= 0) {
-        return false;
+        return SendResult::SocketError;
     }
 
     sendOffset_ += static_cast<std::size_t>(bytesSent);
 
-    if (sendOffset_ == sendBuffer_.size()) {
+    // Keep initialized storage between file chunks; release it once the response is complete.
+    if (isSendComplete()) {
         std::string().swap(sendBuffer_);
         sendOffset_ = 0;
     }
 
     //update timeout timer whenever bytes sent: prevent timeout during large transfers
     lastActivity_ = std::chrono::steady_clock::now();
-    return true;
+    return SendResult::Ok;
 }
 
 bool Connection::hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const {

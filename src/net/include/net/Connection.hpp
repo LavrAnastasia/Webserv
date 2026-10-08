@@ -25,12 +25,17 @@ private:
     std::string sendBuffer_;
     std::size_t sendOffset_ = 0;
     std::optional<ResponseBody> body_;
+    bool bodyFailed_ = false;
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
     bool shouldClose_;
     bool headersOnly_ = false;
 
+    bool refill();
+
 public:
+    enum class SendResult { Ok, BodyError, SocketError };
+
     Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config);
 
     const ConnectionInfo& info() const { return info_; }
@@ -46,13 +51,13 @@ public:
     // used by EventLoop to determine when to switch between POLLOUT and POLLIN
     bool isSendComplete() const;
 
-    // called by server, serializes the response into sendBuffer_
-    void appendResponse(HttpResponse response);
+    // Replaces the pending response and buffers headers with the first body bytes.
+    void setResponse(HttpResponse response);
 
     //called by server when POLLIN detected -reads raw bytes from socket -> HttpParser
     std::optional<ParseResult> receiveRequest();
 
-    bool sendResponse();
+    SendResult sendResponse();
     bool isAlive() const;
     bool hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const;
 };

@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <system_error>
 #include <variant>
@@ -19,7 +18,9 @@ public:
 
     std::uintmax_t size() const;
     bool done() const;
-    std::optional<std::string> next(std::size_t limit);
+    bool isInMemory() const;
+    // Replaces out with the next chunk; clears it on completion or read failure.
+    bool next(std::string& out, std::size_t limit);
 
 private:
     ResponseBody(FileDescriptor file, std::uintmax_t size);
