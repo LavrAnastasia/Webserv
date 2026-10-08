@@ -80,7 +80,8 @@ std::vector<std::string> CgiEnvironment::build(
 
     addVariable(env, "SCRIPT_NAME", request.path);
     addVariable(env, "SCRIPT_FILENAME", script.string());
-    addVariable(env, "PATH_INFO", "");
+    addVariable(env, "PATH_INFO", ""); // use request.path for tester
+    addVariable(env, "REQUEST_URI", request.query.empty() ? request.path : request.path + "?" + request.query);
 
     addVariable(env, "SERVER_PROTOCOL", request.version);
     addVariable(env, "SERVER_SOFTWARE", "webserv");
