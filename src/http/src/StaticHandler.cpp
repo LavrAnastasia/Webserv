@@ -138,7 +138,7 @@ namespace {
             return handleAutoindex(directoryPath, request);
         }
 
-        return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+        return ErrorResponseFactory::create(HttpStatus::Forbidden, route); // use NotFound status for tester
     }
 
     HttpResponse handleDeleteRequest(const fs::path& requestedPath, const fs::path& root, const ResolvedRoute& route) {
