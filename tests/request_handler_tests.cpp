@@ -60,7 +60,7 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns200ForExistingFile) {
-        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -71,7 +71,7 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns404ForMissingFile) {
-        const auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
@@ -117,7 +117,7 @@ namespace {
     TEST_P(RequestHandlerBodyLimitTest, ChecksBodySize) {
         const auto& test = GetParam();
 
-        const auto result = RequestDispatcher::dispatch(
+        auto result = RequestDispatcher::dispatch(
             Requests::get("/index.html", std::string(test.bodySize, 'a')), server_, ConnectionInfo{}
         );
 
@@ -160,8 +160,7 @@ namespace {
         server_.clientMaxBodySize = 4;
         server_.locations.front().clientMaxBodySize = 8;
 
-        const auto result =
-            RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);

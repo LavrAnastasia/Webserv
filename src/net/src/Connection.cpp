@@ -15,8 +15,12 @@ Connection::Connection(int fd, const std::string& ip, std::uint16_t serverPort, 
     setCloseOnExec();
 }
 
+void Connection::setHeadersOnly(bool state) {
+    headersOnly_ = state;
+}
+
 void Connection::appendResponse(HttpResponse response) {
-    auto output = HttpSerializer::serialize(std::move(response), {.close = shouldClose_});
+    auto output = HttpSerializer::serialize(std::move(response), {.close = shouldClose_, .headersOnly = headersOnly_});
 
     sendBuffer_ = std::move(output.headers);
     sendOffset_ = 0;

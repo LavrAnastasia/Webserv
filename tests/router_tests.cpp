@@ -58,7 +58,7 @@ namespace {
         void expectResponse(
             const HttpRequest& request, HttpStatus status, const std::optional<std::string>& body = std::nullopt
         ) const {
-            const auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
+            auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -274,7 +274,7 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        const auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -367,8 +367,7 @@ namespace {
         server_.locations.push_back(location);
 
         const std::string body = "payload";
-        const auto result =
-            RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 

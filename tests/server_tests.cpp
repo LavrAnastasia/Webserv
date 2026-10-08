@@ -133,7 +133,7 @@ namespace {
             }
         }
 
-        ReceivedResponse readResponse() {
+        ReceivedResponse readResponse(bool headersOnly = false) {
             const auto deadline = Clock::now() + 15s;
             std::size_t headerEnd;
 
@@ -186,6 +186,10 @@ namespace {
 
             if (error != std::errc{} || end != length.data() + length.size() || bodySize > 64u * 1024u * 1024u) {
                 throw std::runtime_error("Invalid or excessive Content-Length");
+            }
+
+            if (headersOnly) {
+                bodySize = 0;
             }
 
             const std::size_t bodyStart = headerEnd + 4;
@@ -326,7 +330,7 @@ namespace {
 
             LocationConfig location{};
             location.path = "/";
-            location.allowedMethods = {HttpMethod::Get};
+            location.allowedMethods = {HttpMethod::Get, HttpMethod::Head};
             serverConfig.locations = {location};
 
             Configuration config;
@@ -448,6 +452,43 @@ namespace {
             client.expectEof();
         }
     };
+
+    TEST_F(ServerTest, HeadOmitsFileBodyAndNextGetIncludesIt) {
+        const std::string expected = createLargeFile();
+        TestClient client(port_);
+        client.sendAll("HEAD /large.bin HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+        const auto response = client.readResponse(true);
+
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        EXPECT_EQ(response.headers.at("content-length"), std::to_string(expected.size()));
+        EXPECT_TRUE(response.body.empty());
+
+        client.sendAll(Requests::rawGet("/large.bin", "close"));
+        expectOK(client, expected);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, HeadOmitsCustomErrorBodyAndNextGetIncludesIt) {
+        const std::string expected(128u * 1024u + 17u, 'e');
+        Files::write(root_ / "error.html", expected);
+
+        TestClient client(port_);
+        client.sendAll("HEAD /missing.txt HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+        const auto head = client.readResponse(true);
+
+        EXPECT_EQ(head.statusLine, "HTTP/1.1 404 Not Found");
+        EXPECT_EQ(head.headers.at("content-length"), std::to_string(expected.size()));
+        EXPECT_TRUE(head.body.empty());
+
+        client.sendAll(Requests::rawGet("/missing.txt", "close"));
+        const auto get = client.readResponse();
+
+        EXPECT_EQ(get.statusLine, "HTTP/1.1 404 Not Found");
+        EXPECT_EQ(get.body, expected);
+        client.expectEof();
+    }
 
     TEST_F(ServerTest, ServesSeveralClientsWithoutMixingTheirResponses) {
         constexpr int clientCount = 8;
