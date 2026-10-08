@@ -2,6 +2,9 @@
 
 #include "http/HttpResponse.hpp"
 
+#include <optional>
+#include <string>
+
 class HttpSerializer {
 public:
     struct Framing {
@@ -9,5 +12,10 @@ public:
         bool headersOnly = false;
     };
 
-    static std::string serialize(const HttpResponse& response, const Framing& framing);
+    struct Output {
+        std::string headers;
+        std::optional<ResponseBody> body;
+    };
+
+    static Output serialize(HttpResponse response, const Framing& framing);
 };

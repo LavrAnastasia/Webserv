@@ -1,8 +1,5 @@
 #include "ErrorResponseFactory.hpp"
 
-#include <fstream>
-#include <iterator>
-#include <optional>
 #include <string>
 #include <utility>
 
@@ -24,27 +21,6 @@ namespace {
         return Http::Html::buildPage(title, title);
     }
 
-    std::optional<std::string> readBody(const std::filesystem::path& path) {
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(path, ec)) {
-            return std::nullopt;
-        }
-
-        std::ifstream file(path, std::ios::binary);
-
-        if (!file.is_open()) {
-            return std::nullopt;
-        }
-
-        std::string body{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-
-        if (file.bad()) {
-            return std::nullopt;
-        }
-
-        return body;
-    }
-
     HttpResponse buildResponse(HttpStatus status) {
         return HttpResponseFactory::create(status, buildHtml(status), std::string(Http::Mime::Html));
     }
@@ -56,13 +32,15 @@ namespace {
             return buildResponse(status);
         }
 
-        std::optional<std::string> body = readBody(it->second);
+        auto body = ResponseBody::open(it->second);
 
-        if (!body.has_value()) {
+        if (std::get_if<std::error_code>(&body)) {
             return buildResponse(status);
         }
 
-        return HttpResponseFactory::create(status, std::move(*body), std::string(Http::Mime::Html));
+        return HttpResponseFactory::create(
+            status, std::move(std::get<ResponseBody>(body)), std::string(Http::Mime::Html)
+        );
     }
 } // namespace
 

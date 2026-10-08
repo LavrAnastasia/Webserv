@@ -1,12 +1,38 @@
 #include "net/ServerSocket.hpp"
 
-#include <arpa/inet.h> // inet_pton()
 #include <cerrno>
+#include <netdb.h>
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h> // socket(), AF_INET, SOCK_STREAM
 #include <system_error>
 #include <unistd.h>
+
+namespace {
+    in_addr resolveAddress(const std::string& host) {
+        addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_NUMERICHOST;
+
+        addrinfo* result = nullptr;
+
+        if (::getaddrinfo(host.c_str(), nullptr, &hints, &result) != 0) {
+            throw std::invalid_argument("invalid host address: " + host);
+        }
+
+        const in_addr address = reinterpret_cast<const sockaddr_in*>(result->ai_addr)->sin_addr;
+        ::freeaddrinfo(result);
+        return address;
+    }
+
+    std::string formatAddress(in_addr address) {
+        const std::uint32_t value = ntohl(address.s_addr);
+
+        return std::to_string((value >> 24) & 255) + '.' + std::to_string((value >> 16) & 255) + '.' +
+            std::to_string((value >> 8) & 255) + '.' + std::to_string(value & 255);
+    }
+} // namespace
 
 ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(port) {
     int newFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -19,14 +45,7 @@ ServerSocket::ServerSocket(const std::string& host, std::uint16_t port) : port_(
     socketAddress_.sin_family = AF_INET; //external IPv4 address
     socketAddress_.sin_port = htons(port_); //convert port_ from machine to server byte order
 
-    if (host == "0.0.0.0") {
-        socketAddress_.sin_addr.s_addr = htonl(INADDR_ANY); //accept connections on any IP
-    } else {
-        // convert string to uint32_t to be usable by OS
-        if (inet_pton(AF_INET, host.c_str(), &socketAddress_.sin_addr) <= 0) {
-            throw std::invalid_argument("invalid host address: " + host);
-        }
-    }
+    socketAddress_.sin_addr = resolveAddress(host);
     int opt = 1;
     if (setsockopt(getFd(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
         throw std::system_error(errno, std::generic_category(), "setsockopt(SO_REUSEADDR)");
@@ -47,7 +66,7 @@ std::uint16_t ServerSocket::getPort() const {
 
 int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) {
     // data for accept() to fill out
-    struct sockaddr_in clientAddress;
+    struct sockaddr_in clientAddress{};
     socklen_t clientLen = sizeof(clientAddress);
 
     // OS fills out argument variables with caller's actual info
@@ -58,7 +77,7 @@ int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) 
     }
 
     // convert binary IP address into readable string and pass it outside of function by reference
-    clientIp = inet_ntoa(clientAddress.sin_addr);
+    clientIp = formatAddress(clientAddress.sin_addr);
 
     // convert port from network byte order to normal and pass outside of function by reference
     clientPort = ntohs(clientAddress.sin_port);
@@ -93,11 +112,6 @@ int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) 
 
     bind() takes a generic sockaddr dummy struct as an input, allowing support for different
     address types (IPv4, IPv6, Bluetooth etc)
-
-    inet_pton(AF_INET, host.c_str(), &socketAddress_.sin_addr) converts a string address to uint32_t
-    1. CONVERSION RULE (address type): AF_INET = IPv4
-    2. INPUT: host.c_str() converts a std::string object to a c-style string
-    3. OUTPUT: &socketAddress_.sin_addr = location of binary IP address, used by the OS
 
     NOTE:
 */

@@ -3,10 +3,12 @@ TEST_DIR := tests
 TEST_NAMES := \
 	cgi_response_parser \
 	config_loader \
+	connection \
 	http_parser \
 	request_handler \
 	router \
 	serializer \
+	response_body \
 	server \
 	static_handler
 

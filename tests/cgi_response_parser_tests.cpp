@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "http/CgiResponseParser.hpp"
+#include "includes/Responses.hpp"
 
 namespace {
 
@@ -12,11 +13,11 @@ namespace {
     }
 
     TEST(CgiResponseParserTest, DefaultsTo200) {
-        const auto response = parse("Content-Type: text/plain\n\nhello");
+        auto response = parse("Content-Type: text/plain\n\nhello");
 
         ASSERT_TRUE(response.has_value());
         EXPECT_EQ(response->status, HttpStatus::OK);
-        EXPECT_EQ(response->body, "hello");
+        EXPECT_EQ(Responses::read(response->body), "hello");
     }
 
     TEST(CgiResponseParserTest, LocationWithoutStatusIs302) {

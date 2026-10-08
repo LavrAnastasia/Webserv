@@ -12,6 +12,7 @@
 #include "http/RequestDispatcher.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
+#include "includes/Responses.hpp"
 #include "includes/TempDirectory.hpp"
 
 namespace {
@@ -57,13 +58,13 @@ namespace {
         void expectResponse(
             const HttpRequest& request, HttpStatus status, const std::optional<std::string>& body = std::nullopt
         ) const {
-            const auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
+            auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-            const auto& response = std::get<HttpResponse>(result);
+            auto& response = std::get<HttpResponse>(result);
 
             EXPECT_EQ(response.status, status);
             if (body.has_value()) {
-                EXPECT_EQ(response.body, *body);
+                EXPECT_EQ(Responses::read(response.body), *body);
             }
         }
 
@@ -72,7 +73,7 @@ namespace {
         ) const {
             const auto result = RequestDispatcher::dispatch(Requests::get(path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-            const auto& response = std::get<HttpResponse>(result);
+            auto& response = std::get<HttpResponse>(result);
 
             EXPECT_EQ(response.status, status);
             expectHeader(response, "Location", target);
@@ -255,7 +256,7 @@ namespace {
         const auto result =
             RequestDispatcher::dispatch(Requests::post("/files/document.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::MethodNotAllowed);
         EXPECT_TRUE(response.headers.has("Allow", "GET"));
@@ -273,13 +274,13 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        const auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         ASSERT_EQ(response.status, HttpStatus::OK);
         expectHeader(response, "Content-Type", "text/html; charset=utf-8");
-        EXPECT_NE(response.body.find("<a href=\"document.txt\">document.txt</a>"), std::string::npos);
+        EXPECT_NE(Responses::read(response.body).find("<a href=\"document.txt\">document.txt</a>"), std::string::npos);
     }
 
     TEST_F(RouterTest, LoadsErrorPagesFromEffectiveRoot) {
@@ -333,10 +334,10 @@ namespace {
         Files::write(root_ / "errors/400.html", "server 400");
         Files::write(siteRoot / "errors/400.html", "site 400");
 
-        const HttpResponse response = RequestDispatcher::fail(HttpStatus::BadRequest, server_);
+        HttpResponse response = RequestDispatcher::fail(HttpStatus::BadRequest, server_);
 
         EXPECT_EQ(response.status, HttpStatus::BadRequest);
-        EXPECT_EQ(response.body, "site 400");
+        EXPECT_EQ(Responses::read(response.body), "site 400");
     }
 
     TEST_F(RouterTest, LoadsErrorPageFromServerRootWhenNoLocationMatches) {
@@ -366,14 +367,13 @@ namespace {
         server_.locations.push_back(location);
 
         const std::string body = "payload";
-        const auto result =
-            RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         ASSERT_EQ(response.status, HttpStatus::Created);
         expectHeader(response, "Location", "/upload/file.txt");
-        EXPECT_TRUE(response.body.empty());
+        EXPECT_TRUE(Responses::read(response.body).empty());
         ASSERT_TRUE(fs::is_regular_file(root_ / "incoming/file.txt"));
         EXPECT_EQ(Files::read(root_ / "incoming/file.txt"), body);
     }
@@ -432,7 +432,7 @@ namespace {
     TEST_F(RouterTest, Returns405WithAllowWhenMethodIsNotAllowed) {
         const auto result = RequestDispatcher::dispatch(Requests::post("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::MethodNotAllowed);
         expectHeader(response, "Allow", "GET");

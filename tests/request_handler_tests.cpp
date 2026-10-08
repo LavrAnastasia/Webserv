@@ -10,6 +10,7 @@
 #include "http/RequestDispatcher.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
+#include "includes/Responses.hpp"
 #include "includes/TempDirectory.hpp"
 
 namespace {
@@ -59,23 +60,25 @@ namespace {
     }
 
     TEST_F(RequestHandlerTest, Returns200ForExistingFile) {
-        const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
+        const std::string actualBody = Responses::read(response.body);
 
         EXPECT_EQ(response.status, HttpStatus::OK);
-        EXPECT_EQ(response.body, fileBody_);
+        EXPECT_EQ(actualBody, fileBody_);
     }
 
     TEST_F(RequestHandlerTest, Returns404ForMissingFile) {
-        const auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/missing.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
+        const std::string actualBody = Responses::read(response.body);
 
         EXPECT_EQ(response.status, HttpStatus::NotFound);
-        EXPECT_FALSE(response.body.empty());
+        EXPECT_FALSE(actualBody.empty());
     }
 
     TEST_F(RequestHandlerTest, Returns404WhenNoLocationMatches) {
@@ -84,7 +87,7 @@ namespace {
         const auto result = RequestDispatcher::dispatch(Requests::get("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::NotFound);
     }
@@ -93,7 +96,7 @@ namespace {
         const auto result = RequestDispatcher::dispatch(Requests::post("/index.html"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::MethodNotAllowed);
 
@@ -114,17 +117,18 @@ namespace {
     TEST_P(RequestHandlerBodyLimitTest, ChecksBodySize) {
         const auto& test = GetParam();
 
-        const auto result = RequestDispatcher::dispatch(
+        auto result = RequestDispatcher::dispatch(
             Requests::get("/index.html", std::string(test.bodySize, 'a')), server_, ConnectionInfo{}
         );
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
+        const std::string actualBody = Responses::read(response.body);
 
         EXPECT_EQ(response.status, test.expectedStatus);
 
         if (test.expectedStatus == HttpStatus::OK) {
-            EXPECT_EQ(response.body, fileBody_);
+            EXPECT_EQ(actualBody, fileBody_);
         }
     }
 
@@ -147,7 +151,7 @@ namespace {
             RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, HttpStatus::PayloadTooLarge);
     }
@@ -156,14 +160,14 @@ namespace {
         server_.clientMaxBodySize = 4;
         server_.locations.front().clientMaxBodySize = 8;
 
-        const auto result =
-            RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
+        auto result = RequestDispatcher::dispatch(Requests::get("/index.html", "12345"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
+        const std::string actualBody = Responses::read(response.body);
 
         EXPECT_EQ(response.status, HttpStatus::OK);
-        EXPECT_EQ(response.body, fileBody_);
+        EXPECT_EQ(actualBody, fileBody_);
     }
 
     struct RedirectCase {
@@ -182,7 +186,7 @@ namespace {
         const auto result = RequestDispatcher::dispatch(Requests::get("/old"), server_, ConnectionInfo{});
 
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        const auto& response = std::get<HttpResponse>(result);
+        auto& response = std::get<HttpResponse>(result);
 
         EXPECT_EQ(response.status, test.status);
 

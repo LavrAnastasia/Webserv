@@ -1,6 +1,7 @@
 #include <array>
 #include <ctime>
 #include <optional>
+#include <utility>
 
 #include "HeaderFields.hpp"
 #include "HttpSyntax.hpp"
@@ -61,13 +62,12 @@ namespace {
 
 } // namespace
 
-std::string HttpSerializer::serialize(const HttpResponse& response, const Framing& framing) {
+HttpSerializer::Output HttpSerializer::serialize(HttpResponse response, const Framing& framing) {
     const int statusCode = static_cast<int>(response.status);
-    const std::string& body = response.body;
     const bool bodyForbidden = statusForbidsBody(response.status);
 
     std::string output;
-    output.reserve(256 + body.size());
+    output.reserve(256);
 
     output.append(Http::Protocol::VersionPrefix)
         .append(Http::Protocol::Version)
@@ -77,7 +77,7 @@ std::string HttpSerializer::serialize(const HttpResponse& response, const Framin
         .append(Http::Status::toString(response.status))
         .append(Http::Syntax::CRLF);
 
-    HttpHeaders headers = response.headers;
+    HttpHeaders headers = std::move(response.headers);
 
     headers.erase(Http::Headers::TransferEncoding);
 
@@ -96,14 +96,16 @@ std::string HttpSerializer::serialize(const HttpResponse& response, const Framin
     if (bodyForbidden) {
         headers.erase(Http::Headers::ContentLength);
     } else {
-        headers.set(std::string(Http::Headers::ContentLength), std::to_string(body.size()));
+        headers.set(std::string(Http::Headers::ContentLength), std::to_string(response.body.size()));
     }
 
     output.append(headers.serialize()).append(Http::Syntax::CRLF);
 
-    if (!framing.headersOnly && !bodyForbidden) {
-        output.append(body);
+    Output result{.headers = std::move(output), .body = std::nullopt};
+
+    if (!framing.headersOnly && !bodyForbidden && !response.body.done()) {
+        result.body.emplace(std::move(response.body));
     }
 
-    return output;
+    return result;
 }
