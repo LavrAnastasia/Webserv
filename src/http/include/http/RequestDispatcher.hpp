@@ -14,5 +14,4 @@ class RequestDispatcher {
 public:
     static HandlerResult
     dispatch(const HttpRequest& request, const ServerConfig& server, const ConnectionInfo& connectionInfo);
-    static HttpResponse fail(HttpStatus status, const ServerConfig& server);
 };

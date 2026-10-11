@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <variant>
 
 #include <gtest/gtest.h>
@@ -37,7 +39,7 @@ namespace {
 
             LocationConfig cgi{};
             cgi.path = "/cgi";
-            cgi.allowedMethods = {HttpMethod::Get};
+            cgi.allowedMethods = {HttpMethod::Get, HttpMethod::Head};
             cgi.cgi.emplace(".py", CgiConfig{".py", fs::path("/usr/bin/python3")});
 
             server_.root = root_;
@@ -64,6 +66,14 @@ namespace {
         }
 
         template <typename Action> bool ended() const { return std::holds_alternative<Action>(end_); }
+
+        void startCgi(const std::string& request) {
+            ASSERT_TRUE(std::holds_alternative<CgiRequest>(session_->receive(request)));
+        }
+
+        void receiveOutput(std::string_view output) {
+            ASSERT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->receiveOutput(output)));
+        }
 
         static bool closes(const std::string& response) {
             return response.find("Connection: close\r\n") != std::string::npos;
@@ -97,6 +107,19 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 400 "));
         EXPECT_TRUE(closes(response));
         EXPECT_TRUE(ended<HttpSession::Close>());
+    }
+
+    TEST_F(HttpSessionTest, AnswersAMalformedRequestWithTheErrorPageOfItsLocation) {
+        const fs::path siteRoot = temp_.path() / "site";
+        server_.locations.front().root = siteRoot;
+        server_.errorPages = {{HttpStatus::BadRequest, "/errors/400.html"}};
+        Files::write(root_ / "errors/400.html", "server 400");
+        Files::write(siteRoot / "errors/400.html", "site 400");
+
+        const std::string response = deliver(session_->receive("GARBAGE\r\n\r\n"));
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 400 "));
+        EXPECT_EQ(body(response), "site 400");
     }
 
     TEST_F(HttpSessionTest, KeepsTheConnectionAndAnswersTheNextRequest) {
@@ -230,5 +253,109 @@ namespace {
 
         ASSERT_NE(request, nullptr);
         EXPECT_NE(std::ranges::find(request->env, "REMOTE_ADDR=10.0.0.7"), request->env.end());
+    }
+
+    TEST_F(HttpSessionTest, AnswersWithTheCollectedCgiOutputWhenItEnds) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        receiveOutput("Status: 201 Created\r\nContent-");
+        receiveOutput("Type: text/plain\r\n\r\nhel");
+        receiveOutput("lo");
+
+        const std::string response = deliver(session_->endOutput());
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 201 "));
+        EXPECT_EQ(body(response), "hello");
+        EXPECT_TRUE(ended<HttpSession::Read>());
+    }
+
+    TEST_F(HttpSessionTest, AnswersBadGatewayForEmptyOrInvalidCgiOutput) {
+        for (const std::string output : {"", "nonsense\r\n\r\n"}) {
+            SCOPED_TRACE(output);
+            startCgi(Requests::rawGet("/cgi/app.py"));
+
+            if (!output.empty()) {
+                receiveOutput(output);
+            }
+
+            const std::string response = deliver(session_->endOutput());
+
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
+            EXPECT_TRUE(ended<HttpSession::Read>());
+        }
+    }
+
+    TEST_F(HttpSessionTest, DoesNotReuseTheOutputOfThePreviousCgi) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        receiveOutput("Content-Type: text/plain\r\n\r\nfirst");
+        deliver(session_->endOutput());
+        ASSERT_TRUE(ended<HttpSession::Read>());
+
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string response = deliver(session_->endOutput());
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
+    }
+
+    TEST_F(HttpSessionTest, AnswersBadGatewayAsSoonAsCgiOutputIsTooLarge) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string megabyte(1024 * 1024, 'x');
+        HttpSession::Action action = session_->receiveOutput("Content-Type: text/plain\r\n\r\n");
+        int chunks = 0;
+
+        while (std::holds_alternative<HttpSession::ReadOutput>(action) && chunks++ < 200) {
+            action = session_->receiveOutput(megabyte);
+        }
+
+        EXPECT_EQ(chunks, 128);
+        EXPECT_TRUE(deliver(std::move(action)).starts_with("HTTP/1.1 502 "));
+    }
+
+    TEST_F(HttpSessionTest, MapsCgiFailuresToStatuses) {
+        const std::pair<HttpSession::CgiFailure, std::string> cases[] = {
+            {HttpSession::CgiFailure::Busy, "503"},
+            {HttpSession::CgiFailure::Launch, "502"},
+            {HttpSession::CgiFailure::Output, "502"},
+            {HttpSession::CgiFailure::Timeout, "504"},
+        };
+
+        for (const auto& [failure, status] : cases) {
+            SCOPED_TRACE(status);
+            startCgi(Requests::rawGet("/cgi/app.py"));
+
+            const std::string response = deliver(session_->fail(failure));
+
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 " + status + " "));
+            EXPECT_TRUE(ended<HttpSession::Read>());
+        }
+    }
+
+    TEST_F(HttpSessionTest, HeadOnCgiSendsHeadersOnly) {
+        startCgi("HEAD /cgi/app.py HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        receiveOutput("Content-Type: text/plain\r\n\r\nhello");
+
+        const std::string response = deliver(session_->endOutput());
+
+        EXPECT_NE(response.find("Content-Length: 5\r\n"), std::string::npos);
+        EXPECT_TRUE(body(response).empty());
+    }
+
+    TEST_F(HttpSessionTest, ClosesAfterCgiWhenTheClientAsksForIt) {
+        startCgi(Requests::rawGet("/cgi/app.py", "close"));
+        receiveOutput("Content-Type: text/plain\r\n\r\nhello");
+
+        deliver(session_->endOutput());
+
+        EXPECT_TRUE(ended<HttpSession::Close>());
+    }
+
+    TEST_F(HttpSessionTest, AnswersARequestPipelinedBehindCgi) {
+        startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/"));
+        receiveOutput("Content-Type: text/plain\r\n\r\ncgi");
+
+        const std::string responses = deliver(session_->endOutput());
+
+        EXPECT_LT(responses.find("\r\n\r\ncgi"), responses.find("\r\n\r\nhello"));
+        EXPECT_NE(responses.find("\r\n\r\nhello"), std::string::npos);
+        EXPECT_TRUE(ended<HttpSession::Read>());
     }
 } // namespace

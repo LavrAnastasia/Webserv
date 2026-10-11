@@ -17,25 +17,29 @@
 class HttpSession {
 public:
     struct Read {};
+    struct ReadOutput {};
     struct Close {};
     struct Write {
         std::string bytes;
     };
-    using Action = std::variant<Read, Write, Close, CgiRequest>;
+    using Action = std::variant<Read, ReadOutput, Write, Close, CgiRequest>;
+    enum class CgiFailure { Busy, Launch, Output, Timeout };
 
     HttpSession(const ServerConfig& server, ConnectionInfo info);
 
     Action receive(std::string_view bytes);
     Action emit();
-    Action respond(HttpResponse response);
-    Action fail(HttpStatus status);
     Action expire();
+    Action receiveOutput(std::string_view bytes);
+    Action endOutput();
+    Action fail(CgiFailure failure);
 
 private:
     enum class Phase { Reading, Responding };
 
-    Action start(HttpResponse response);
+    Action respond(HttpResponse response);
     Action finish();
+    Action fail(HttpStatus status);
     bool append(std::string& bytes);
 
     const ServerConfig& server_;
@@ -44,4 +48,5 @@ private:
     Phase phase_ = Phase::Reading;
     HttpSerializer::Framing framing_;
     std::optional<ResponseBody> body_;
+    std::string output_;
 };

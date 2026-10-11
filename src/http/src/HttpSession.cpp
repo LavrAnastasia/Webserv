@@ -2,12 +2,17 @@
 
 #include <utility>
 
+#include "ErrorResponseFactory.hpp"
+#include "Router.hpp"
+#include "http/CgiResponseParser.hpp"
 #include "http/HttpMethod.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "log/Log.hpp"
 
 namespace {
     constexpr std::size_t kChunkSize = 64 * 1024;
+    // TODO: WEB-55 remove the cap once the output is streamed
+    constexpr std::size_t kMaxOutputSize = 128 * 1024 * 1024;
 } // namespace
 
 HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info)
@@ -36,7 +41,7 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     HandlerResult handled = RequestDispatcher::dispatch(request, server_, info_);
 
     if (HttpResponse* response = std::get_if<HttpResponse>(&handled)) {
-        return start(std::move(*response));
+        return respond(std::move(*response));
     }
 
     return std::move(std::get<CgiRequest>(handled));
@@ -56,14 +61,6 @@ HttpSession::Action HttpSession::emit() {
     return Write{std::move(bytes)};
 }
 
-HttpSession::Action HttpSession::respond(HttpResponse response) {
-    return start(std::move(response));
-}
-
-HttpSession::Action HttpSession::fail(HttpStatus status) {
-    return start(RequestDispatcher::fail(status, server_));
-}
-
 HttpSession::Action HttpSession::expire() {
     if (phase_ == Phase::Responding) {
         Log::info("client timed out while sending response, client: " + info_.remoteAddr);
@@ -76,7 +73,54 @@ HttpSession::Action HttpSession::expire() {
     return fail(HttpStatus::RequestTimeout);
 }
 
-HttpSession::Action HttpSession::start(HttpResponse response) {
+HttpSession::Action HttpSession::receiveOutput(std::string_view bytes) {
+    // TODO: WEB-55 stream the output to the client instead of collecting it
+    if (output_.size() + bytes.size() > kMaxOutputSize) {
+        Log::error("CGI output is too large, client: " + info_.remoteAddr);
+        std::string().swap(output_);
+        return fail(HttpStatus::BadGateway);
+    }
+
+    output_.append(bytes);
+    return ReadOutput{};
+}
+
+HttpSession::Action HttpSession::endOutput() {
+    std::string output;
+    output.swap(output_);
+
+    std::optional<HttpResponse> response = CgiResponseParser::parse(output);
+
+    if (response) {
+        return respond(std::move(*response));
+    }
+
+    const std::string problem = output.empty() ? "CGI produced no usable output" : "CGI sent invalid header";
+    Log::error(problem + " while reading response header, client: " + info_.remoteAddr);
+    return fail(HttpStatus::BadGateway);
+}
+
+HttpSession::Action HttpSession::fail(CgiFailure failure) {
+    std::string().swap(output_);
+
+    switch (failure) {
+        case CgiFailure::Busy:
+            return fail(HttpStatus::ServiceUnavailable);
+        case CgiFailure::Timeout:
+            return fail(HttpStatus::GatewayTimeout);
+        case CgiFailure::Launch:
+        case CgiFailure::Output:
+            break;
+    }
+
+    return fail(HttpStatus::BadGateway);
+}
+
+HttpSession::Action HttpSession::fail(HttpStatus status) {
+    return respond(ErrorResponseFactory::create(status, Router::mapErrorPages(server_)));
+}
+
+HttpSession::Action HttpSession::respond(HttpResponse response) {
     HttpSerializer::Output output = HttpSerializer::serialize(std::move(response), framing_);
     std::string bytes = std::move(output.headers);
 

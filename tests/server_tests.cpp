@@ -331,7 +331,21 @@ namespace {
             LocationConfig location{};
             location.path = "/";
             location.allowedMethods = {HttpMethod::Get, HttpMethod::Head};
-            serverConfig.locations = {location};
+
+            LocationConfig cgi{};
+            cgi.path = "/cgi";
+            cgi.allowedMethods = {HttpMethod::Get, HttpMethod::Head};
+            cgi.cgi.emplace(".sh", CgiConfig{".sh", fs::path("/bin/sh")});
+
+            Files::write(root_ / "cgi/hello.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\nhello from cgi'\n");
+            Files::write(root_ / "cgi/bad.sh", "printf 'nonsense\\n\\n'\n");
+            Files::write(root_ / "cgi/slow.sh", "sleep 3\nprintf 'Content-Type: text/plain\\r\\n\\r\\nlate'\n");
+            Files::write(
+                root_ / "cgi/large.sh",
+                "printf 'Content-Type: application/octet-stream\\r\\n\\r\\n'\nhead -c 3000000 /dev/zero\n"
+            );
+
+            serverConfig.locations = {location, cgi};
 
             Configuration config;
             config.servers.push_back(serverConfig);
@@ -525,6 +539,62 @@ namespace {
         slow.sendAll(" localhost\r\nConnection: close\r\n\r\n");
         expectOK(slow, smallBody_);
         slow.expectEof();
+    }
+
+    TEST_F(ServerTest, AnswersCgiAndReusesTheConnection) {
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/hello.sh"));
+        expectOK(client, "hello from cgi");
+
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, HeadOnCgiOmitsTheBody) {
+        TestClient client(port_);
+        client.sendAll("HEAD /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+        const auto response = client.readResponse(true);
+
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        EXPECT_EQ(response.headers.at("content-length"), "14");
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, AnswersBadGatewayForInvalidCgiOutputAndKeepsServing) {
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/bad.sh", "close"));
+
+        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
+        client.expectEof();
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, SendsLargeCgiOutputWhole) {
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/large.sh", "close"));
+
+        expectOK(client, std::string(3000000, '\0'));
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, ClientLeavingDuringCgiDoesNotAffectOthers) {
+        TestClient leaving(port_);
+        leaving.sendAll(Requests::rawGet("/cgi/slow.sh"));
+        ::poll(nullptr, 0, 200);
+        leaving.abortWithReset();
+
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, AnswersARequestPipelinedBehindCgi) {
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/hello.sh") + Requests::rawGet("/small.txt", "close"));
+
+        expectOK(client, "hello from cgi");
+        expectOK(client, smallBody_);
+        client.expectEof();
     }
 
     class ServerKeepAliveTest : public ServerTest, public ::testing::WithParamInterface<bool> {};

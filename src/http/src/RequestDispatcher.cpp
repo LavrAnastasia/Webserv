@@ -38,7 +38,3 @@ HandlerResult RequestDispatcher::dispatch(
 
     return StaticHandler::handle(request, *route);
 }
-
-HttpResponse RequestDispatcher::fail(HttpStatus status, const ServerConfig& server) {
-    return ErrorResponseFactory::create(status, Router::mapErrorPages(server));
-}

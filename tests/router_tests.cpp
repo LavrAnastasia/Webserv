@@ -326,20 +326,6 @@ namespace {
         expectResponse(Requests::get("/api/missing"), HttpStatus::NotFound, "site 404");
     }
 
-    TEST_F(RouterTest, ErrorsWithoutRouteUseLocationRoot) {
-        const fs::path siteRoot = temp_.path() / "site";
-        server_.locations.front().root = siteRoot;
-        server_.errorPages = {{HttpStatus::BadRequest, "/errors/400.html"}};
-
-        Files::write(root_ / "errors/400.html", "server 400");
-        Files::write(siteRoot / "errors/400.html", "site 400");
-
-        HttpResponse response = RequestDispatcher::fail(HttpStatus::BadRequest, server_);
-
-        EXPECT_EQ(response.status, HttpStatus::BadRequest);
-        EXPECT_EQ(Responses::read(response.body), "site 400");
-    }
-
     TEST_F(RouterTest, LoadsErrorPageFromServerRootWhenNoLocationMatches) {
         const fs::path apiRoot = temp_.path() / "api";
         auto api = makeLocation("/api");
