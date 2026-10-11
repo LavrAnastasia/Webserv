@@ -111,22 +111,13 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
 
     //send phase (OS write bucket has space)
     if (events & POLLOUT) {
-        const auto result = connection.sendResponse();
-
-        if (result != Connection::SendResult::Ok) {
-            if (result == Connection::SendResult::BodyError) {
-                Log::error(
-                    "failed to read response body (file was truncated or read failed), client: " +
-                    connection.info().remoteAddr
-                );
-            }
-
+        if (!connection.send()) {
             closeConnection(clientFd);
             return;
         }
 
-        if (connection.isSendComplete()) {
-            execute(clientFd, client->session.finish());
+        if (connection.pending() == 0) {
+            execute(clientFd, client->session.emit());
         }
     }
 }
@@ -140,8 +131,8 @@ void EventLoop::execute(int clientFd, HttpSession::Action action) {
 
     if (std::holds_alternative<HttpSession::Close>(action)) {
         closeConnection(clientFd);
-    } else if (HttpSerializer::Output* output = std::get_if<HttpSerializer::Output>(&action)) {
-        client->connection.setResponse(std::move(*output));
+    } else if (HttpSession::Write* write = std::get_if<HttpSession::Write>(&action)) {
+        client->connection.queue(std::move(write->bytes));
         poller_.modifySocket(clientFd, POLLOUT);
     } else if (const CgiRequest* request = std::get_if<CgiRequest>(&action)) {
         launchCgi(*client, *request);
@@ -218,18 +209,19 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     }
 
     std::optional<HttpResponse> response = CgiResponseParser::parse(process->output());
+    HttpSession::Action action;
 
     if (response) {
-        client->connection.setResponse(client->session.serialize(std::move(*response)));
+        action = client->session.respond(std::move(*response));
     } else {
         const std::string problem =
             process->output().empty() ? "CGI produced no usable output" : "CGI sent invalid header";
         Log::error(problem + " while reading response header, client: " + client->connection.info().remoteAddr);
-        client->connection.setResponse(client->session.fail(HttpStatus::BadGateway));
+        action = client->session.fail(HttpStatus::BadGateway);
     }
 
     cgiRegistry_.remove(clientFd);
-    poller_.modifySocket(clientFd, POLLOUT);
+    execute(clientFd, std::move(action));
 }
 
 void EventLoop::closeCgi(int clientFd) {
