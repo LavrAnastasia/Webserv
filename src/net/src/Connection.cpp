@@ -1,8 +1,5 @@
 #include "net/Connection.hpp"
 
-#include "config/ServerConfig.hpp"
-#include "http/HttpSerializer.hpp"
-
 #include <sys/socket.h>
 #include <utility>
 
@@ -10,21 +7,26 @@ namespace {
     constexpr std::size_t kChunkSize = 64 * 1024;
 } // namespace
 
-Connection::Connection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig& config)
-    : info_{ip, serverPort}, parser_(config.maxBodySize()), serverConfig_(config),
-      lastActivity_(std::chrono::steady_clock::now()), shouldClose_(false) {
+Connection::Connection(int fd, ConnectionInfo info)
+    : info_(std::move(info)), lastActivity_(std::chrono::steady_clock::now()) {
     setFd(fd);
     setNonBlocking();
     setCloseOnExec();
 }
 
-void Connection::setHeadersOnly(bool state) {
-    headersOnly_ = state;
+std::optional<std::string_view> Connection::receive() {
+    const ssize_t received = recv(getFd(), readBuffer_.data(), readBuffer_.size(), 0);
+
+    // host disconnected or the socket failed after poll reported it readable
+    if (received <= 0) {
+        return std::nullopt;
+    }
+
+    lastActivity_ = std::chrono::steady_clock::now();
+    return std::string_view(readBuffer_.data(), static_cast<std::size_t>(received));
 }
 
-void Connection::setResponse(HttpResponse response) {
-    auto output = HttpSerializer::serialize(std::move(response), {.close = shouldClose_, .headersOnly = headersOnly_});
-
+void Connection::setResponse(HttpSerializer::Output output) {
     sendBuffer_.clear();
     sendOffset_ = 0;
     body_ = std::move(output.body);
@@ -36,28 +38,6 @@ void Connection::setResponse(HttpResponse response) {
 
 bool Connection::isSendComplete() const {
     return sendOffset_ == sendBuffer_.size() && !body_;
-}
-
-/*
-    called by server when status == POLLIN, calls recv() and appends to parser_'s
-    internal buffer
-
-    recv function signature: ssize_t recv(int sockfd, void *buf, size_t len, int flags);
-    0 for flags is the default
-*/
-std::optional<ParseResult> Connection::receiveRequest() {
-    char buffer[4096];
-    ssize_t bytesReceived = recv(getFd(), buffer, sizeof(buffer), 0);
-
-    // host disconnected or the socket failed after poll reported it readable
-    if (bytesReceived <= 0) {
-        return std::nullopt;
-    }
-
-    lastActivity_ = std::chrono::steady_clock::now(); // update timeout timer
-
-    // recv return > 0 indicates number of bytes successfully received
-    return parser_.append(buffer, bytesReceived);
 }
 
 bool Connection::isAlive() const {
@@ -108,7 +88,6 @@ Connection::SendResult Connection::sendResponse() {
         sendOffset_ = 0;
     }
 
-    //update timeout timer whenever bytes sent: prevent timeout during large transfers
     lastActivity_ = std::chrono::steady_clock::now();
     return SendResult::Ok;
 }
