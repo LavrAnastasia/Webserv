@@ -10,8 +10,8 @@
 
 #include <gtest/gtest.h>
 
-#include "config/ServerConfig.hpp"
 #include "fs/FileDescriptor.hpp"
+#include "http/HttpSerializer.hpp"
 #include "includes/Files.hpp"
 #include "includes/TempDirectory.hpp"
 #include "net/Connection.hpp"
@@ -22,7 +22,6 @@ namespace {
     class ConnectionTest : public ::testing::Test {
     protected:
         TempDirectory temp_{"webserv-connection"};
-        ServerConfig config_;
         FileDescriptor peer_;
         std::unique_ptr<Connection> connection_;
         using SignalHandler = void (*)(int);
@@ -33,13 +32,17 @@ namespace {
             int sockets[2];
             ASSERT_EQ(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets), 0);
             peer_ = FileDescriptor(sockets[1]);
-            connection_ = std::make_unique<Connection>(sockets[0], "127.0.0.1", 8080, config_);
+            connection_ = std::make_unique<Connection>(sockets[0], ConnectionInfo{"127.0.0.1", 8080});
 
             const int bufferSize = 128 * 1024;
             ASSERT_EQ(::setsockopt(connection_->getFd(), SOL_SOCKET, SO_SNDBUF, &bufferSize, sizeof(bufferSize)), 0);
         }
 
         void TearDown() override { std::signal(SIGPIPE, previousSigpipe_); }
+
+        void respond(HttpResponse response, const HttpSerializer::Framing& framing = {}) {
+            connection_->setResponse(HttpSerializer::serialize(std::move(response), framing));
+        }
 
         ResponseBody fileBody(const std::string& contents) {
             const auto path = temp_.path() / "payload.bin";
@@ -78,7 +81,7 @@ namespace {
         for (const std::size_t size : {0u, 1u, 65537u}) {
             SCOPED_TRACE(size);
             const std::string body(size, '\0');
-            connection_->setResponse(HttpResponse{.status = HttpStatus::NotFound, .body = ResponseBody(body)});
+            respond(HttpResponse{.status = HttpStatus::NotFound, .body = ResponseBody(body)});
 
             ASSERT_EQ(connection_->sendResponse(), Connection::SendResult::Ok);
             EXPECT_TRUE(connection_->isSendComplete());
@@ -90,7 +93,7 @@ namespace {
         for (const std::size_t size : {0u, 1u, 65536u, 65537u}) {
             SCOPED_TRACE(size);
             const std::string body(size, 'f');
-            connection_->setResponse(HttpResponse{.status = HttpStatus::OK, .body = fileBody(body)});
+            respond(HttpResponse{.status = HttpStatus::OK, .body = fileBody(body)});
 
             ASSERT_EQ(connection_->sendResponse(), Connection::SendResult::Ok);
             EXPECT_EQ(connection_->isSendComplete(), size <= 65536);
@@ -107,8 +110,7 @@ namespace {
     TEST_F(ConnectionTest, HeadDoesNotReadOrSendTheFileBody) {
         auto body = fileBody("payload");
         fs::resize_file(temp_.path() / "payload.bin", 0);
-        connection_->setHeadersOnly(true);
-        connection_->setResponse(HttpResponse{.status = HttpStatus::OK, .body = std::move(body)});
+        respond(HttpResponse{.status = HttpStatus::OK, .body = std::move(body)}, {.headersOnly = true});
 
         ASSERT_EQ(connection_->sendResponse(), Connection::SendResult::Ok);
         EXPECT_TRUE(connection_->isSendComplete());
@@ -118,13 +120,13 @@ namespace {
     TEST_F(ConnectionTest, ReportsTruncationBeforeSendingHeadersAndCanReplaceFailedResponse) {
         auto body = fileBody("payload");
         fs::resize_file(temp_.path() / "payload.bin", 0);
-        connection_->setResponse(HttpResponse{.status = HttpStatus::OK, .body = std::move(body)});
+        respond(HttpResponse{.status = HttpStatus::OK, .body = std::move(body)});
 
         EXPECT_EQ(connection_->sendResponse(), Connection::SendResult::BodyError);
         EXPECT_FALSE(connection_->isSendComplete());
         EXPECT_TRUE(receiveAvailable().empty());
 
-        connection_->setResponse(HttpResponse{.status = HttpStatus::OK, .body = ResponseBody("replacement")});
+        respond(HttpResponse{.status = HttpStatus::OK, .body = ResponseBody("replacement")});
         ASSERT_EQ(connection_->sendResponse(), Connection::SendResult::Ok);
         EXPECT_TRUE(connection_->isSendComplete());
         expectResponse(receiveAvailable(), "replacement", 11);
@@ -132,7 +134,7 @@ namespace {
 
     TEST_F(ConnectionTest, ReportsTruncationAfterTheFirstChunkAsBodyError) {
         const std::string body(2 * 65536, 'f');
-        connection_->setResponse(HttpResponse{.status = HttpStatus::OK, .body = fileBody(body)});
+        respond(HttpResponse{.status = HttpStatus::OK, .body = fileBody(body)});
         ASSERT_EQ(connection_->sendResponse(), Connection::SendResult::Ok);
         expectResponse(receiveAvailable(), body.substr(0, 65536), body.size());
         fs::resize_file(temp_.path() / "payload.bin", 0);
@@ -153,9 +155,7 @@ namespace {
 
         for (const bool file : {false, true}) {
             SCOPED_TRACE(file);
-            connection_->setResponse(
-                HttpResponse{.status = HttpStatus::OK, .body = file ? fileBody(expected) : ResponseBody(expected)}
-            );
+            respond(HttpResponse{.status = HttpStatus::OK, .body = file ? fileBody(expected) : ResponseBody(expected)});
             std::string received;
             int sends = 0;
 
@@ -171,7 +171,7 @@ namespace {
     }
 
     TEST_F(ConnectionTest, ReportsSocketFailureSeparatelyFromBodyFailure) {
-        connection_->setResponse(HttpResponse{.status = HttpStatus::OK, .body = ResponseBody("payload")});
+        respond(HttpResponse{.status = HttpStatus::OK, .body = ResponseBody("payload")});
         ASSERT_EQ(::shutdown(connection_->getFd(), SHUT_WR), 0);
 
         EXPECT_EQ(connection_->sendResponse(), Connection::SendResult::SocketError);
