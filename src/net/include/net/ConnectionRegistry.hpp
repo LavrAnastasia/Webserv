@@ -3,14 +3,11 @@
 #include "http/HttpSession.hpp"
 #include "net/Connection.hpp"
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-struct ServerConfig;
 
 class ConnectionRegistry {
 public:
@@ -21,7 +18,7 @@ public:
         HttpSession session;
     };
 
-    // called by TCP server when new client connects
+    // called by event loop when a new client connects
     void addConnection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig* config);
 
     // called by event loop to clean up disconnected client

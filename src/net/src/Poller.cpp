@@ -13,8 +13,7 @@ void Poller::addSocket(int fd) {
 /*
     called by EventLoop to toggle between receive and send modes
     1. receive (POLLIN) (wake me up when client has sent bytes to my read bucket)
-    Then, when client request is done (complete header received), switch to:
-    2. send (POLLOUT) (ready to send response (HTML page) to client)
+    2. send (POLLOUT) (wake me up when there is room to send queued response bytes)
 
 */
 void Poller::modifySocket(int fd, short newEvents) {

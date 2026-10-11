@@ -12,10 +12,10 @@
 
 class Connection : public Socket {
 private:
-    static constexpr std::size_t kClientHeaderBufferSize = 4 * 1024;
+    static constexpr std::size_t kReceiveBufferSize = 4 * 1024;
 
     ConnectionInfo info_;
-    std::array<char, kClientHeaderBufferSize> readBuffer_{};
+    std::array<char, kReceiveBufferSize> readBuffer_{};
     std::string sendBuffer_;
     std::size_t sendOffset_ = 0;
     std::chrono::steady_clock::time_point lastActivity_;

@@ -268,6 +268,19 @@ namespace {
         EXPECT_TRUE(ended<HttpSession::Close>());
     }
 
+    TEST_F(HttpSessionTest, KeepsASlowButSteadyBody) {
+        session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n");
+
+        for (int byte = 0; byte < 3; ++byte) {
+            fakeNow += 50s;
+            session_->receive("a");
+        }
+
+        fakeNow += 55s;
+
+        EXPECT_FALSE(session_->expire().has_value());
+    }
+
     TEST_F(HttpSessionTest, IgnoresItsTimersWhileResponding) {
         ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(session_->receive(Requests::rawGet("/"))));
 
@@ -358,6 +371,36 @@ namespace {
         startCgi(Requests::rawGet("/cgi/app.py"));
         receiveOutput("Content-Type: text/plain\r\n\r\nfirst");
         deliver(session_->endOutput());
+        ASSERT_TRUE(ended<HttpSession::Read>());
+
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string response = deliver(session_->endOutput());
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
+    }
+
+    TEST_F(HttpSessionTest, DropsPartialCgiOutputAfterAFailure) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        receiveOutput("Content-Type: text/plain\r\n\r\nstale");
+        deliver(session_->fail(HttpSession::CgiFailure::Timeout));
+        ASSERT_TRUE(ended<HttpSession::Read>());
+
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string response = deliver(session_->endOutput());
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
+    }
+
+    TEST_F(HttpSessionTest, DropsCgiOutputAfterItGrowsTooLarge) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string megabyte(1024 * 1024, 'x');
+        HttpSession::Action action = session_->receiveOutput("Content-Type: text/plain\r\n\r\n");
+
+        while (std::holds_alternative<HttpSession::ReadOutput>(action)) {
+            action = session_->receiveOutput(megabyte);
+        }
+
+        deliver(std::move(action));
         ASSERT_TRUE(ended<HttpSession::Read>());
 
         startCgi(Requests::rawGet("/cgi/app.py"));

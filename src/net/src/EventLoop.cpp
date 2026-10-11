@@ -208,12 +208,10 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
             execute(clientFd, client->session.receiveOutput(bytes));
             break;
         case CgiProcess::Output::End:
-            closeCgi(clientFd);
             execute(clientFd, client->session.endOutput());
             break;
         case CgiProcess::Output::Error:
             Log::error("failed to read CGI output, client: " + client->connection.info().remoteAddr);
-            closeCgi(clientFd);
             execute(clientFd, client->session.fail(HttpSession::CgiFailure::Output));
             break;
     }
@@ -308,11 +306,10 @@ void EventLoop::cleanupTimedOutConnections() {
 
 void EventLoop::cleanupTimedOutCgi() {
     for (int clientFd : cgiRegistry_.expired(kCgiTimeout, std::chrono::steady_clock::now())) {
-        closeCgi(clientFd);
-
         ConnectionRegistry::Client* client = connectionRegistry_.find(clientFd);
 
         if (client == nullptr) {
+            closeCgi(clientFd);
             continue;
         }
 

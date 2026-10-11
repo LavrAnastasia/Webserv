@@ -1,6 +1,8 @@
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <memory>
+#include <poll.h>
 #include <string>
 #include <sys/socket.h>
 
@@ -110,5 +112,17 @@ namespace {
         ASSERT_EQ(::shutdown(connection_->getFd(), SHUT_WR), 0);
 
         EXPECT_FALSE(connection_->send());
+    }
+
+    TEST_F(ConnectionTest, QueueingAndSendingCountAsActivity) {
+        ::poll(nullptr, 0, 1100);
+        ASSERT_TRUE(connection_->hasTimedOut(std::chrono::steady_clock::now(), 0));
+
+        connection_->queue("x");
+        EXPECT_FALSE(connection_->hasTimedOut(std::chrono::steady_clock::now(), 0));
+
+        ::poll(nullptr, 0, 1100);
+        ASSERT_TRUE(connection_->send());
+        EXPECT_FALSE(connection_->hasTimedOut(std::chrono::steady_clock::now(), 0));
     }
 } // namespace

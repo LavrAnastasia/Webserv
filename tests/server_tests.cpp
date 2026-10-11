@@ -334,7 +334,7 @@ namespace {
 
             LocationConfig cgi{};
             cgi.path = "/cgi";
-            cgi.allowedMethods = {HttpMethod::Get, HttpMethod::Head};
+            cgi.allowedMethods = {HttpMethod::Get, HttpMethod::Head, HttpMethod::Post};
             cgi.cgi.emplace(".sh", CgiConfig{".sh", fs::path("/bin/sh")});
 
             Files::write(root_ / "cgi/hello.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\nhello from cgi'\n");
@@ -343,6 +343,13 @@ namespace {
             Files::write(
                 root_ / "cgi/large.sh",
                 "printf 'Content-Type: application/octet-stream\\r\\n\\r\\n'\nhead -c 3000000 /dev/zero\n"
+            );
+
+            Files::write(root_ / "cgi/echo.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\n'\ncat\n");
+            Files::write(root_ / "cgi/marker.sh", "sleep 2\ntouch marker\n");
+            Files::write(
+                root_ / "cgi/huge.sh",
+                "printf 'Content-Type: application/octet-stream\\r\\n\\r\\n'\nhead -c 135000000 /dev/zero\n"
             );
 
             serverConfig.locations = {location, cgi};
@@ -585,6 +592,38 @@ namespace {
         ::poll(nullptr, 0, 200);
         leaving.abortWithReset();
 
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, PassesTheRequestBodyToCgi) {
+        TestClient client(port_);
+        client.sendAll("POST /cgi/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nping");
+        expectOK(client, "ping");
+
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, AnswersBadGatewayWhenCgiOutputIsTooLarge) {
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/huge.sh", "close"));
+
+        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
+        client.expectEof();
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, StopsCgiWhenTheClientCloses) {
+        {
+            TestClient leaving(port_);
+            leaving.sendAll(Requests::rawGet("/cgi/marker.sh"));
+            ::poll(nullptr, 0, 300);
+        }
+
+        ::poll(nullptr, 0, 3000);
+
+        EXPECT_FALSE(fs::exists(root_ / "cgi/marker"));
         expectFreshConnectionWorks();
     }
 
