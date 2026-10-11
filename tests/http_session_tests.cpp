@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -18,7 +19,15 @@
 namespace {
     namespace fs = std::filesystem;
 
+    using namespace std::chrono_literals;
+
     constexpr std::size_t kChunkSize = 64 * 1024;
+
+    std::chrono::steady_clock::time_point fakeNow;
+
+    std::chrono::steady_clock::time_point readFakeNow() {
+        return fakeNow;
+    }
 
     class HttpSessionTest : public testing::Test {
     protected:
@@ -44,7 +53,8 @@ namespace {
 
             server_.root = root_;
             server_.locations = {site, cgi};
-            session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{"10.0.0.7", 8080});
+            fakeNow = std::chrono::steady_clock::time_point{};
+            session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{"10.0.0.7", 8080}, readFakeNow);
         }
 
         std::string deliver(HttpSession::Action action) {
@@ -190,20 +200,80 @@ namespace {
         EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->emit()));
     }
 
-    TEST_F(HttpSessionTest, AnswersTimeoutWhileWaitingForARequestAndCloses) {
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive("GET / HT")));
+    TEST_F(HttpSessionTest, ClosesAnIdleConnectionAfterTheKeepAliveTimeout) {
+        fakeNow += 59s;
+        EXPECT_FALSE(session_->expire().has_value());
 
-        const std::string response = deliver(session_->expire());
+        fakeNow += 1s;
+        const auto action = session_->expire();
+
+        ASSERT_TRUE(action.has_value());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
+    }
+
+    TEST_F(HttpSessionTest, CountsKeepAliveFromTheEndOfTheLastResponse) {
+        HttpSession::Action response = session_->receive(Requests::rawGet("/"));
+        fakeNow += 50s;
+        deliver(std::move(response));
+        ASSERT_TRUE(ended<HttpSession::Read>());
+
+        fakeNow += 59s;
+        EXPECT_FALSE(session_->expire().has_value());
+
+        fakeNow += 1s;
+        EXPECT_TRUE(session_->expire().has_value());
+    }
+
+    TEST_F(HttpSessionTest, ClosesWhenHeadersTrickleInForTooLong) {
+        session_->receive("GET / HTTP/1.1\r\n");
+
+        for (int second = 0; second < 19; ++second) {
+            fakeNow += 1s;
+            session_->receive("X");
+            ASSERT_FALSE(session_->expire().has_value()) << second;
+        }
+
+        fakeNow += 1s;
+        const auto action = session_->expire();
+
+        ASSERT_TRUE(action.has_value());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
+    }
+
+    TEST_F(HttpSessionTest, StartsTheHeaderTimerForAPipelinedPartialRequest) {
+        deliver(session_->receive(Requests::rawGet("/") + "GET / HT"));
+        ASSERT_TRUE(ended<HttpSession::Read>());
+
+        fakeNow += 20s;
+        const auto action = session_->expire();
+
+        ASSERT_TRUE(action.has_value());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
+    }
+
+    TEST_F(HttpSessionTest, AnswersTimeoutWhenTheBodyStopsArriving) {
+        session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nabc");
+
+        fakeNow += 59s;
+        EXPECT_FALSE(session_->expire().has_value());
+
+        fakeNow += 1s;
+        auto action = session_->expire();
+
+        ASSERT_TRUE(action.has_value());
+        const std::string response = deliver(std::move(*action));
 
         EXPECT_TRUE(response.starts_with("HTTP/1.1 408 "));
         EXPECT_TRUE(closes(response));
         EXPECT_TRUE(ended<HttpSession::Close>());
     }
 
-    TEST_F(HttpSessionTest, ClosesWithoutAnswerOnTimeoutWhileResponding) {
+    TEST_F(HttpSessionTest, IgnoresItsTimersWhileResponding) {
         ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(session_->receive(Requests::rawGet("/"))));
 
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->expire()));
+        fakeNow += 1h;
+
+        EXPECT_FALSE(session_->expire().has_value());
     }
 
     TEST_F(HttpSessionTest, AnswersBytesReceivedWhileRespondingAfterTheResponse) {
