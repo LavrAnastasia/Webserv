@@ -283,3 +283,11 @@ void HttpParser::reset() {
     _contentLength = 0;
     _currentChunkSize = 0;
 }
+
+bool HttpParser::isIdle() const {
+    return _state == ParserState::StartLine && _buffer.empty();
+}
+
+bool HttpParser::hasHeaders() const {
+    return _state != ParserState::StartLine && _state != ParserState::Headers;
+}

@@ -29,7 +29,7 @@ public:
 
     Client* find(int fd);
     std::size_t size() const;
-    std::vector<int> getTimedOutConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime);
+    std::vector<int> fds() const;
 
 private:
     std::unordered_map<int, Client> clients_;

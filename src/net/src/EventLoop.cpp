@@ -15,6 +15,7 @@
 
 namespace {
     constexpr std::chrono::seconds kCgiTimeout{60};
+    constexpr int kSendTimeoutSeconds = 60;
     constexpr std::size_t kMaxConnections = 1000;
     constexpr std::size_t kMaxCgi = 128;
     constexpr std::chrono::milliseconds kAcceptPause{500};
@@ -284,17 +285,24 @@ void EventLoop::run() {
 }
 
 void EventLoop::cleanupTimedOutConnections() {
-    std::vector<int> timedOutFds =
-        connectionRegistry_.getTimedOutConnections(clientTimeoutSeconds_, std::chrono::steady_clock::now());
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-    for (int fd : timedOutFds) {
+    for (int fd : connectionRegistry_.fds()) {
         ConnectionRegistry::Client* client = connectionRegistry_.find(fd);
 
-        if (client == nullptr || cgiRegistry_.find(fd)) {
+        if (client == nullptr) {
             continue;
         }
 
-        execute(fd, client->session.expire());
+        if (client->connection.pending() > 0 && client->connection.hasTimedOut(now, kSendTimeoutSeconds)) {
+            Log::info("client timed out while sending response, client: " + client->connection.info().remoteAddr);
+            closeConnection(fd);
+            continue;
+        }
+
+        if (std::optional<HttpSession::Action> action = client->session.expire()) {
+            execute(fd, std::move(*action));
+        }
     }
 }
 

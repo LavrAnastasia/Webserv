@@ -13,14 +13,32 @@ namespace {
     constexpr std::size_t kChunkSize = 64 * 1024;
     // TODO: WEB-55 remove the cap once the output is streamed
     constexpr std::size_t kMaxOutputSize = 128 * 1024 * 1024;
+    constexpr std::chrono::seconds kHeaderTimeout{20};
+    constexpr std::chrono::seconds kBodyTimeout{60};
+    constexpr std::chrono::seconds kKeepAliveTimeout{60};
+
+    std::chrono::steady_clock::time_point now() {
+        return std::chrono::steady_clock::now();
+    }
 } // namespace
 
-HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info)
-    : server_(server), info_(std::move(info)), parser_(server.maxBodySize()) {
+HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info) : HttpSession(server, std::move(info), now) {
+}
+
+HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info, Clock clock)
+    : server_(server), info_(std::move(info)), clock_(clock), parser_(server.maxBodySize()), lastReceived_(clock_()) {
 }
 
 HttpSession::Action HttpSession::receive(std::string_view bytes) {
+    if (!bytes.empty()) {
+        lastReceived_ = clock_();
+    }
+
     const ParseResult result = parser_.append(bytes.data(), bytes.size());
+
+    if (!requestStarted_ && !parser_.isIdle()) {
+        requestStarted_ = clock_();
+    }
 
     if (phase_ == Phase::Responding || std::holds_alternative<NeedMoreData>(result)) {
         return Read{};
@@ -61,13 +79,35 @@ HttpSession::Action HttpSession::emit() {
     return Write{std::move(bytes)};
 }
 
-HttpSession::Action HttpSession::expire() {
+std::optional<HttpSession::Action> HttpSession::expire() {
     if (phase_ == Phase::Responding) {
-        Log::info("client timed out while sending response, client: " + info_.remoteAddr);
+        return std::nullopt;
+    }
+
+    const std::chrono::steady_clock::time_point current = clock_();
+
+    if (!requestStarted_) {
+        if (current - lastReceived_ < kKeepAliveTimeout) {
+            return std::nullopt;
+        }
+
         return Close{};
     }
 
-    Log::info("client timed out while waiting for request, client: " + info_.remoteAddr);
+    if (!parser_.hasHeaders()) {
+        if (current - *requestStarted_ < kHeaderTimeout) {
+            return std::nullopt;
+        }
+
+        Log::info("client timed out while sending request header, client: " + info_.remoteAddr);
+        return Close{};
+    }
+
+    if (current - lastReceived_ < kBodyTimeout) {
+        return std::nullopt;
+    }
+
+    Log::info("client timed out while sending request body, client: " + info_.remoteAddr);
     phase_ = Phase::Responding;
     framing_.close = true;
     return fail(HttpStatus::RequestTimeout);
@@ -161,6 +201,8 @@ HttpSession::Action HttpSession::finish() {
     parser_.reset();
     phase_ = Phase::Reading;
     framing_ = {};
+    lastReceived_ = clock_();
+    requestStarted_.reset();
 
     if (close) {
         return Close{};

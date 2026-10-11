@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -24,12 +25,14 @@ public:
     };
     using Action = std::variant<Read, ReadOutput, Write, Close, CgiRequest>;
     enum class CgiFailure { Busy, Launch, Output, Timeout };
+    using Clock = std::chrono::steady_clock::time_point (*)();
 
     HttpSession(const ServerConfig& server, ConnectionInfo info);
+    HttpSession(const ServerConfig& server, ConnectionInfo info, Clock clock);
 
     Action receive(std::string_view bytes);
     Action emit();
-    Action expire();
+    std::optional<Action> expire();
     Action receiveOutput(std::string_view bytes);
     Action endOutput();
     Action fail(CgiFailure failure);
@@ -44,7 +47,10 @@ private:
 
     const ServerConfig& server_;
     ConnectionInfo info_;
+    Clock clock_;
     HttpParser parser_;
+    std::chrono::steady_clock::time_point lastReceived_;
+    std::optional<std::chrono::steady_clock::time_point> requestStarted_;
     Phase phase_ = Phase::Reading;
     HttpSerializer::Framing framing_;
     std::optional<ResponseBody> body_;

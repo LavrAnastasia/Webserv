@@ -28,15 +28,13 @@ std::size_t ConnectionRegistry::size() const {
     return clients_.size();
 }
 
-std::vector<int>
-ConnectionRegistry::getTimedOutConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime) {
-    std::vector<int> timedOutFds;
+std::vector<int> ConnectionRegistry::fds() const {
+    std::vector<int> result;
+    result.reserve(clients_.size());
 
-    for (auto& [fd, client] : clients_) {
-        if (client.connection.hasTimedOut(currentTime, timeoutSeconds)) {
-            timedOutFds.push_back(fd);
-        }
+    for (const auto& client : clients_) {
+        result.push_back(client.first);
     }
 
-    return timedOutFds;
+    return result;
 }
