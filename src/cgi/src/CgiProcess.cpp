@@ -12,7 +12,8 @@
 #include <unistd.h>
 
 namespace {
-    constexpr std::size_t kMaxOutputSize = 10 * 1024 * 1024; // 10 MB
+    // TODO: WEB-55 remove the cap;
+    constexpr std::size_t kMaxOutputSize = 128 * 1024 * 1024; // 128 MB
     constexpr std::size_t kReadChunkSize = 64 * 1024; // 64 KB
     constexpr int kExecFailed = 127;
 

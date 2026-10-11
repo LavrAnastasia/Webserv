@@ -19,11 +19,8 @@ CgiHandler::handle(const HttpRequest& request, const ResolvedRoute& route, const
 
         const fs::file_status status = fs::status(script);
 
-        if (!fs::exists(status)) {
-            return ErrorResponseFactory::create(HttpStatus::NotFound, route);
-        }
-
-        if (!fs::is_regular_file(status)) {
+        // missing script is left to the interpreter, like nginx fastcgi_pass
+        if (fs::exists(status) && !fs::is_regular_file(status)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
 
