@@ -21,9 +21,11 @@ private:
     FileDescriptor outputPipe_;
     std::string body_;
     std::size_t written_;
-    std::string output_;
+    bool succeeded_ = false;
 
 public:
+    enum class State { Running, Succeeded, Failed };
+
     static std::optional<CgiProcess> launch(const CgiRequest& request);
 
     ~CgiProcess();
@@ -36,9 +38,8 @@ public:
     int inputFd() const;
     int outputFd() const;
 
-    void writeInput();
-    void readOutput();
-
-    bool isAlive() const;
-    const std::string& output() const;
+    std::size_t writeInput();
+    void closeInput();
+    void closeOutput();
+    State state();
 };

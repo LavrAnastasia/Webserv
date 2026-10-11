@@ -11,7 +11,8 @@ class CgiRegistry {
 private:
     struct Entry {
         CgiProcess process;
-        std::chrono::steady_clock::time_point launched;
+        std::chrono::steady_clock::time_point activity;
+        std::optional<std::chrono::steady_clock::time_point> paused;
     };
 
     std::unordered_map<int, Entry> entries_;
@@ -19,6 +20,9 @@ private:
 public:
     void add(int clientFd, CgiProcess process);
     void remove(int clientFd);
+    void touch(int clientFd);
+    void pause(int clientFd, bool paused);
+    std::vector<int> clients() const;
 
     std::size_t size() const;
     CgiProcess* find(int clientFd);

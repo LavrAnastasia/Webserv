@@ -23,6 +23,7 @@ void Connection::setHeadersOnly(bool state) {
 }
 
 void Connection::setResponse(HttpResponse response) {
+    cgi_.reset();
     auto output = HttpSerializer::serialize(std::move(response), {.close = shouldClose_, .headersOnly = headersOnly_});
 
     sendBuffer_.clear();
@@ -35,7 +36,7 @@ void Connection::setResponse(HttpResponse response) {
 }
 
 bool Connection::isSendComplete() const {
-    return sendOffset_ == sendBuffer_.size() && !body_;
+    return cgi_ ? cgi_->done() : sendOffset_ == sendBuffer_.size() && !body_;
 }
 
 /*
@@ -60,10 +61,39 @@ std::optional<ParseResult> Connection::receiveRequest() {
     return parser_.append(buffer, bytesReceived);
 }
 
-bool Connection::isAlive() const {
-    char byte;
+void Connection::startCgi() {
+    cgi_.emplace(shouldClose_, headersOnly_);
+    body_.reset();
+    sendBuffer_.clear();
+    sendOffset_ = 0;
+    bodyFailed_ = false;
+    lastActivity_ = std::chrono::steady_clock::now();
+}
 
-    return recv(getFd(), &byte, 1, MSG_PEEK) > 0;
+std::size_t Connection::cgiCapacity() const {
+    return cgi_ ? cgi_->capacity() : 0;
+}
+
+bool Connection::appendCgi(std::string_view bytes) {
+    if (!cgi_) {
+        return false;
+    }
+    if (!hasOutput()) {
+        lastActivity_ = std::chrono::steady_clock::now();
+    }
+    return cgi_->append(bytes);
+}
+
+bool Connection::finishCgi() {
+    return cgi_ && cgi_->finish();
+}
+
+bool Connection::responseStarted() const {
+    return cgi_ && cgi_->started();
+}
+
+bool Connection::hasOutput() const {
+    return cgi_ ? !cgi_->data().empty() : sendOffset_ < sendBuffer_.size() || body_.has_value();
 }
 
 bool Connection::refill() {
@@ -85,6 +115,20 @@ bool Connection::refill() {
 }
 
 Connection::SendResult Connection::sendResponse() {
+    if (cgi_) {
+        const std::string_view bytes = cgi_->data();
+        if (bytes.empty()) {
+            return SendResult::Ok;
+        }
+        const ssize_t sent = ::send(getFd(), bytes.data(), bytes.size(), 0);
+        if (sent <= 0) {
+            return SendResult::SocketError;
+        }
+        cgi_->consume(static_cast<std::size_t>(sent));
+        lastActivity_ = std::chrono::steady_clock::now();
+        return SendResult::Ok;
+    }
+
     if (bodyFailed_ || (sendOffset_ == sendBuffer_.size() && !refill())) {
         bodyFailed_ = true;
         return SendResult::BodyError;

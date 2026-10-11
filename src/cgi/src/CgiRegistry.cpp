@@ -3,7 +3,7 @@
 #include <utility>
 
 void CgiRegistry::add(int clientFd, CgiProcess process) {
-    entries_.insert_or_assign(clientFd, Entry{std::move(process), std::chrono::steady_clock::now()});
+    entries_.insert_or_assign(clientFd, Entry{std::move(process), std::chrono::steady_clock::now(), std::nullopt});
 }
 
 void CgiRegistry::remove(int clientFd) {
@@ -42,10 +42,46 @@ std::vector<int> CgiRegistry::expired(std::chrono::seconds timeout, std::chrono:
     std::vector<int> result;
 
     for (const auto& [clientFd, entry] : entries_) {
-        if (now - entry.launched >= timeout) {
+        if (!entry.paused && now - entry.activity >= timeout) {
             result.push_back(clientFd);
         }
     }
 
+    return result;
+}
+
+void CgiRegistry::touch(int clientFd) {
+    auto it = entries_.find(clientFd);
+    if (it != entries_.end()) {
+        const auto now = std::chrono::steady_clock::now();
+        it->second.activity = now;
+        if (it->second.paused) {
+            it->second.paused = now;
+        }
+    }
+}
+
+void CgiRegistry::pause(int clientFd, bool paused) {
+    auto it = entries_.find(clientFd);
+    if (it == entries_.end()) {
+        return;
+    }
+    auto& entry = it->second;
+    const auto now = std::chrono::steady_clock::now();
+    if (paused && !entry.paused) {
+        entry.paused = now;
+    } else if (!paused && entry.paused) {
+        entry.activity += now - *entry.paused;
+        entry.paused.reset();
+    }
+}
+
+std::vector<int> CgiRegistry::clients() const {
+    std::vector<int> result;
+    result.reserve(entries_.size());
+    for (const auto& [clientFd, entry] : entries_) {
+        (void)entry;
+        result.push_back(clientFd);
+    }
     return result;
 }

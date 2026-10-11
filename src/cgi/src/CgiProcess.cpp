@@ -12,8 +12,6 @@
 #include <unistd.h>
 
 namespace {
-    constexpr std::size_t kMaxOutputSize = 10 * 1024 * 1024; // 10 MB
-    constexpr std::size_t kReadChunkSize = 64 * 1024; // 64 KB
     constexpr int kExecFailed = 127;
 
     struct Pipe {
@@ -54,7 +52,7 @@ namespace {
 
 CgiProcess::CgiProcess(pid_t pid, FileDescriptor inputPipe, FileDescriptor outputPipe, std::string body)
     : pid_(pid), alive_(true), inputPipe_(std::move(inputPipe)), outputPipe_(std::move(outputPipe)),
-      body_(std::move(body)), written_(0), output_() {
+      body_(std::move(body)), written_(0) {
     if (body_.empty()) {
         inputPipe_.close();
     }
@@ -67,7 +65,7 @@ CgiProcess::~CgiProcess() {
 CgiProcess::CgiProcess(CgiProcess&& other) noexcept
     : pid_(std::exchange(other.pid_, -1)), alive_(std::exchange(other.alive_, false)),
       inputPipe_(std::move(other.inputPipe_)), outputPipe_(std::move(other.outputPipe_)), body_(std::move(other.body_)),
-      written_(other.written_), output_(std::move(other.output_)) {
+      written_(other.written_), succeeded_(other.succeeded_) {
 }
 
 CgiProcess& CgiProcess::operator=(CgiProcess&& other) noexcept {
@@ -80,7 +78,7 @@ CgiProcess& CgiProcess::operator=(CgiProcess&& other) noexcept {
         outputPipe_ = std::move(other.outputPipe_);
         body_ = std::move(other.body_);
         written_ = other.written_;
-        output_ = std::move(other.output_);
+        succeeded_ = other.succeeded_;
     }
 
     return *this;
@@ -133,63 +131,49 @@ int CgiProcess::outputFd() const {
     return outputPipe_.get();
 }
 
-void CgiProcess::writeInput() {
+std::size_t CgiProcess::writeInput() {
     if (!inputPipe_.isOpen()) {
-        return;
+        return 0;
     }
 
     const ssize_t count = ::write(inputPipe_.get(), body_.data() + written_, body_.size() - written_);
 
     if (count <= 0) {
-        inputPipe_.close();
-        return;
+        closeInput();
+        return 0;
     }
 
     written_ += static_cast<std::size_t>(count);
 
     if (written_ == body_.size()) {
-        inputPipe_.close();
+        closeInput();
     }
+    return static_cast<std::size_t>(count);
 }
 
-void CgiProcess::readOutput() {
-    if (!outputPipe_.isOpen()) {
-        return;
-    }
-
-    std::array<char, kReadChunkSize> buffer{};
-    const ssize_t count = ::read(outputPipe_.get(), buffer.data(), buffer.size());
-
-    if (count < 0) {
-        output_.clear();
-        kill();
-        return;
-    }
-
-    if (count == 0) {
-        kill();
-        return;
-    }
-
-    output_.append(buffer.data(), static_cast<std::size_t>(count));
-
-    if (output_.size() > kMaxOutputSize) {
-        output_.clear();
-        kill();
-    }
+void CgiProcess::closeInput() {
+    inputPipe_.close();
+    std::string().swap(body_);
 }
 
-bool CgiProcess::isAlive() const {
-    return alive_;
+void CgiProcess::closeOutput() {
+    outputPipe_.close();
 }
 
-const std::string& CgiProcess::output() const {
-    return output_;
+CgiProcess::State CgiProcess::state() {
+    reap();
+    return alive_ ? State::Running : (succeeded_ ? State::Succeeded : State::Failed);
 }
 
 void CgiProcess::reap() {
-    if (alive_ && ::waitpid(pid_, nullptr, WNOHANG) != 0) {
+    if (!alive_) {
+        return;
+    }
+    int status = 0;
+    const pid_t result = ::waitpid(pid_, &status, WNOHANG);
+    if (result == pid_) {
         alive_ = false;
+        succeeded_ = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     }
 }
 

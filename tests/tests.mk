@@ -2,6 +2,7 @@ TEST_DIR := tests
 
 TEST_NAMES := \
 	cgi_response_parser \
+	cgi_stream \
 	config_loader \
 	connection \
 	http_parser \

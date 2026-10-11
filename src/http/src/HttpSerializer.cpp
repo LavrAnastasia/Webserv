@@ -93,17 +93,27 @@ HttpSerializer::Output HttpSerializer::serialize(HttpResponse response, const Fr
         headers.set(std::string(Http::Headers::Server), std::string(serverName));
     }
 
+    const bool chunked =
+        framing.stream && !bodyForbidden && !framing.headersOnly && !headers.has(Http::Headers::ContentLength);
+
     if (bodyForbidden) {
         headers.erase(Http::Headers::ContentLength);
-    } else {
+    } else if (chunked) {
+        headers.set(std::string(Http::Headers::TransferEncoding), std::string(Http::Headers::TransferCoding::Chunked));
+    } else if (!framing.stream) {
         headers.set(std::string(Http::Headers::ContentLength), std::to_string(response.body.size()));
     }
 
     output.append(headers.serialize()).append(Http::Syntax::CRLF);
 
-    Output result{.headers = std::move(output), .body = std::nullopt};
+    Output result{
+        .headers = std::move(output),
+        .body = std::nullopt,
+        .chunked = chunked,
+        .suppressed = framing.headersOnly || bodyForbidden
+    };
 
-    if (!framing.headersOnly && !bodyForbidden && !response.body.done()) {
+    if (!framing.stream && !result.suppressed && !response.body.done()) {
         result.body.emplace(std::move(response.body));
     }
 

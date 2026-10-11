@@ -174,6 +174,45 @@ namespace {
                 }
             }
 
+            pending_.erase(0, headerEnd + 4);
+
+            if (headersOnly || response.statusLine.starts_with("HTTP/1.1 204 ") ||
+                response.statusLine.starts_with("HTTP/1.1 304 ")) {
+                return response;
+            }
+
+            const auto encoding = response.headers.find("transfer-encoding");
+            if (encoding != response.headers.end()) {
+                if (encoding->second != "chunked" || response.headers.contains("content-length")) {
+                    throw std::runtime_error("Invalid response framing");
+                }
+                while (true) {
+                    std::size_t lineEnd;
+                    while ((lineEnd = pending_.find("\r\n")) == std::string::npos) {
+                        receiveMore(deadline);
+                    }
+                    std::size_t size = 0;
+                    const char* end = pending_.data() + lineEnd;
+                    const auto parsed = std::from_chars(pending_.data(), end, size, 16);
+                    if (parsed.ec != std::errc{} || parsed.ptr != end ||
+                        size > 128u * 1024u * 1024u - response.body.size()) {
+                        throw std::runtime_error("Invalid or excessive chunk size");
+                    }
+                    pending_.erase(0, lineEnd + 2);
+                    while (pending_.size() < size + 2) {
+                        receiveMore(deadline);
+                    }
+                    if (pending_.compare(size, 2, "\r\n") != 0) {
+                        throw std::runtime_error("Missing chunk terminator");
+                    }
+                    response.body.append(pending_, 0, size);
+                    pending_.erase(0, size + 2);
+                    if (size == 0) {
+                        return response;
+                    }
+                }
+            }
+
             const auto lengthHeader = response.headers.find("content-length");
             if (lengthHeader == response.headers.end()) {
                 throw std::runtime_error("Missing Content-Length");
@@ -184,29 +223,29 @@ namespace {
 
             const auto [end, error] = std::from_chars(length.data(), length.data() + length.size(), bodySize);
 
-            if (error != std::errc{} || end != length.data() + length.size() || bodySize > 64u * 1024u * 1024u) {
+            if (error != std::errc{} || end != length.data() + length.size() || bodySize > 128u * 1024u * 1024u) {
                 throw std::runtime_error("Invalid or excessive Content-Length");
             }
 
-            if (headersOnly) {
-                bodySize = 0;
-            }
-
-            const std::size_t bodyStart = headerEnd + 4;
-            const std::size_t messageSize = bodyStart + bodySize;
-
-            while (pending_.size() < messageSize) {
+            while (pending_.size() < bodySize) {
                 receiveMore(deadline);
             }
 
-            response.body = pending_.substr(bodyStart, bodySize);
-            pending_.erase(0, messageSize);
+            response.body = pending_.substr(0, bodySize);
+            pending_.erase(0, bodySize);
             return response;
         }
 
         void waitForResponseStart() {
             if (pending_.empty()) {
                 receiveMore(Clock::now() + 5s);
+            }
+        }
+
+        void waitForBytes(std::string_view bytes) {
+            const auto deadline = Clock::now() + 5s;
+            while (pending_.find(bytes) == std::string::npos) {
+                receiveMore(deadline);
             }
         }
 
@@ -316,6 +355,8 @@ namespace {
         const std::string smallBody_ = "small response\n";
         const std::string otherBody_ = "another response\n";
 
+        virtual void configure(ServerConfig&) {}
+
         void SetUp() override {
             root_ = temp_.path();
 
@@ -332,6 +373,7 @@ namespace {
             location.path = "/";
             location.allowedMethods = {HttpMethod::Get, HttpMethod::Head};
             serverConfig.locations = {location};
+            configure(serverConfig);
 
             Configuration config;
             config.servers.push_back(serverConfig);
@@ -768,6 +810,302 @@ namespace {
 #else
         GTEST_SKIP() << "Peak memory check uses Linux /proc";
 #endif
+    }
+
+    class CgiServerTest : public ServerTest {
+    protected:
+        void SetUp() override {
+            if (::access("/usr/bin/python3", X_OK) != 0) {
+                GTEST_SKIP() << "CGI server tests require /usr/bin/python3";
+            }
+            ServerTest::SetUp();
+        }
+
+        void configure(ServerConfig& config) override {
+            config.clientMaxBodySize = 128u * 1024u * 1024u;
+            config.locations.front().allowedMethods.insert(HttpMethod::Post);
+            config.locations.front().cgi.emplace(".py", CgiConfig{".py", "/usr/bin/python3"});
+        }
+
+        void script(const std::string& source) { Files::write(root_ / "stream.py", source); }
+
+        std::string gate() const {
+            return "import os, time\n"
+                   "def wait():\n"
+                   "    for i in range(1000):\n"
+                   "        if os.path.exists('release'): return\n"
+                   "        time.sleep(0.01)\n"
+                   "    raise RuntimeError('release was not created')\n";
+        }
+
+        void release() { Files::write(root_ / "release", ""); }
+
+        void expectReuse(TestClient& client) {
+            client.sendAll(Requests::rawGet("/small.txt", "close"));
+            expectOK(client, smallBody_);
+            client.expectEof();
+        }
+
+#ifdef __linux__
+        std::uintmax_t peakMemory() const {
+            std::ifstream status("/proc/" + std::to_string(child_) + "/status");
+            for (std::string line; std::getline(status, line);) {
+                if (line.starts_with("VmHWM:")) {
+                    std::istringstream value(line.substr(6));
+                    std::uintmax_t kib = 0;
+                    if (value >> kib) {
+                        return kib * 1024;
+                    }
+                }
+            }
+            throw std::runtime_error("Cannot read server peak memory");
+        }
+
+        std::uintmax_t cpuTicks() const {
+            std::ifstream status("/proc/" + std::to_string(child_) + "/stat");
+            std::string line;
+            std::getline(status, line);
+            const auto end = line.rfind(')');
+            if (end == std::string::npos) {
+                throw std::runtime_error("Cannot read server CPU usage");
+            }
+            std::istringstream values(line.substr(end + 1));
+            std::uintmax_t ticks = 0;
+            for (int i = 0; i <= 12; ++i) {
+                std::string value;
+                values >> value;
+                if (i >= 11) {
+                    ticks += std::stoull(value);
+                }
+            }
+            return ticks;
+        }
+
+        void expectNoSpin() const {
+            ::poll(nullptr, 0, 100);
+            const auto before = cpuTicks();
+            ::poll(nullptr, 0, 300);
+            const auto allowed = static_cast<std::uintmax_t>(::sysconf(_SC_CLK_TCK)) / 10 + 2;
+            EXPECT_LE(cpuTicks() - before, allowed);
+        }
+#endif
+    };
+
+    class CgiLargeResponseTest : public CgiServerTest, public ::testing::WithParamInterface<bool> {};
+
+    TEST_P(CgiLargeResponseTest, Streams100MiBAndKeepsConnectionAlive) {
+        const bool knownLength = GetParam();
+        std::string headers = "Content-Type: application/octet-stream\\n";
+        if (knownLength) {
+            headers += "Content-Length: 104857600\\n";
+        }
+        script(
+            "import sys\n"
+            "out = sys.stdout.buffer\n"
+            "out.write(b'" +
+            headers +
+            "\\n')\n"
+            "chunk = bytes(range(256)) * 256\n"
+            "for i in range(1600): out.write(chunk)\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/stream.py"));
+        const auto response = client.readResponse();
+        ASSERT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        ASSERT_EQ(response.body.size(), 100u * 1024u * 1024u);
+        bool matches = true;
+        for (std::size_t i = 0; i < response.body.size(); ++i) {
+            if (static_cast<unsigned char>(response.body[i]) != i % 256) {
+                matches = false;
+                break;
+            }
+        }
+        EXPECT_TRUE(matches);
+        EXPECT_EQ(response.headers.contains("content-length"), knownLength);
+        EXPECT_EQ(response.headers.contains("transfer-encoding"), !knownLength);
+        expectReuse(client);
+    }
+
+    INSTANTIATE_TEST_SUITE_P(Framing, CgiLargeResponseTest, ::testing::Bool());
+
+    TEST_F(CgiServerTest, Echoes100MiBThroughCgiStdinAndStdout) {
+        script(
+            "import sys\n"
+            "out = sys.stdout.buffer\n"
+            "out.write(b'Content-Type: application/octet-stream\\n\\n')\n"
+            "while True:\n"
+            "    chunk = sys.stdin.buffer.read(65536)\n"
+            "    if not chunk: break\n"
+            "    out.write(chunk)\n"
+            "    out.flush()\n"
+        );
+        TestClient client(port_);
+        client.sendAll("POST /stream.py HTTP/1.1\r\nHost: localhost\r\nContent-Length: 104857600\r\n\r\n");
+        const std::string block(65536, 'e');
+        for (int i = 0; i < 1600; ++i) {
+            client.sendAll(block);
+        }
+        const auto response = client.readResponse();
+        ASSERT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        ASSERT_EQ(response.body.size(), 100u * 1024u * 1024u);
+        EXPECT_EQ(response.body.find_first_not_of('e'), std::string::npos);
+        expectReuse(client);
+    }
+
+    TEST_F(CgiServerTest, DeliversBodyBeforeScriptFinishesWithoutIdleWritableSpin) {
+        script(
+            gate() +
+            "os.write(1, b'Content-Type: text/plain\\n\\nfirst')\n"
+            "wait()\n"
+            "os.write(1, b'second')\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/stream.py"));
+        client.waitForBytes("first");
+        expectFreshConnectionWorks();
+#ifdef __linux__
+        expectNoSpin();
+#endif
+        release();
+        expectOK(client, "firstsecond");
+        expectReuse(client);
+    }
+
+    TEST_F(CgiServerTest, SlowReaderPausesCgiWithBoundedMemoryAndResumes) {
+        script(
+            "import sys\n"
+            "out = sys.stdout.buffer\n"
+            "out.write(b'Content-Type: application/octet-stream\\n\\n')\n"
+            "for i in range(512): out.write(b'x' * 65536)\n"
+            "out.flush()\n"
+            "open('finished', 'w').close()\n"
+        );
+#ifdef __linux__
+        const auto before = peakMemory();
+#endif
+        TestClient client(port_, 64 * 1024);
+        client.sendAll(Requests::rawGet("/stream.py"));
+        client.waitForResponseStart();
+        ::poll(nullptr, 0, 200);
+        EXPECT_FALSE(fs::exists(root_ / "finished"));
+        expectFreshConnectionWorks();
+#ifdef __linux__
+        EXPECT_LT(peakMemory(), before + 8u * 1024u * 1024u);
+        expectNoSpin();
+#endif
+        const auto response = client.readResponse();
+        ASSERT_EQ(response.body.size(), 32u * 1024u * 1024u);
+        EXPECT_EQ(response.body.find_first_not_of('x'), std::string::npos);
+        EXPECT_TRUE(fs::exists(root_ / "finished"));
+        expectReuse(client);
+    }
+
+    TEST_F(CgiServerTest, MissingInvalidAndOversizedHeadersProduce502) {
+        for (const std::string source :
+             {"",
+              "print('bad header\\n')\n",
+              "print('Content-Length: nope\\n')\n",
+              "print('X-Large: ' + 'x' * 32768 + '\\n')\n",
+              "print('\\n')\n"}) {
+            script(source);
+            TestClient client(port_);
+            client.sendAll(Requests::rawGet("/stream.py"));
+            const auto response = client.readResponse();
+            EXPECT_EQ(response.statusLine, "HTTP/1.1 502 Bad Gateway");
+            expectReuse(client);
+        }
+    }
+
+    TEST_F(CgiServerTest, FailureAfterHeadersClosesWithoutFinalChunkOrAnotherStatus) {
+        script(
+            gate() +
+            "os.write(1, b'Content-Type: text/plain\\n\\npartial')\n"
+            "wait()\n"
+            "os._exit(7)\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/stream.py"));
+        client.waitForBytes("partial");
+        release();
+        const auto response = client.readUntilEof();
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        EXPECT_EQ(response.find("502 Bad Gateway"), std::string::npos);
+        EXPECT_FALSE(response.ends_with("0\r\n\r\n"));
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(CgiServerTest, EofBeforeProcessExitDoesNotFinishTheResponseEarly) {
+        script(
+            gate() +
+            "os.write(1, b'Content-Type: text/plain\\n\\npartial')\n"
+            "os.close(1)\n"
+            "wait()\n"
+            "os._exit(9)\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/stream.py"));
+        client.waitForBytes("partial");
+        expectFreshConnectionWorks();
+        release();
+        const auto response = client.readUntilEof();
+        EXPECT_FALSE(response.ends_with("0\r\n\r\n"));
+        EXPECT_EQ(response.find("502 Bad Gateway"), std::string::npos);
+    }
+
+    TEST_F(CgiServerTest, ContentLengthMismatchAfterHeadersClosesConnection) {
+        for (const std::string tail : {"", "too long"}) {
+            fs::remove(root_ / "release");
+            script(
+                gate() +
+                "os.write(1, b'Content-Type: text/plain\\nContent-Length: 10\\n\\npartial')\n"
+                "wait()\n"
+                "os.write(1, b'" +
+                tail + "')\n"
+            );
+            TestClient client(port_);
+            client.sendAll(Requests::rawGet("/stream.py"));
+            client.waitForBytes("partial");
+            release();
+            const auto response = client.readUntilEof();
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+            EXPECT_TRUE(response.ends_with("partial"));
+            EXPECT_EQ(response.find("502 Bad Gateway"), std::string::npos);
+            expectFreshConnectionWorks();
+        }
+    }
+
+    TEST_F(CgiServerTest, HeadAndBodylessStatusesDoNotLeakBodyIntoNextResponse) {
+        for (const int status : {200, 204, 304}) {
+            script(
+                "import sys\n"
+                "sys.stdout.write('Status: " +
+                std::to_string(status) + "\\nContent-Type: text/plain\\nContent-Length: 123\\n\\nignored body')\n"
+            );
+            TestClient client(port_);
+            const std::string method = status == 200 ? "HEAD" : "GET";
+            client.sendAll(method + " /stream.py HTTP/1.1\r\nHost: localhost\r\n\r\n");
+            const auto response = client.readResponse(status == 200);
+            EXPECT_TRUE(response.statusLine.starts_with("HTTP/1.1 " + std::to_string(status) + " "));
+            EXPECT_TRUE(response.body.empty());
+            EXPECT_FALSE(response.headers.contains("transfer-encoding"));
+            expectReuse(client);
+        }
+    }
+
+    TEST_F(CgiServerTest, ClientResetCancelsStreamingWithoutAffectingOtherClients) {
+        script(
+            "import sys\n"
+            "out = sys.stdout.buffer\n"
+            "out.write(b'Content-Type: text/plain\\n\\n')\n"
+            "while True:\n"
+            "    out.write(b'x' * 65536)\n"
+            "    out.flush()\n"
+        );
+        TestClient client(port_, 64 * 1024);
+        client.sendAll(Requests::rawGet("/stream.py"));
+        client.waitForResponseStart();
+        client.abortWithReset();
+        expectFreshConnectionWorks();
     }
 
     TEST(ServerSocketTest, ResolvesNumericHostsAndFormatsAcceptedAddress) {

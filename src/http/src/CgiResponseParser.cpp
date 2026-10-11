@@ -6,13 +6,13 @@
 
 #include "HeaderFields.hpp"
 #include "HeadersParser.hpp"
-#include "HttpResponseFactory.hpp"
 #include "HttpSyntax.hpp"
 #include "http/CgiResponseParser.hpp"
 #include "http/HttpHeaders.hpp"
 #include "http/HttpStatus.hpp"
 
 namespace {
+    constexpr std::size_t kHeaderLimit = 16 * 1024;
     constexpr std::size_t kStatusCodeSize = 3;
     constexpr int kMinStatus = 200;
     constexpr int kMaxStatus = 599;
@@ -29,7 +29,7 @@ namespace {
         while (true) {
             const std::size_t end = output.find(Http::Syntax::LF, start);
 
-            if (end == std::string_view::npos) {
+            if (end == std::string_view::npos || end >= kHeaderLimit) {
                 return std::nullopt;
             }
 
@@ -77,27 +77,69 @@ namespace {
     }
 } // namespace
 
-std::optional<HttpResponse> CgiResponseParser::parse(std::string_view output) {
+std::size_t CgiResponseParser::headerLimit() {
+    return kHeaderLimit;
+}
+
+std::variant<CgiResponseParser::Incomplete, CgiResponseParser::Invalid, CgiResponseParser::Head>
+CgiResponseParser::parseHeaders(std::string_view output) {
     const std::optional<Sections> sections = split(output);
 
     if (!sections) {
-        return std::nullopt;
+        if (output.size() >= kHeaderLimit) {
+            return Invalid{};
+        }
+        return Incomplete{};
+    }
+
+    if (sections->headers.empty()) {
+        return Invalid{};
     }
 
     std::optional<HttpHeaders> headers = HeadersParser::parse(sections->headers);
 
-    if (!headers) {
-        return std::nullopt;
+    if (!headers || headers->has(Http::Headers::TransferEncoding)) {
+        return Invalid{};
     }
 
     const std::optional<HttpStatus> status = parseStatus(*headers);
 
     if (!status) {
-        return std::nullopt;
+        return Invalid{};
+    }
+
+    std::optional<std::uintmax_t> length;
+    if (const auto value = headers->get(Http::Headers::ContentLength)) {
+        std::uintmax_t size = 0;
+        const char* end = value->data() + value->size();
+        const auto result = std::from_chars(value->data(), end, size);
+        if (result.ec != std::errc{} || result.ptr != end) {
+            return Invalid{};
+        }
+        length = size;
     }
 
     headers->erase(Http::Headers::Status);
     headers->erase(Http::Headers::Connection);
+    headers->erase("Keep-Alive");
+    headers->erase("Proxy-Connection");
+    headers->erase("TE");
+    headers->erase("Trailer");
+    headers->erase("Upgrade");
 
-    return HttpResponseFactory::create(*status, std::move(*headers), std::string(sections->body));
+    return Head{
+        .response = HttpResponse{.status = *status, .headers = std::move(*headers)},
+        .consumed = output.size() - sections->body.size(),
+        .length = length
+    };
+}
+
+std::optional<HttpResponse> CgiResponseParser::parse(std::string_view output) {
+    auto result = parseHeaders(output);
+    auto* head = std::get_if<Head>(&result);
+    if (head == nullptr) {
+        return std::nullopt;
+    }
+    head->response.body = ResponseBody(std::string(output.substr(head->consumed)));
+    return std::move(head->response);
 }

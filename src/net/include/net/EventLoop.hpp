@@ -27,7 +27,11 @@ private:
 
     void handleNewConnection(int listenFd);
     void handleClientActivity(int clientFd, uint32_t events);
-    void handleCgiActivity(int clientFd, int pipeFd);
+    void handleCgiActivity(int clientFd, int pipeFd, short events);
+    void updateCgiEvents(Connection& connection);
+    void checkCgi(int clientFd);
+    void failCgi(int clientFd, HttpStatus status);
+    void finishResponse(Connection& connection);
     void launchCgi(Connection& connection, const CgiRequest& request);
     void closeCgi(int clientFd);
     void closeConnection(int fd);

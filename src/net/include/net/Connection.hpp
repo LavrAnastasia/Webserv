@@ -1,5 +1,6 @@
 #pragma once
 
+#include "http/CgiResponse.hpp"
 #include "http/ConnectionInfo.hpp"
 #include "http/HttpParser.hpp"
 #include "http/HttpResponse.hpp"
@@ -25,6 +26,7 @@ private:
     std::string sendBuffer_;
     std::size_t sendOffset_ = 0;
     std::optional<ResponseBody> body_;
+    std::optional<CgiResponse> cgi_;
     bool bodyFailed_ = false;
     const ServerConfig& serverConfig_;
     std::chrono::steady_clock::time_point lastActivity_;
@@ -57,6 +59,11 @@ public:
     std::optional<ParseResult> receiveRequest();
 
     SendResult sendResponse();
-    bool isAlive() const;
+    void startCgi();
+    std::size_t cgiCapacity() const;
+    bool appendCgi(std::string_view bytes);
+    bool finishCgi();
+    bool responseStarted() const;
+    bool hasOutput() const;
     bool hasTimedOut(std::chrono::steady_clock::time_point currentTime, int timeoutSeconds) const;
 };
