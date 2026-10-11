@@ -183,10 +183,45 @@ namespace {
         EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->expire()));
     }
 
-    TEST_F(HttpSessionTest, DoesNotAnswerBytesReceivedWhileResponding) {
-        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(session_->receive(Requests::rawGet("/"))));
+    TEST_F(HttpSessionTest, AnswersBytesReceivedWhileRespondingAfterTheResponse) {
+        HttpSession::Action first = session_->receive(Requests::rawGet("/"));
 
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive(Requests::rawGet("/"))));
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(first));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive(Requests::rawGet("/missing"))));
+
+        const std::string responses = deliver(std::move(first));
+
+        EXPECT_LT(responses.find("HTTP/1.1 200 "), responses.find("HTTP/1.1 404 "));
+        EXPECT_NE(responses.find("HTTP/1.1 404 "), std::string::npos);
+        EXPECT_TRUE(ended<HttpSession::Read>());
+    }
+
+    TEST_F(HttpSessionTest, AnswersPipelinedRequestsInOrder) {
+        const std::string responses = deliver(session_->receive(Requests::rawGet("/") + Requests::rawGet("/missing")));
+
+        EXPECT_LT(responses.find("HTTP/1.1 200 "), responses.find("HTTP/1.1 404 "));
+        EXPECT_NE(responses.find("HTTP/1.1 404 "), std::string::npos);
+        EXPECT_TRUE(ended<HttpSession::Read>());
+    }
+
+    TEST_F(HttpSessionTest, IgnoresRequestsPipelinedAfterClose) {
+        const std::string responses =
+            deliver(session_->receive(Requests::rawGet("/", "close") + Requests::rawGet("/missing")));
+
+        EXPECT_EQ(responses.find("HTTP/1.1 404 "), std::string::npos);
+        EXPECT_TRUE(ended<HttpSession::Close>());
+    }
+
+    TEST_F(HttpSessionTest, WaitsForTheRestOfAPipelinedRequest) {
+        const std::string second = Requests::rawGet("/missing");
+        const std::string first = deliver(session_->receive(Requests::rawGet("/") + second.substr(0, 10)));
+
+        EXPECT_EQ(first.find("HTTP/1.1 404 "), std::string::npos);
+        ASSERT_TRUE(ended<HttpSession::Read>());
+
+        const std::string rest = deliver(session_->receive(second.substr(10)));
+
+        EXPECT_TRUE(rest.starts_with("HTTP/1.1 404 "));
     }
 
     TEST_F(HttpSessionTest, PassesTheClientAddressToCgi) {

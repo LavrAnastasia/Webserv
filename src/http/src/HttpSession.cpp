@@ -114,7 +114,6 @@ bool HttpSession::append(std::string& bytes) {
 HttpSession::Action HttpSession::finish() {
     const bool close = framing_.close;
 
-    // TODO: WEB-53 parse a request that is already buffered (pipelining)
     parser_.reset();
     phase_ = Phase::Reading;
     framing_ = {};
@@ -123,5 +122,5 @@ HttpSession::Action HttpSession::finish() {
         return Close{};
     }
 
-    return Read{};
+    return receive({});
 }
