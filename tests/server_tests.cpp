@@ -3,6 +3,8 @@
 #include <fstream>
 #include <functional>
 
+#include <sys/wait.h>
+
 #include <gtest/gtest.h>
 
 #include "fs/FileDescriptor.hpp"
@@ -24,7 +26,6 @@ namespace {
     constexpr std::size_t kResponseLimit = 256u * kMebibyte;
     constexpr std::size_t kCgiHugeSize = 200u * kMebibyte;
     constexpr std::size_t kCgiPostSize = 100u * kMebibyte;
-    constexpr std::size_t kMemoryGrowthLimit = 16u * kMebibyte;
     constexpr int kRepeatedRequests = 20;
 
     [[noreturn]] void systemError(const char* operation) {
@@ -737,6 +738,7 @@ namespace {
 
     TEST_F(ServerTest, Streams200MiBToSlowClientWithBoundedMemory) {
 #ifdef __linux__
+        constexpr std::size_t kMemoryGrowthLimit = 16u * kMebibyte;
         const auto before = readPeakMemory();
 #endif
         TestClient client(port_, 64 * 1024);
