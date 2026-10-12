@@ -1,6 +1,7 @@
 TEST_DIR := tests
 
 TEST_NAMES := \
+	cgi_registry \
 	cgi_response_parser \
 	config_loader \
 	connection \

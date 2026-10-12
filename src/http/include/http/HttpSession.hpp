@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -14,6 +15,8 @@
 #include "http/HttpSerializer.hpp"
 #include "http/HttpStatus.hpp"
 #include "http/ResponseBody.hpp"
+
+class CgiStream;
 
 class HttpSession {
 public:
@@ -29,6 +32,7 @@ public:
 
     HttpSession(const ServerConfig& server, ConnectionInfo info);
     HttpSession(const ServerConfig& server, ConnectionInfo info, Clock clock);
+    ~HttpSession();
 
     Action receive(std::string_view bytes);
     Action emit();
@@ -43,6 +47,7 @@ private:
     Action respond(HttpResponse response);
     Action finish();
     Action fail(HttpStatus status);
+    Action failOutput();
     bool append(std::string& bytes);
 
     const ServerConfig& server_;
@@ -54,5 +59,7 @@ private:
     Phase phase_ = Phase::Reading;
     HttpSerializer::Framing framing_;
     std::optional<ResponseBody> body_;
-    std::string output_;
+    std::unique_ptr<CgiStream> cgi_;
+    bool receivedOutput_ = false;
+    bool startedOutput_ = false;
 };

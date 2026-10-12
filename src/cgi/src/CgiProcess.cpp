@@ -150,6 +150,10 @@ void CgiProcess::writeInput() {
     }
 }
 
+void CgiProcess::closeInput() {
+    inputPipe_.close();
+}
+
 CgiProcess::Output CgiProcess::readOutput(std::string& bytes) {
     bytes.resize(kReadChunkSize);
 

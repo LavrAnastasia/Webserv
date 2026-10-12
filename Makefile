@@ -67,6 +67,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	CgiEnvironment.cpp \
 	CgiHandler.cpp \
 	CgiResponseParser.cpp \
+	CgiStream.cpp \
 )
 
 NET_SRC := $(addprefix src/net/src/, \
