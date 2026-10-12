@@ -1,62 +1,40 @@
 #include "net/ConnectionRegistry.hpp"
 
-/*
-    -called by TCP server when new client connects
-    -creates a key/value pair in activeConnections_,
-    where the fd is the key and a Connection object is the value
+ConnectionRegistry::Client::Client(int fd, const ServerConfig& server, const ConnectionInfo& info)
+    : connection(fd, info), session(server, info) {
+}
 
-    try_emplace(fd, fd, ip, serverPort, config);
-    1. fd = map key
-    2. - 5. = constructor arguments passed to Connection constructor
-    "Calculate hash for File Descriptor *** and find the correct memory bucket,
-    then pass the rest of the arguments to the Connection constructor and build the object
-    directly in that bucket without copying -> EFFICIENT!"
-*/
 void ConnectionRegistry::addConnection(
     int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig* config
 ) {
-    // dereference config to pass as reference to Connection constructor
-    activeConnections_.try_emplace(fd, fd, ip, serverPort, *config);
+    clients_.try_emplace(fd, fd, *config, ConnectionInfo{ip, serverPort});
 }
 
-/*
-    -called by event loop to clean up disconnected client
-    -erase() automatically calls the Connection destructor and
-    frees all memory. If the fd doesn't exist, erase safely does nothing
-*/
 void ConnectionRegistry::removeConnection(int fd) {
-    activeConnections_.erase(fd);
+    clients_.erase(fd);
 }
 
-/*
-    called by event loop when poller indicates the fd has data
-    returns a pointer, because a reference would break and crash the program
-    in case of abrupt client disconnection
-    -find() returns an iterator pointing to the key/value pair, or end() if not found
-    -end() is a theoretical invalid memory space just past the last item in the map
-    -it->first is the KEY of the key/value pair
-    -it->second is the VALUE of the pair, in this case a Connection object
-*/
-Connection* ConnectionRegistry::getConnection(int fd) {
-    auto it = activeConnections_.find(fd);
-    if (it != activeConnections_.end()) {
-        return &(it->second);
-    }
-    return nullptr;
-}
+ConnectionRegistry::Client* ConnectionRegistry::find(int fd) {
+    auto it = clients_.find(fd);
 
-std::vector<int>
-ConnectionRegistry::getTimedOutConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime) {
-    std::vector<int> timedOutFds;
-
-    for (auto& [fd, connection] : activeConnections_) {
-        if (connection.hasTimedOut(currentTime, timeoutSeconds)) {
-            timedOutFds.push_back(fd);
-        }
+    if (it == clients_.end()) {
+        return nullptr;
     }
-    return timedOutFds;
+
+    return &it->second;
 }
 
 std::size_t ConnectionRegistry::size() const {
-    return activeConnections_.size();
+    return clients_.size();
+}
+
+std::vector<int> ConnectionRegistry::fds() const {
+    std::vector<int> result;
+    result.reserve(clients_.size());
+
+    for (const auto& client : clients_) {
+        result.push_back(client.first);
+    }
+
+    return result;
 }

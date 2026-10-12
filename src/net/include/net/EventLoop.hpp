@@ -20,7 +20,6 @@ private:
     CgiRegistry cgiRegistry_;
     TcpServer& tcpServer_;
 
-    int clientTimeoutSeconds_;
     std::vector<int> listeningFds_;
     bool acceptEventsEnabled_ = true;
     std::chrono::steady_clock::time_point acceptAgainAt_;
@@ -28,7 +27,8 @@ private:
     void handleNewConnection(int listenFd);
     void handleClientActivity(int clientFd, uint32_t events);
     void handleCgiActivity(int clientFd, int pipeFd);
-    void launchCgi(Connection& connection, const CgiRequest& request);
+    void execute(int clientFd, HttpSession::Action action);
+    void launchCgi(ConnectionRegistry::Client& client, const CgiRequest& request);
     void closeCgi(int clientFd);
     void closeConnection(int fd);
     void cleanupTimedOutConnections();
@@ -38,7 +38,7 @@ private:
 public:
     static void setupSignals();
 
-    EventLoop(TcpServer& server) : tcpServer_(server), clientTimeoutSeconds_(60) {}
+    EventLoop(TcpServer& server) : tcpServer_(server) {}
 
     void initialize();
     void run();

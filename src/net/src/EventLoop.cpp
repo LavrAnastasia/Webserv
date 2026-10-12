@@ -1,7 +1,4 @@
 #include "net/EventLoop.hpp"
-#include "http/CgiResponseParser.hpp"
-#include "http/HttpResponse.hpp"
-#include "http/RequestDispatcher.hpp"
 #include "log/Log.hpp"
 #include "net/TcpServer.hpp"
 
@@ -18,6 +15,7 @@
 
 namespace {
     constexpr std::chrono::seconds kCgiTimeout{60};
+    constexpr int kSendTimeoutSeconds = 60;
     constexpr std::size_t kMaxConnections = 1000;
     constexpr std::size_t kMaxCgi = 128;
     constexpr std::chrono::milliseconds kAcceptPause{500};
@@ -72,11 +70,14 @@ void EventLoop::handleNewConnection(int listenFd) {
 }
 
 void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
-    //fetch client
-    Connection* connection = connectionRegistry_.getConnection(clientFd);
-    if (connection == nullptr) {
+    ConnectionRegistry::Client* client = connectionRegistry_.find(clientFd);
+
+    if (client == nullptr) {
         return;
     }
+
+    Connection& connection = client->connection;
+
     // close on error, or on hangup with nothing left to read
     if ((events & POLLERR) || ((events & POLLHUP) && !(events & POLLIN))) {
         closeConnection(clientFd);
@@ -84,97 +85,72 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     }
 
     if (cgiRegistry_.find(clientFd) != nullptr) {
-        if (!connection->isAlive()) {
-            Log::info("client closed connection while CGI was running, client: " + connection->info().remoteAddr);
+        if (!connection.isAlive()) {
+            Log::info("client closed connection while CGI was running, client: " + connection.info().remoteAddr);
             closeConnection(clientFd);
         } else {
             poller_.modifySocket(clientFd, 0);
         }
         return;
     }
+
     //reading phase (OS kernel receive buffer has data)
     if (events & POLLIN) {
-        //feed bytes from OS kernel's socket buffer into parser and receive status
-        const std::optional<ParseResult> received = connection->receiveRequest();
+        const std::optional<std::string_view> bytes = connection.receive();
 
-        // Client disconnected -> clean up immediately
-        if (!received) {
+        // client disconnected or the socket failed
+        if (!bytes) {
             closeConnection(clientFd);
             return;
         }
 
-        const ParseResult& result = *received;
-
-        // Parsing complete -> build response from HttpRequest
-        if (const Complete* complete = std::get_if<Complete>(&result)) {
-            const ServerConfig& server = connection->getServerConfig();
-            HandlerResult handlerResult = RequestDispatcher::dispatch(complete->request, server, connection->info());
-
-            connection->setShouldClose(!complete->request.isPersistent());
-            connection->setHeadersOnly(complete->request.method == HttpMethod::Head);
-
-            if (HttpResponse* response = std::get_if<HttpResponse>(&handlerResult)) {
-                connection->setResponse(std::move(*response));
-                poller_.modifySocket(clientFd, POLLOUT);
-            } else {
-                launchCgi(*connection, std::get<CgiRequest>(handlerResult));
-            }
-        }
-
-        /*
-        fail case: unable to parse client request -> build error response and
-        close connection after sending!
-        */
-        else if (const Failed* failed = std::get_if<Failed>(&result)) {
-            connection->setShouldClose(true);
-            connection->setResponse(RequestDispatcher::fail(failed->status, connection->getServerConfig()));
-            poller_.modifySocket(clientFd, POLLOUT); //switch to POLLOUT to send error
-        }
-        /*
-            case 'NeedMoreData' -> do nothing and wait for next loop - no POLLOUT switch
-        */
+        execute(clientFd, client->session.receive(*bytes));
+        return;
     }
 
     //send phase (OS write bucket has space)
     if (events & POLLOUT) {
-        const auto result = connection->sendResponse();
-
-        if (result != Connection::SendResult::Ok) {
-            if (result == Connection::SendResult::BodyError) {
-                Log::error(
-                    "failed to read response body (file was truncated or read failed), client: " +
-                    connection->info().remoteAddr
-                );
-            }
-
+        if (!connection.send()) {
             closeConnection(clientFd);
             return;
         }
 
-        if (connection->isSendComplete()) {
-            if (connection->shouldClose()) {
-                closeConnection(clientFd);
-            } else {
-                connection->resetParser();
-                connection->setHeadersOnly(false);
-                /*
-                    TODO: HTTP pipelining support:
-                    If client has sent multiple requests and parser buffer still
-                    has data in it after reset, parser should be re-run immediately.
-                    Requests already in buffer need to be processed before setting
-                    socket to POLLIN.
-                */
-                poller_.modifySocket(clientFd, POLLIN);
-            }
+        if (connection.pending() == 0) {
+            execute(clientFd, client->session.emit());
         }
     }
 }
 
-void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
+void EventLoop::execute(int clientFd, HttpSession::Action action) {
+    ConnectionRegistry::Client* client = connectionRegistry_.find(clientFd);
+
+    if (client == nullptr) {
+        return;
+    }
+
+    // TODO: WEB-55 a Write while the CGI streams keeps it running and pauses its output pipe
+    if (!std::holds_alternative<HttpSession::ReadOutput>(action)) {
+        closeCgi(clientFd);
+    }
+
+    if (std::holds_alternative<HttpSession::Close>(action)) {
+        closeConnection(clientFd);
+    } else if (HttpSession::Write* write = std::get_if<HttpSession::Write>(&action)) {
+        client->connection.queue(std::move(write->bytes));
+        poller_.modifySocket(clientFd, POLLOUT);
+    } else if (const CgiRequest* request = std::get_if<CgiRequest>(&action)) {
+        launchCgi(*client, *request);
+    } else {
+        poller_.modifySocket(clientFd, POLLIN);
+    }
+}
+
+void EventLoop::launchCgi(ConnectionRegistry::Client& client, const CgiRequest& request) {
+    const int clientFd = client.connection.getFd();
+
     if (cgiRegistry_.size() >= kMaxCgi) {
-        Log::warn("too many CGI processes running, client: " + connection.info().remoteAddr);
-        connection.setResponse(RequestDispatcher::fail(HttpStatus::ServiceUnavailable, connection.getServerConfig()));
-        poller_.modifySocket(connection.getFd(), POLLOUT);
+        Log::warn("too many CGI processes running, client: " + client.connection.info().remoteAddr);
+        execute(clientFd, client.session.fail(HttpSession::CgiFailure::Busy));
         return;
     }
 
@@ -183,10 +159,9 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     if (!process) {
         Log::error(
             "failed to start CGI " + request.script.string() + " with " + request.interpreter.string() +
-            ", client: " + connection.info().remoteAddr
+            ", client: " + client.connection.info().remoteAddr
         );
-        connection.setResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection.getServerConfig()));
-        poller_.modifySocket(connection.getFd(), POLLOUT);
+        execute(clientFd, client.session.fail(HttpSession::CgiFailure::Launch));
         return;
     }
 
@@ -196,60 +171,50 @@ void EventLoop::launchCgi(Connection& connection, const CgiRequest& request) {
     }
 
     poller_.addSocket(process->outputFd());
-    poller_.modifySocket(connection.getFd(), POLLIN);
-    cgiRegistry_.add(connection.getFd(), std::move(*process));
+    poller_.modifySocket(clientFd, POLLIN);
+    cgiRegistry_.add(clientFd, std::move(*process));
 }
 
 void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     CgiProcess* process = cgiRegistry_.find(clientFd);
+    ConnectionRegistry::Client* client = connectionRegistry_.find(clientFd);
 
     if (process == nullptr) {
         return;
     }
 
-    const int input = process->inputFd();
-    const int output = process->outputFd();
+    if (client == nullptr) {
+        closeCgi(clientFd);
+        return;
+    }
 
-    if (pipeFd == input) {
+    if (pipeFd == process->inputFd()) {
         process->writeInput();
-    } else if (pipeFd == output) {
-        process->readOutput();
-    } else {
+
+        if (process->inputFd() != pipeFd) {
+            poller_.removeSocket(pipeFd);
+        }
         return;
     }
 
-    if (process->inputFd() != input) {
-        poller_.removeSocket(input);
-    }
-
-    if (process->outputFd() != output) {
-        poller_.removeSocket(output);
-    }
-
-    if (process->isAlive()) {
+    if (pipeFd != process->outputFd()) {
         return;
     }
 
-    Connection* connection = connectionRegistry_.getConnection(clientFd);
+    std::string bytes;
 
-    if (connection == nullptr) {
-        cgiRegistry_.remove(clientFd);
-        return;
+    switch (process->readOutput(bytes)) {
+        case CgiProcess::Output::Data:
+            execute(clientFd, client->session.receiveOutput(bytes));
+            break;
+        case CgiProcess::Output::End:
+            execute(clientFd, client->session.endOutput());
+            break;
+        case CgiProcess::Output::Error:
+            Log::error("failed to read CGI output, client: " + client->connection.info().remoteAddr);
+            execute(clientFd, client->session.fail(HttpSession::CgiFailure::Output));
+            break;
     }
-
-    std::optional<HttpResponse> response = CgiResponseParser::parse(process->output());
-
-    if (response) {
-        connection->setResponse(std::move(*response));
-    } else {
-        const std::string problem =
-            process->output().empty() ? "CGI produced no usable output" : "CGI sent invalid header";
-        Log::error(problem + " while reading response header, client: " + connection->info().remoteAddr);
-        connection->setResponse(RequestDispatcher::fail(HttpStatus::BadGateway, connection->getServerConfig()));
-    }
-
-    cgiRegistry_.remove(clientFd);
-    poller_.modifySocket(clientFd, POLLOUT);
 }
 
 void EventLoop::closeCgi(int clientFd) {
@@ -298,8 +263,8 @@ void EventLoop::run() {
                 }
 
                 const int fd = client.value_or(event.fd);
-                const Connection* connection = connectionRegistry_.getConnection(fd);
-                const std::string ip = connection != nullptr ? connection->info().remoteAddr : "unknown";
+                const ConnectionRegistry::Client* failed = connectionRegistry_.find(fd);
+                const std::string ip = failed != nullptr ? failed->connection.info().remoteAddr : "unknown";
 
                 closeConnection(fd);
                 Log::error(std::string(error.what()) + " while processing request, connection closed, client: " + ip);
@@ -318,50 +283,41 @@ void EventLoop::run() {
 }
 
 void EventLoop::cleanupTimedOutConnections() {
-    std::vector<int> timedOutFds =
-        connectionRegistry_.getTimedOutConnections(clientTimeoutSeconds_, std::chrono::steady_clock::now());
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-    for (int fd : timedOutFds) {
-        Connection* connection = connectionRegistry_.getConnection(fd);
+    for (int fd : connectionRegistry_.fds()) {
+        ConnectionRegistry::Client* client = connectionRegistry_.find(fd);
 
-        if (!connection)
-            continue;
-
-        if (cgiRegistry_.find(fd)) {
+        if (client == nullptr) {
             continue;
         }
 
-        // response pending or connection flagged to close: close immediately, do not queue 408
-        if (connection->shouldClose() || !connection->isSendComplete()) {
-            Log::info("client timed out while sending response, client: " + connection->info().remoteAddr);
+        if (client->connection.pending() > 0 && client->connection.hasTimedOut(now, kSendTimeoutSeconds)) {
+            Log::info("client timed out while sending response, client: " + client->connection.info().remoteAddr);
             closeConnection(fd);
             continue;
         }
 
-        // no response pending: client timed out while sending request
-        connection->setShouldClose(true);
-        connection->setResponse(RequestDispatcher::fail(HttpStatus::RequestTimeout, connection->getServerConfig()));
-        poller_.modifySocket(fd, POLLOUT);
-        Log::info("client timed out while waiting for request, client: " + connection->info().remoteAddr);
+        if (std::optional<HttpSession::Action> action = client->session.expire()) {
+            execute(fd, std::move(*action));
+        }
     }
 }
 
 void EventLoop::cleanupTimedOutCgi() {
     for (int clientFd : cgiRegistry_.expired(kCgiTimeout, std::chrono::steady_clock::now())) {
-        closeCgi(clientFd);
+        ConnectionRegistry::Client* client = connectionRegistry_.find(clientFd);
 
-        Connection* connection = connectionRegistry_.getConnection(clientFd);
-
-        if (connection == nullptr) {
+        if (client == nullptr) {
+            closeCgi(clientFd);
             continue;
         }
 
         Log::error(
             "CGI timed out after " + std::to_string(kCgiTimeout.count()) +
-            " s while reading response, client: " + connection->info().remoteAddr
+            " s while reading response, client: " + client->connection.info().remoteAddr
         );
-        connection->setResponse(RequestDispatcher::fail(HttpStatus::GatewayTimeout, connection->getServerConfig()));
-        poller_.modifySocket(clientFd, POLLOUT);
+        execute(clientFd, client->session.fail(HttpSession::CgiFailure::Timeout));
     }
 }
 

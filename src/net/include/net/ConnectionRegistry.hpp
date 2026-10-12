@@ -1,53 +1,33 @@
 #pragma once
 
+#include "http/HttpSession.hpp"
 #include "net/Connection.hpp"
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-struct ServerConfig;
-
 class ConnectionRegistry {
-private:
-    /*
-    Unordered map (a highly optimized hash table) is used to store connection objects
-    because of performance: when OS tells Poller that a given fd has incoming data,
-    fetching the matching Connection object takes only 1 operation.
-
-    activeConnections_ maps OS file descriptor to Connection object
-*/
-    std::unordered_map<int, Connection> activeConnections_;
-
 public:
-    /*
-    The default keyword guarantees the compiler will generate (highly optimized)
-    default constructors, which will not be skipped even if a parametrized constructor
-    is added later.
-*/
-    ConnectionRegistry() = default;
+    struct Client {
+        Client(int fd, const ServerConfig& server, const ConnectionInfo& info);
 
-    // called by TCP server when new client connects
+        Connection connection;
+        HttpSession session;
+    };
+
+    // called by event loop when a new client connects
     void addConnection(int fd, const std::string& ip, std::uint16_t serverPort, const ServerConfig* config);
 
     // called by event loop to clean up disconnected client
     void removeConnection(int fd);
 
-    /*
-    called by event loop when poller indicates the fd has data
-    returns a pointer, because a reference would break and crash the program
-    in case of abrupt client disconnection
-*/
-    Connection* getConnection(int fd);
-
+    Client* find(int fd);
     std::size_t size() const;
+    std::vector<int> fds() const;
 
-    /*
-    checks activeConnections_ for timed out connections, returns a vector containing
-    timed out fds
-*/
-    std::vector<int> getTimedOutConnections(int timeoutSeconds, std::chrono::steady_clock::time_point currentTime);
+private:
+    std::unordered_map<int, Client> clients_;
 };

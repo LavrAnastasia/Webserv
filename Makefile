@@ -55,6 +55,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	ResponseBody.cpp \
 	HttpStatus.cpp \
 	HttpSerializer.cpp \
+	HttpSession.cpp \
 	StaticHandler.cpp \
 	RedirectHandler.cpp \
 	UploadHandler.cpp \

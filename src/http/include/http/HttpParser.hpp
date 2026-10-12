@@ -53,4 +53,6 @@ public:
     explicit HttpParser(std::size_t maxBodySize);
     ParseResult append(const char* data, std::size_t size);
     void reset();
+    bool isIdle() const;
+    bool hasHeaders() const;
 };
