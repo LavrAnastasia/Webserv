@@ -123,7 +123,7 @@ HttpSession::Action HttpSession::receiveOutput(std::string_view output) {
     std::string bytes;
 
     if (!cgi_ || !cgi_->receive(output, bytes)) {
-        return failOutput();
+        return failOutput(std::move(bytes));
     }
 
     if (bytes.empty()) {
@@ -131,7 +131,7 @@ HttpSession::Action HttpSession::receiveOutput(std::string_view output) {
     }
 
     startedOutput_ = true;
-    return Write{std::move(bytes)};
+    return Stream{std::move(bytes)};
 }
 
 HttpSession::Action HttpSession::endOutput() {
@@ -170,12 +170,18 @@ HttpSession::Action HttpSession::fail(CgiFailure failure) {
     return fail(HttpStatus::BadGateway);
 }
 
-HttpSession::Action HttpSession::failOutput() {
+HttpSession::Action HttpSession::failOutput(std::string bytes) {
     const std::string problem = cgi_ && cgi_->hasHeaders() ? "CGI sent invalid response body"
         : receivedOutput_                                  ? "CGI sent invalid header"
                                                            : "CGI produced no usable output";
     Log::error(problem + ", client: " + info_.remoteAddr);
     cgi_.reset();
+
+    if (!bytes.empty()) {
+        framing_.close = true;
+        startedOutput_ = true;
+        return Write{std::move(bytes)};
+    }
 
     return startedOutput_ ? Action{Close{}} : fail(HttpStatus::BadGateway);
 }

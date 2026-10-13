@@ -26,7 +26,10 @@ public:
     struct Write {
         std::string bytes;
     };
-    using Action = std::variant<Read, ReadOutput, Write, Close, CgiRequest>;
+    struct Stream {
+        std::string bytes;
+    };
+    using Action = std::variant<Read, ReadOutput, Write, Stream, Close, CgiRequest>;
     enum class CgiFailure { Busy, Launch, Output, Timeout };
     using Clock = std::chrono::steady_clock::time_point (*)();
 
@@ -47,7 +50,7 @@ private:
     Action respond(HttpResponse response);
     Action finish();
     Action fail(HttpStatus status);
-    Action failOutput();
+    Action failOutput(std::string bytes = {});
     bool append(std::string& bytes);
 
     const ServerConfig& server_;

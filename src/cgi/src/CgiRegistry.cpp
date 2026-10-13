@@ -1,46 +1,13 @@
 #include "cgi/CgiRegistry.hpp"
 
-#include <iterator>
 #include <utility>
 
 void CgiRegistry::add(int clientFd, CgiProcess process) {
-    remove(clientFd);
-    activity_.push_back(clientFd);
-
-    const int input = process.inputFd();
-    const int output = process.outputFd();
-
-    try {
-        entries_.emplace(
-            clientFd, Entry{std::move(process), std::chrono::steady_clock::now(), std::prev(activity_.end()), false}
-        );
-    } catch (...) {
-        activity_.pop_back();
-        throw;
-    }
-
-    if (input >= 0) {
-        pipes_.insert_or_assign(input, clientFd);
-    }
-
-    pipes_.insert_or_assign(output, clientFd);
+    entries_.insert_or_assign(clientFd, Entry{std::move(process), std::chrono::steady_clock::now(), false});
 }
 
 void CgiRegistry::remove(int clientFd) {
-    auto it = entries_.find(clientFd);
-
-    if (it == entries_.end()) {
-        return;
-    }
-
-    release(it->second.process.inputFd());
-    release(it->second.process.outputFd());
-    activity_.erase(it->second.activity);
-    entries_.erase(it);
-}
-
-void CgiRegistry::release(int pipeFd) {
-    pipes_.erase(pipeFd);
+    entries_.erase(clientFd);
 }
 
 void CgiRegistry::touch(int clientFd) {
@@ -51,7 +18,6 @@ void CgiRegistry::touch(int clientFd) {
     }
 
     it->second.updated = std::chrono::steady_clock::now();
-    activity_.splice(activity_.end(), activity_, it->second.activity);
 }
 
 std::optional<int> CgiRegistry::pause(int clientFd) {
@@ -73,6 +39,7 @@ std::optional<int> CgiRegistry::resume(int clientFd) {
     }
 
     it->second.paused = false;
+    it->second.updated = std::chrono::steady_clock::now();
     return it->second.process.outputFd();
 }
 
@@ -91,24 +58,26 @@ CgiProcess* CgiRegistry::find(int clientFd) {
 }
 
 std::optional<int> CgiRegistry::client(int pipeFd) const {
-    const auto it = pipes_.find(pipeFd);
-
-    if (it == pipes_.end()) {
+    if (pipeFd < 0) {
         return std::nullopt;
     }
 
-    return it->second;
+    for (const auto& [clientFd, entry] : entries_) {
+        if (entry.process.inputFd() == pipeFd || entry.process.outputFd() == pipeFd) {
+            return clientFd;
+        }
+    }
+
+    return std::nullopt;
 }
 
 std::vector<int> CgiRegistry::expired(std::chrono::seconds timeout, std::chrono::steady_clock::time_point now) const {
     std::vector<int> result;
 
-    for (int clientFd : activity_) {
-        if (now - entries_.at(clientFd).updated < timeout) {
-            break;
+    for (const auto& [clientFd, entry] : entries_) {
+        if (!entry.paused && now - entry.updated >= timeout) {
+            result.push_back(clientFd);
         }
-
-        result.push_back(clientFd);
     }
 
     return result;

@@ -61,13 +61,22 @@ namespace {
             std::string text;
             int writes = 0;
 
-            while (auto* write = std::get_if<HttpSession::Write>(&action)) {
-                if (write->bytes.empty() || ++writes > 1024) {
+            while (true) {
+                const auto* write = std::get_if<HttpSession::Write>(&action);
+                const auto* stream = std::get_if<HttpSession::Stream>(&action);
+
+                if (write == nullptr && stream == nullptr) {
+                    break;
+                }
+
+                const std::string& bytes = write != nullptr ? write->bytes : stream->bytes;
+
+                if (bytes.empty() || ++writes > 1024) {
                     ADD_FAILURE() << "Response never ends or emits empty writes";
                     break;
                 }
 
-                text += write->bytes;
+                text += bytes;
                 action = session_->emit();
             }
 
@@ -343,16 +352,22 @@ namespace {
         receiveOutput("Status: 201 Created\r\nContent-");
         receiveOutput("Type: text/plain\r\n\r");
 
-        const std::string first = deliver(session_->receiveOutput("\nhel"));
+        HttpSession::Action action = session_->receiveOutput("\nhel");
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Stream>(action));
+        const std::string first = deliver(std::move(action));
 
         EXPECT_TRUE(first.starts_with("HTTP/1.1 201 "));
         EXPECT_NE(first.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
         EXPECT_EQ(first.find("Content-Length:"), std::string::npos);
         EXPECT_EQ(body(first), "3\r\nhel\r\n");
         EXPECT_TRUE(ended<HttpSession::ReadOutput>());
-        EXPECT_EQ(deliver(session_->receiveOutput("lo")), "2\r\nlo\r\n");
+        action = session_->receiveOutput("lo");
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Stream>(action));
+        EXPECT_EQ(deliver(std::move(action)), "2\r\nlo\r\n");
         EXPECT_TRUE(ended<HttpSession::ReadOutput>());
-        EXPECT_EQ(deliver(session_->endOutput()), "0\r\n\r\n");
+        action = session_->endOutput();
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        EXPECT_EQ(deliver(std::move(action)), "0\r\n\r\n");
         EXPECT_TRUE(ended<HttpSession::Read>());
     }
 
@@ -424,6 +439,26 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
     }
 
+    TEST_F(HttpSessionTest, WritesBadGatewayBeforeAnsweringAPipelinedRequest) {
+        const std::string content = pattern(3 * kChunkSize);
+        Files::write(root_ / "file.bin", content);
+        startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/file.bin"));
+
+        HttpSession::Action action = session_->receiveOutput("nonsense\r\n\r\n");
+        const auto* write = std::get_if<HttpSession::Write>(&action);
+
+        ASSERT_NE(write, nullptr);
+        EXPECT_TRUE(write->bytes.starts_with("HTTP/1.1 502 "));
+
+        action = session_->emit();
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        const std::string response = deliver(std::move(action));
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 "));
+        EXPECT_EQ(body(response), content);
+        EXPECT_TRUE(ended<HttpSession::Read>());
+    }
+
     TEST_F(HttpSessionTest, DoesNotReuseTheOutputOfThePreviousCgi) {
         startCgi(Requests::rawGet("/cgi/app.py"));
         deliver(session_->receiveOutput("Content-Type: text/plain\r\n\r\nfirst"));
@@ -448,18 +483,18 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
     }
 
-    TEST_F(HttpSessionTest, StreamsPastTheFormerOutputLimit) {
+    TEST_F(HttpSessionTest, StreamsMultipleMegabytesWithoutCollectingOutput) {
         constexpr std::size_t kMegabyte = 1024 * 1024;
-        constexpr std::size_t kOutputMegabytes = 200;
+        constexpr std::size_t kOutputMegabytes = 3;
         const std::string megabyte(kMegabyte, 'x');
         startCgi(Requests::rawGet("/cgi/app.py"));
         deliver(session_->receiveOutput("Content-Type: application/octet-stream\r\n\r\n"));
 
         for (std::size_t chunk = 0; chunk < kOutputMegabytes; ++chunk) {
             HttpSession::Action action = session_->receiveOutput(megabyte);
-            auto* write = std::get_if<HttpSession::Write>(&action);
-            ASSERT_NE(write, nullptr) << chunk;
-            EXPECT_EQ(write->bytes, "100000\r\n" + megabyte + "\r\n");
+            const auto* stream = std::get_if<HttpSession::Stream>(&action);
+            ASSERT_NE(stream, nullptr) << chunk;
+            EXPECT_EQ(stream->bytes, "100000\r\n" + megabyte + "\r\n");
             ASSERT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->emit()));
         }
 
@@ -507,20 +542,39 @@ namespace {
         EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->endOutput()));
     }
 
-    TEST_F(HttpSessionTest, ClosesWhenContentLengthIsExceededAfterHeaders) {
-        startCgi(Requests::rawGet("/cgi/app.py"));
-        deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 3\r\n\r\n"));
+    TEST_F(HttpSessionTest, WritesRemainingContentLengthBeforeClosingOnExcessBody) {
+        startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/"));
+        const std::string first =
+            deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhe"));
 
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receiveOutput("four")));
+        EXPECT_EQ(body(first), "he");
+        HttpSession::Action action = session_->receiveOutput("llo and excess");
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        EXPECT_EQ(deliver(std::move(action)), "llo");
+        EXPECT_TRUE(ended<HttpSession::Close>());
     }
 
-    TEST_F(HttpSessionTest, RejectsExcessBodyBeforeSendingHeaders) {
-        startCgi(Requests::rawGet("/cgi/app.py"));
-        const std::string response =
-            deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 3\r\n\r\nfour"));
+    TEST_F(HttpSessionTest, WritesOnlyContentLengthWhenFirstOutputHasExcessBody) {
+        for (const std::string length : {"0", "3"}) {
+            session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{"10.0.0.7", 8080}, readFakeNow);
+            startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/"));
+            HttpSession::Action action =
+                session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: " + length + "\r\n\r\nfour");
 
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
-        EXPECT_TRUE(ended<HttpSession::Read>());
+            ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+            const std::string response = deliver(std::move(action));
+
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 200 "));
+            EXPECT_EQ(body(response), length == "0" ? "" : "fou");
+            EXPECT_TRUE(ended<HttpSession::Close>());
+        }
+    }
+
+    TEST_F(HttpSessionTest, ClosesImmediatelyWhenContentLengthWasAlreadySent) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 3\r\n\r\nfou"));
+
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receiveOutput("r")));
     }
 
     TEST_F(HttpSessionTest, WaitsForEofEvenWithZeroContentLength) {

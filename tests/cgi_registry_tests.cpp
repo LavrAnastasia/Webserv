@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <chrono>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -10,6 +12,7 @@
 namespace {
     using Clock = std::chrono::steady_clock;
     constexpr std::chrono::seconds kTimeout{60};
+    constexpr std::chrono::milliseconds kClockTick{1};
     constexpr int kFirstClient = 100;
     constexpr int kSecondClient = 101;
 
@@ -17,7 +20,7 @@ namespace {
         return CgiProcess::launch(CgiRequest{"/bin/sh", "/dev/null", {}, "input"});
     }
 
-    TEST(CgiRegistryTest, ExpiresFromLastOutputInActivityOrder) {
+    TEST(CgiRegistryTest, ExpiresFromLastOutput) {
         CgiRegistry registry;
         auto first = launch();
         auto second = launch();
@@ -27,13 +30,29 @@ namespace {
         registry.add(kSecondClient, std::move(*second));
 
         const auto boundary = Clock::now();
+        std::this_thread::sleep_for(kClockTick);
         registry.touch(kFirstClient);
 
         EXPECT_EQ(registry.expired(kTimeout, boundary + kTimeout), std::vector<int>{kSecondClient});
-        EXPECT_EQ(registry.expired(kTimeout, Clock::now() + kTimeout), (std::vector<int>{kSecondClient, kFirstClient}));
+        auto expired = registry.expired(kTimeout, Clock::now() + kTimeout);
+        std::ranges::sort(expired);
+        EXPECT_EQ(expired, (std::vector<int>{kFirstClient, kSecondClient}));
     }
 
-    TEST(CgiRegistryTest, PausesAndResumesWithoutExtendingTheOutputTimeout) {
+    TEST(CgiRegistryTest, SkipsPausedProcessesWhenOthersExpire) {
+        CgiRegistry registry;
+        auto first = launch();
+        auto second = launch();
+        ASSERT_TRUE(first);
+        ASSERT_TRUE(second);
+        registry.add(kFirstClient, std::move(*first));
+        registry.add(kSecondClient, std::move(*second));
+
+        ASSERT_TRUE(registry.pause(kFirstClient));
+        EXPECT_EQ(registry.expired(kTimeout, Clock::now() + kTimeout), std::vector<int>{kSecondClient});
+    }
+
+    TEST(CgiRegistryTest, RestartsTheOutputTimeoutOnResume) {
         CgiRegistry registry;
         auto process = launch();
         ASSERT_TRUE(process);
@@ -44,12 +63,15 @@ namespace {
         EXPECT_FALSE(registry.resume(kFirstClient));
         EXPECT_EQ(registry.pause(kFirstClient), output);
         EXPECT_FALSE(registry.pause(kFirstClient));
+        EXPECT_TRUE(registry.expired(kTimeout, boundary + kTimeout).empty());
+        std::this_thread::sleep_for(kClockTick);
         EXPECT_EQ(registry.resume(kFirstClient), output);
         EXPECT_FALSE(registry.resume(kFirstClient));
-        EXPECT_EQ(registry.expired(kTimeout, boundary + kTimeout), std::vector<int>{kFirstClient});
+        EXPECT_TRUE(registry.expired(kTimeout, boundary + kTimeout).empty());
+        EXPECT_EQ(registry.expired(kTimeout, Clock::now() + kTimeout), std::vector<int>{kFirstClient});
     }
 
-    TEST(CgiRegistryTest, ReleasesClosedInputAndRemovesRemainingRoutesAndTimeouts) {
+    TEST(CgiRegistryTest, IgnoresClosedInputAndRemovesRemainingDescriptorsAndTimeouts) {
         CgiRegistry registry;
         auto process = launch();
         ASSERT_TRUE(process);
@@ -60,8 +82,8 @@ namespace {
         EXPECT_EQ(registry.client(output), kFirstClient);
 
         registry.find(kFirstClient)->closeInput();
-        registry.release(input);
         EXPECT_FALSE(registry.client(input));
+        EXPECT_FALSE(registry.client(-1));
         EXPECT_EQ(registry.client(output), kFirstClient);
 
         registry.remove(kFirstClient);

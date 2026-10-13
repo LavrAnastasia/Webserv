@@ -709,6 +709,28 @@ namespace {
         expectFreshConnectionWorks();
     }
 
+    TEST_F(ServerTest, StopsInvalidCgiBeforeSendingAPipelinedFile) {
+        Files::write(root_ / "cgi/invalid.sh", "echo $$ > invalid.pid\nprintf 'nonsense\\r\\n\\r\\n'\nexec sleep 30\n");
+        const std::string content(3 * kMebibyte, 'f');
+        Files::write(root_ / "next.bin", content);
+        TestClient client(port_, kHeaderLimit);
+        client.sendAll(Requests::rawGet("/cgi/invalid.sh") + Requests::rawGet("/next.bin"));
+
+        ASSERT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
+        std::ifstream pidFile(root_ / "cgi/invalid.pid");
+        pid_t pid = 0;
+        ASSERT_TRUE(static_cast<bool>(pidFile >> pid));
+        ASSERT_GT(pid, 0);
+        errno = 0;
+        EXPECT_EQ(::kill(pid, 0), -1);
+        EXPECT_EQ(errno, ESRCH);
+
+        expectOK(client, content);
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
     TEST_F(ServerTest, SendsLargeCgiOutputWhole) {
         TestClient client(port_);
         client.sendAll(Requests::rawGet("/cgi/large.sh", "close"));
@@ -844,6 +866,22 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
         EXPECT_TRUE(response.ends_with("\r\n\r\npartial"));
         EXPECT_EQ(response.find("502 Bad Gateway"), std::string::npos);
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, SendsOnlyContentLengthBeforeClosingOnExcessCgiOutput) {
+        Files::write(
+            root_ / "cgi/excess.sh",
+            "printf 'Content-Type: text/plain\\r\\nContent-Length: 5\\r\\n\\r\\nhe'\n"
+            "while [ ! -e release ]; do sleep 0.01; done\nprintf 'llo and excess'\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/excess.sh") + Requests::rawGet("/small.txt"));
+        client.waitForBytes("\r\n\r\nhe");
+        Files::write(root_ / "cgi/release", "");
+
+        expectOK(client, "hello");
+        client.expectEof();
         expectFreshConnectionWorks();
     }
 

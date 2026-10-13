@@ -46,8 +46,7 @@ bool CgiStream::receive(std::string_view output, std::string& bytes) {
 
     length_ = headers->length;
     const HttpStatus status = headers->response.status;
-    suppressed_ = framing_.headersOnly || Http::Status::isInformational(status) || status == HttpStatus::NoContent ||
-        status == HttpStatus::NotModified;
+    suppressed_ = framing_.headersOnly || status == HttpStatus::NoContent || status == HttpStatus::NotModified;
     framing_.chunked = !suppressed_ && !length_;
     parsed_ = true;
 
@@ -65,6 +64,8 @@ bool CgiStream::append(std::string_view output, std::string& bytes) {
 
     if (length_) {
         if (output.size() > *length_ - received_) {
+            bytes.append(output.substr(0, static_cast<std::size_t>(*length_ - received_)));
+            received_ = *length_;
             return false;
         }
 

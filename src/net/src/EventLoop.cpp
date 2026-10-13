@@ -135,7 +135,7 @@ void EventLoop::execute(int clientFd, HttpSession::Action action) {
         if (const std::optional<int> output = cgiRegistry_.resume(clientFd)) {
             poller_.addSocket(*output);
         }
-    } else if (std::holds_alternative<HttpSession::Write>(action)) {
+    } else if (std::holds_alternative<HttpSession::Stream>(action)) {
         if (const std::optional<int> output = cgiRegistry_.pause(clientFd)) {
             poller_.removeSocket(*output);
         }
@@ -147,6 +147,9 @@ void EventLoop::execute(int clientFd, HttpSession::Action action) {
         closeConnection(clientFd);
     } else if (HttpSession::Write* write = std::get_if<HttpSession::Write>(&action)) {
         client->connection.queue(std::move(write->bytes));
+        poller_.modifySocket(clientFd, POLLOUT);
+    } else if (HttpSession::Stream* stream = std::get_if<HttpSession::Stream>(&action)) {
+        client->connection.queue(std::move(stream->bytes));
         poller_.modifySocket(clientFd, POLLOUT);
     } else if (const CgiRequest* request = std::get_if<CgiRequest>(&action)) {
         launchCgi(*client, *request);
@@ -207,7 +210,6 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd, short events) {
 
         if (process->inputFd() != pipeFd) {
             poller_.removeSocket(pipeFd);
-            cgiRegistry_.release(pipeFd);
         }
         return;
     }
@@ -218,7 +220,6 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd, short events) {
 
     if (events & (POLLERR | POLLNVAL)) {
         Log::error("CGI output pipe failed, client: " + client->connection.info().remoteAddr);
-        closeCgi(clientFd);
         execute(clientFd, client->session.fail(HttpSession::CgiFailure::Output));
         return;
     }
@@ -235,12 +236,10 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd, short events) {
             execute(clientFd, client->session.receiveOutput(bytes));
             break;
         case CgiProcess::Output::End:
-            closeCgi(clientFd);
             execute(clientFd, client->session.endOutput());
             break;
         case CgiProcess::Output::Error:
             Log::error("failed to read CGI output, client: " + client->connection.info().remoteAddr);
-            closeCgi(clientFd);
             execute(clientFd, client->session.fail(HttpSession::CgiFailure::Output));
             break;
     }
@@ -346,7 +345,6 @@ void EventLoop::cleanupTimedOutCgi() {
             "CGI timed out after " + std::to_string(kCgiTimeout.count()) +
             " s while reading response, client: " + client->connection.info().remoteAddr
         );
-        closeCgi(clientFd);
         execute(clientFd, client->session.fail(HttpSession::CgiFailure::Timeout));
     }
 }
