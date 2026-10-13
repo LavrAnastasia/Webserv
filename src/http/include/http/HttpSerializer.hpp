@@ -10,6 +10,8 @@ public:
     struct Framing {
         bool close = false;
         bool headersOnly = false;
+        bool stream = false;
+        bool chunked = false;
     };
 
     struct Output {

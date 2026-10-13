@@ -79,23 +79,26 @@ void EventLoop::handleClientActivity(int clientFd, uint32_t events) {
     Connection& connection = client->connection;
 
     // close on error, or on hangup with nothing left to read
-    if ((events & POLLERR) || ((events & POLLHUP) && !(events & POLLIN))) {
+    if ((events & (POLLERR | POLLNVAL)) || ((events & POLLHUP) && !(events & POLLIN))) {
         closeConnection(clientFd);
         return;
     }
 
     if (cgiRegistry_.find(clientFd) != nullptr) {
-        if (!connection.isAlive()) {
+        if ((events & POLLIN) && !connection.isAlive()) {
             Log::info("client closed connection while CGI was running, client: " + connection.info().remoteAddr);
             closeConnection(clientFd);
-        } else {
-            poller_.modifySocket(clientFd, 0);
+            return;
         }
-        return;
+
+        if (!(events & POLLOUT)) {
+            poller_.modifySocket(clientFd, connection.pending() == 0 ? 0 : POLLOUT);
+            return;
+        }
     }
 
     //reading phase (OS kernel receive buffer has data)
-    if (events & POLLIN) {
+    if ((events & POLLIN) && cgiRegistry_.find(clientFd) == nullptr) {
         const std::optional<std::string_view> bytes = connection.receive();
 
         // client disconnected or the socket failed
@@ -128,8 +131,15 @@ void EventLoop::execute(int clientFd, HttpSession::Action action) {
         return;
     }
 
-    // TODO: WEB-55 a Write while the CGI streams keeps it running and pauses its output pipe
-    if (!std::holds_alternative<HttpSession::ReadOutput>(action)) {
+    if (std::holds_alternative<HttpSession::ReadOutput>(action)) {
+        if (const std::optional<int> output = cgiRegistry_.resume(clientFd)) {
+            poller_.addSocket(*output);
+        }
+    } else if (std::holds_alternative<HttpSession::Stream>(action)) {
+        if (const std::optional<int> output = cgiRegistry_.pause(clientFd)) {
+            poller_.removeSocket(*output);
+        }
+    } else {
         closeCgi(clientFd);
     }
 
@@ -137,6 +147,9 @@ void EventLoop::execute(int clientFd, HttpSession::Action action) {
         closeConnection(clientFd);
     } else if (HttpSession::Write* write = std::get_if<HttpSession::Write>(&action)) {
         client->connection.queue(std::move(write->bytes));
+        poller_.modifySocket(clientFd, POLLOUT);
+    } else if (HttpSession::Stream* stream = std::get_if<HttpSession::Stream>(&action)) {
+        client->connection.queue(std::move(stream->bytes));
         poller_.modifySocket(clientFd, POLLOUT);
     } else if (const CgiRequest* request = std::get_if<CgiRequest>(&action)) {
         launchCgi(*client, *request);
@@ -175,7 +188,7 @@ void EventLoop::launchCgi(ConnectionRegistry::Client& client, const CgiRequest& 
     cgiRegistry_.add(clientFd, std::move(*process));
 }
 
-void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
+void EventLoop::handleCgiActivity(int clientFd, int pipeFd, short events) {
     CgiProcess* process = cgiRegistry_.find(clientFd);
     ConnectionRegistry::Client* client = connectionRegistry_.find(clientFd);
 
@@ -189,7 +202,11 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
     }
 
     if (pipeFd == process->inputFd()) {
-        process->writeInput();
+        if (events & (POLLERR | POLLHUP | POLLNVAL)) {
+            process->closeInput();
+        } else if (events & POLLOUT) {
+            process->writeInput();
+        }
 
         if (process->inputFd() != pipeFd) {
             poller_.removeSocket(pipeFd);
@@ -197,7 +214,17 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
         return;
     }
 
-    if (pipeFd != process->outputFd()) {
+    if (pipeFd != process->outputFd() || client->connection.pending() != 0) {
+        return;
+    }
+
+    if (events & (POLLERR | POLLNVAL)) {
+        Log::error("CGI output pipe failed, client: " + client->connection.info().remoteAddr);
+        execute(clientFd, client->session.fail(HttpSession::CgiFailure::Output));
+        return;
+    }
+
+    if (!(events & (POLLIN | POLLHUP))) {
         return;
     }
 
@@ -205,6 +232,7 @@ void EventLoop::handleCgiActivity(int clientFd, int pipeFd) {
 
     switch (process->readOutput(bytes)) {
         case CgiProcess::Output::Data:
+            cgiRegistry_.touch(clientFd);
             execute(clientFd, client->session.receiveOutput(bytes));
             break;
         case CgiProcess::Output::End:
@@ -252,7 +280,7 @@ void EventLoop::run() {
                 if (listening) {
                     handleNewConnection(event.fd);
                 } else if (client) {
-                    handleCgiActivity(*client, event.fd);
+                    handleCgiActivity(*client, event.fd, event.revents);
                 } else {
                     handleClientActivity(event.fd, event.revents);
                 }

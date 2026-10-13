@@ -38,5 +38,6 @@ public:
     int outputFd() const;
 
     void writeInput();
+    void closeInput();
     Output readOutput(std::string& bytes);
 };

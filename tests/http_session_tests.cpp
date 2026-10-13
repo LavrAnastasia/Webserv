@@ -61,13 +61,22 @@ namespace {
             std::string text;
             int writes = 0;
 
-            while (auto* write = std::get_if<HttpSession::Write>(&action)) {
-                if (write->bytes.empty() || ++writes > 1024) {
+            while (true) {
+                const auto* write = std::get_if<HttpSession::Write>(&action);
+                const auto* stream = std::get_if<HttpSession::Stream>(&action);
+
+                if (write == nullptr && stream == nullptr) {
+                    break;
+                }
+
+                const std::string& bytes = write != nullptr ? write->bytes : stream->bytes;
+
+                if (bytes.empty() || ++writes > 1024) {
                     ADD_FAILURE() << "Response never ends or emits empty writes";
                     break;
                 }
 
-                text += write->bytes;
+                text += bytes;
                 action = session_->emit();
             }
 
@@ -338,27 +347,70 @@ namespace {
         EXPECT_NE(std::ranges::find(request->env, "REMOTE_ADDR=10.0.0.7"), request->env.end());
     }
 
-    TEST_F(HttpSessionTest, AnswersWithTheCollectedCgiOutputWhenItEnds) {
+    TEST_F(HttpSessionTest, StreamsHeadersAndBodyAcrossReads) {
         startCgi(Requests::rawGet("/cgi/app.py"));
         receiveOutput("Status: 201 Created\r\nContent-");
-        receiveOutput("Type: text/plain\r\n\r\nhel");
-        receiveOutput("lo");
+        receiveOutput("Type: text/plain\r\n\r");
 
-        const std::string response = deliver(session_->endOutput());
+        HttpSession::Action action = session_->receiveOutput("\nhel");
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Stream>(action));
+        const std::string first = deliver(std::move(action));
 
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 201 "));
-        EXPECT_EQ(body(response), "hello");
+        EXPECT_TRUE(first.starts_with("HTTP/1.1 201 "));
+        EXPECT_NE(first.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
+        EXPECT_EQ(first.find("Content-Length:"), std::string::npos);
+        EXPECT_EQ(body(first), "3\r\nhel\r\n");
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        action = session_->receiveOutput("lo");
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Stream>(action));
+        EXPECT_EQ(deliver(std::move(action)), "2\r\nlo\r\n");
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        action = session_->endOutput();
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        EXPECT_EQ(deliver(std::move(action)), "0\r\n\r\n");
         EXPECT_TRUE(ended<HttpSession::Read>());
     }
 
-    TEST_F(HttpSessionTest, AnswersBadGatewayForEmptyOrInvalidCgiOutput) {
-        for (const std::string output : {"", "nonsense\r\n\r\n"}) {
+    TEST_F(HttpSessionTest, WaitsForOutputWhileCgiRuns) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+
+        EXPECT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->emit()));
+        receiveOutput("Content-Type:");
+        EXPECT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->emit()));
+    }
+
+    TEST_F(HttpSessionTest, PreservesContentLengthAndWaitsForEof) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string first =
+            deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 0005\r\n\r\nhel"));
+
+        EXPECT_NE(first.find("Content-Length: 0005\r\n"), std::string::npos);
+        EXPECT_EQ(first.find("Transfer-Encoding:"), std::string::npos);
+        EXPECT_EQ(body(first), "hel");
+        EXPECT_EQ(deliver(session_->receiveOutput("lo")), "lo");
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        receiveOutput("");
+        EXPECT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->emit()));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->endOutput()));
+    }
+
+    TEST_F(HttpSessionTest, FramesBinaryChunksWithHexadecimalLengths) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string response = deliver(session_->receiveOutput("Content-Type: application/octet-stream\n\n"));
+        EXPECT_TRUE(body(response).empty());
+        receiveOutput("");
+
+        const std::string content = pattern(32);
+        EXPECT_EQ(deliver(session_->receiveOutput(content)), "20\r\n" + content + "\r\n");
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        EXPECT_EQ(deliver(session_->endOutput()), "0\r\n\r\n");
+    }
+
+    TEST_F(HttpSessionTest, AnswersBadGatewayForEmptyOrIncompleteCgiHeaders) {
+        for (const std::string output : {"", "Content-Type: text/plain\r\n"}) {
             SCOPED_TRACE(output);
             startCgi(Requests::rawGet("/cgi/app.py"));
-
-            if (!output.empty()) {
-                receiveOutput(output);
-            }
+            receiveOutput(output);
 
             const std::string response = deliver(session_->endOutput());
 
@@ -367,9 +419,49 @@ namespace {
         }
     }
 
+    TEST_F(HttpSessionTest, AnswersBadGatewayAsSoonAsHeadersAreInvalid) {
+        for (const std::string output :
+             {"nonsense\r\n\r\n", "\r\n", "Content-Length: nope\r\n\r\n", "Status: 100 Continue\r\n\r\n"}) {
+            SCOPED_TRACE(output);
+            startCgi(Requests::rawGet("/cgi/app.py"));
+
+            const std::string response = deliver(session_->receiveOutput(output));
+
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
+            EXPECT_TRUE(ended<HttpSession::Read>());
+        }
+    }
+
+    TEST_F(HttpSessionTest, RejectsOversizedHeadersBeforeSendingAResponse) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string response = deliver(session_->receiveOutput("X-Large: " + std::string(kChunkSize, 'x')));
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
+    }
+
+    TEST_F(HttpSessionTest, WritesBadGatewayBeforeAnsweringAPipelinedRequest) {
+        const std::string content = pattern(3 * kChunkSize);
+        Files::write(root_ / "file.bin", content);
+        startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/file.bin"));
+
+        HttpSession::Action action = session_->receiveOutput("nonsense\r\n\r\n");
+        const auto* write = std::get_if<HttpSession::Write>(&action);
+
+        ASSERT_NE(write, nullptr);
+        EXPECT_TRUE(write->bytes.starts_with("HTTP/1.1 502 "));
+
+        action = session_->emit();
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        const std::string response = deliver(std::move(action));
+
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 "));
+        EXPECT_EQ(body(response), content);
+        EXPECT_TRUE(ended<HttpSession::Read>());
+    }
+
     TEST_F(HttpSessionTest, DoesNotReuseTheOutputOfThePreviousCgi) {
         startCgi(Requests::rawGet("/cgi/app.py"));
-        receiveOutput("Content-Type: text/plain\r\n\r\nfirst");
+        deliver(session_->receiveOutput("Content-Type: text/plain\r\n\r\nfirst"));
         deliver(session_->endOutput());
         ASSERT_TRUE(ended<HttpSession::Read>());
 
@@ -379,10 +471,10 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
     }
 
-    TEST_F(HttpSessionTest, DropsPartialCgiOutputAfterAFailure) {
+    TEST_F(HttpSessionTest, DropsPartialCgiHeadersAfterAFailure) {
         startCgi(Requests::rawGet("/cgi/app.py"));
-        receiveOutput("Content-Type: text/plain\r\n\r\nstale");
-        deliver(session_->fail(HttpSession::CgiFailure::Timeout));
+        receiveOutput("Content-Type: text/plain\r\n");
+        EXPECT_TRUE(deliver(session_->fail(HttpSession::CgiFailure::Timeout)).starts_with("HTTP/1.1 504 "));
         ASSERT_TRUE(ended<HttpSession::Read>());
 
         startCgi(Requests::rawGet("/cgi/app.py"));
@@ -391,36 +483,23 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
     }
 
-    TEST_F(HttpSessionTest, DropsCgiOutputAfterItGrowsTooLarge) {
+    TEST_F(HttpSessionTest, StreamsMultipleMegabytesWithoutCollectingOutput) {
+        constexpr std::size_t kMegabyte = 1024 * 1024;
+        constexpr std::size_t kOutputMegabytes = 3;
+        const std::string megabyte(kMegabyte, 'x');
         startCgi(Requests::rawGet("/cgi/app.py"));
-        const std::string megabyte(1024 * 1024, 'x');
-        HttpSession::Action action = session_->receiveOutput("Content-Type: text/plain\r\n\r\n");
+        deliver(session_->receiveOutput("Content-Type: application/octet-stream\r\n\r\n"));
 
-        while (std::holds_alternative<HttpSession::ReadOutput>(action)) {
-            action = session_->receiveOutput(megabyte);
+        for (std::size_t chunk = 0; chunk < kOutputMegabytes; ++chunk) {
+            HttpSession::Action action = session_->receiveOutput(megabyte);
+            const auto* stream = std::get_if<HttpSession::Stream>(&action);
+            ASSERT_NE(stream, nullptr) << chunk;
+            EXPECT_EQ(stream->bytes, "100000\r\n" + megabyte + "\r\n");
+            ASSERT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->emit()));
         }
 
-        deliver(std::move(action));
-        ASSERT_TRUE(ended<HttpSession::Read>());
-
-        startCgi(Requests::rawGet("/cgi/app.py"));
-        const std::string response = deliver(session_->endOutput());
-
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
-    }
-
-    TEST_F(HttpSessionTest, AnswersBadGatewayAsSoonAsCgiOutputIsTooLarge) {
-        startCgi(Requests::rawGet("/cgi/app.py"));
-        const std::string megabyte(1024 * 1024, 'x');
-        HttpSession::Action action = session_->receiveOutput("Content-Type: text/plain\r\n\r\n");
-        int chunks = 0;
-
-        while (std::holds_alternative<HttpSession::ReadOutput>(action) && chunks++ < 200) {
-            action = session_->receiveOutput(megabyte);
-        }
-
-        EXPECT_EQ(chunks, 128);
-        EXPECT_TRUE(deliver(std::move(action)).starts_with("HTTP/1.1 502 "));
+        EXPECT_EQ(deliver(session_->endOutput()), "0\r\n\r\n");
+        EXPECT_TRUE(ended<HttpSession::Read>());
     }
 
     TEST_F(HttpSessionTest, MapsCgiFailuresToStatuses) {
@@ -442,33 +521,131 @@ namespace {
         }
     }
 
-    TEST_F(HttpSessionTest, HeadOnCgiSendsHeadersOnly) {
-        startCgi("HEAD /cgi/app.py HTTP/1.1\r\nHost: localhost\r\n\r\n");
-        receiveOutput("Content-Type: text/plain\r\n\r\nhello");
+    TEST_F(HttpSessionTest, ClosesOnAnyCgiFailureAfterHeadersWereSent) {
+        for (const auto failure :
+             {HttpSession::CgiFailure::Busy,
+              HttpSession::CgiFailure::Launch,
+              HttpSession::CgiFailure::Output,
+              HttpSession::CgiFailure::Timeout}) {
+            session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{"10.0.0.7", 8080}, readFakeNow);
+            startCgi(Requests::rawGet("/cgi/app.py"));
+            deliver(session_->receiveOutput("Content-Type: text/plain\r\n\r\n"));
 
-        const std::string response = deliver(session_->endOutput());
+            EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->fail(failure)));
+        }
+    }
+
+    TEST_F(HttpSessionTest, ClosesWhenContentLengthIsNotReachedAtEof) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhel"));
+
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->endOutput()));
+    }
+
+    TEST_F(HttpSessionTest, WritesRemainingContentLengthBeforeClosingOnExcessBody) {
+        startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/"));
+        const std::string first =
+            deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhe"));
+
+        EXPECT_EQ(body(first), "he");
+        HttpSession::Action action = session_->receiveOutput("llo and excess");
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        EXPECT_EQ(deliver(std::move(action)), "llo");
+        EXPECT_TRUE(ended<HttpSession::Close>());
+    }
+
+    TEST_F(HttpSessionTest, WritesOnlyContentLengthWhenFirstOutputHasExcessBody) {
+        for (const std::string length : {"0", "3"}) {
+            session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{"10.0.0.7", 8080}, readFakeNow);
+            startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/"));
+            HttpSession::Action action =
+                session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: " + length + "\r\n\r\nfour");
+
+            ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+            const std::string response = deliver(std::move(action));
+
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 200 "));
+            EXPECT_EQ(body(response), length == "0" ? "" : "fou");
+            EXPECT_TRUE(ended<HttpSession::Close>());
+        }
+    }
+
+    TEST_F(HttpSessionTest, ClosesImmediatelyWhenContentLengthWasAlreadySent) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 3\r\n\r\nfou"));
+
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receiveOutput("r")));
+    }
+
+    TEST_F(HttpSessionTest, WaitsForEofEvenWithZeroContentLength) {
+        startCgi(Requests::rawGet("/cgi/app.py"));
+        const std::string response = deliver(session_->receiveOutput("Content-Length: 0\r\n\r\n"));
+
+        EXPECT_TRUE(body(response).empty());
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->endOutput()));
+    }
+
+    TEST_F(HttpSessionTest, HeadDrainsCgiWithoutSendingBodyOrInventingLength) {
+        startCgi("HEAD /cgi/app.py HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        const std::string response = deliver(session_->receiveOutput("Content-Type: text/plain\r\n\r\nhello"));
+
+        EXPECT_EQ(response.find("Content-Length:"), std::string::npos);
+        EXPECT_EQ(response.find("Transfer-Encoding:"), std::string::npos);
+        EXPECT_TRUE(body(response).empty());
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        receiveOutput("discard this too");
+        EXPECT_TRUE(std::holds_alternative<HttpSession::ReadOutput>(session_->emit()));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->endOutput()));
+    }
+
+    TEST_F(HttpSessionTest, HeadPreservesCgiLengthAndDoesNotValidateDiscardedBody) {
+        startCgi("HEAD /cgi/app.py HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        const std::string response =
+            deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nignored body"));
 
         EXPECT_NE(response.find("Content-Length: 5\r\n"), std::string::npos);
         EXPECT_TRUE(body(response).empty());
+        receiveOutput("more ignored bytes");
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->endOutput()));
+    }
+
+    TEST_F(HttpSessionTest, DrainsCgiForStatusesThatForbidBody) {
+        for (const std::string status : {"204 No Content", "304 Not Modified"}) {
+            startCgi(Requests::rawGet("/cgi/app.py"));
+            const std::string response = deliver(session_->receiveOutput(
+                "Status: " + status + "\r\nContent-Type: text/plain\r\nContent-Length: 1\r\n\r\nhidden body"
+            ));
+
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 " + status));
+            EXPECT_EQ(response.find("Transfer-Encoding:"), std::string::npos);
+            EXPECT_TRUE(body(response).empty());
+            EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+            receiveOutput("more hidden body");
+            EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->endOutput()));
+        }
     }
 
     TEST_F(HttpSessionTest, ClosesAfterCgiWhenTheClientAsksForIt) {
         startCgi(Requests::rawGet("/cgi/app.py", "close"));
-        receiveOutput("Content-Type: text/plain\r\n\r\nhello");
+        const std::string response = deliver(session_->receiveOutput("Content-Type: text/plain\r\n\r\nhello"));
 
-        deliver(session_->endOutput());
-
+        EXPECT_TRUE(closes(response));
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        EXPECT_EQ(deliver(session_->endOutput()), "0\r\n\r\n");
         EXPECT_TRUE(ended<HttpSession::Close>());
     }
 
     TEST_F(HttpSessionTest, AnswersARequestPipelinedBehindCgi) {
         startCgi(Requests::rawGet("/cgi/app.py") + Requests::rawGet("/"));
-        receiveOutput("Content-Type: text/plain\r\n\r\ncgi");
+        const std::string first = deliver(session_->receiveOutput("Content-Type: text/plain\r\n\r\ncgi"));
 
-        const std::string responses = deliver(session_->endOutput());
+        EXPECT_EQ(body(first), "3\r\ncgi\r\n");
+        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
+        const std::string rest = deliver(session_->endOutput());
 
-        EXPECT_LT(responses.find("\r\n\r\ncgi"), responses.find("\r\n\r\nhello"));
-        EXPECT_NE(responses.find("\r\n\r\nhello"), std::string::npos);
+        EXPECT_TRUE(rest.starts_with("0\r\n\r\nHTTP/1.1 200 "));
+        EXPECT_TRUE(rest.ends_with("\r\n\r\nhello"));
         EXPECT_TRUE(ended<HttpSession::Read>());
     }
 } // namespace

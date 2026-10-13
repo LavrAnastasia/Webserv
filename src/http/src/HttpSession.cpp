@@ -2,17 +2,15 @@
 
 #include <utility>
 
+#include "CgiStream.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "Router.hpp"
-#include "http/CgiResponseParser.hpp"
 #include "http/HttpMethod.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "log/Log.hpp"
 
 namespace {
     constexpr std::size_t kChunkSize = 64 * 1024;
-    // TODO: WEB-55 remove the cap once the output is streamed
-    constexpr std::size_t kMaxOutputSize = 128 * 1024 * 1024;
     constexpr std::chrono::seconds kHeaderTimeout{20};
     constexpr std::chrono::seconds kBodyTimeout{60};
     constexpr std::chrono::seconds kKeepAliveTimeout{60};
@@ -28,6 +26,8 @@ HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info) : Http
 HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info, Clock clock)
     : server_(server), info_(std::move(info)), clock_(clock), parser_(server.maxBodySize()), lastReceived_(clock_()) {
 }
+
+HttpSession::~HttpSession() = default;
 
 HttpSession::Action HttpSession::receive(std::string_view bytes) {
     if (!bytes.empty()) {
@@ -62,10 +62,15 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
         return respond(std::move(*response));
     }
 
+    cgi_ = std::make_unique<CgiStream>(framing_);
     return std::move(std::get<CgiRequest>(handled));
 }
 
 HttpSession::Action HttpSession::emit() {
+    if (cgi_) {
+        return ReadOutput{};
+    }
+
     if (!body_) {
         return finish();
     }
@@ -113,35 +118,44 @@ std::optional<HttpSession::Action> HttpSession::expire() {
     return fail(HttpStatus::RequestTimeout);
 }
 
-HttpSession::Action HttpSession::receiveOutput(std::string_view bytes) {
-    // TODO: WEB-55 stream the output to the client instead of collecting it
-    if (output_.size() + bytes.size() > kMaxOutputSize) {
-        Log::error("CGI output is too large, client: " + info_.remoteAddr);
-        std::string().swap(output_);
-        return fail(HttpStatus::BadGateway);
+HttpSession::Action HttpSession::receiveOutput(std::string_view output) {
+    receivedOutput_ = receivedOutput_ || !output.empty();
+    std::string bytes;
+
+    if (!cgi_ || !cgi_->receive(output, bytes)) {
+        return failOutput(std::move(bytes));
     }
 
-    output_.append(bytes);
-    return ReadOutput{};
+    if (bytes.empty()) {
+        return ReadOutput{};
+    }
+
+    startedOutput_ = true;
+    return Stream{std::move(bytes)};
 }
 
 HttpSession::Action HttpSession::endOutput() {
-    std::string output;
-    output.swap(output_);
+    std::string bytes;
 
-    std::optional<HttpResponse> response = CgiResponseParser::parse(output);
-
-    if (response) {
-        return respond(std::move(*response));
+    if (!cgi_ || !cgi_->end(bytes)) {
+        return failOutput();
     }
 
-    const std::string problem = output.empty() ? "CGI produced no usable output" : "CGI sent invalid header";
-    Log::error(problem + " while reading response header, client: " + info_.remoteAddr);
-    return fail(HttpStatus::BadGateway);
+    cgi_.reset();
+
+    if (!bytes.empty()) {
+        return Write{std::move(bytes)};
+    }
+
+    return finish();
 }
 
 HttpSession::Action HttpSession::fail(CgiFailure failure) {
-    std::string().swap(output_);
+    cgi_.reset();
+
+    if (startedOutput_) {
+        return Close{};
+    }
 
     switch (failure) {
         case CgiFailure::Busy:
@@ -154,6 +168,22 @@ HttpSession::Action HttpSession::fail(CgiFailure failure) {
     }
 
     return fail(HttpStatus::BadGateway);
+}
+
+HttpSession::Action HttpSession::failOutput(std::string bytes) {
+    const std::string problem = cgi_ && cgi_->hasHeaders() ? "CGI sent invalid response body"
+        : receivedOutput_                                  ? "CGI sent invalid header"
+                                                           : "CGI produced no usable output";
+    Log::error(problem + ", client: " + info_.remoteAddr);
+    cgi_.reset();
+
+    if (!bytes.empty()) {
+        framing_.close = true;
+        startedOutput_ = true;
+        return Write{std::move(bytes)};
+    }
+
+    return startedOutput_ ? Action{Close{}} : fail(HttpStatus::BadGateway);
 }
 
 HttpSession::Action HttpSession::fail(HttpStatus status) {
@@ -201,6 +231,9 @@ HttpSession::Action HttpSession::finish() {
     parser_.reset();
     phase_ = Phase::Reading;
     framing_ = {};
+    cgi_.reset();
+    receivedOutput_ = false;
+    startedOutput_ = false;
     lastReceived_ = clock_();
     requestStarted_.reset();
 

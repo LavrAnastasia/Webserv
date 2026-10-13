@@ -95,7 +95,10 @@ HttpSerializer::Output HttpSerializer::serialize(HttpResponse response, const Fr
 
     if (bodyForbidden) {
         headers.erase(Http::Headers::ContentLength);
-    } else {
+    } else if (framing.chunked) {
+        headers.erase(Http::Headers::ContentLength);
+        headers.set(std::string(Http::Headers::TransferEncoding), std::string(Http::Headers::TransferCoding::Chunked));
+    } else if (!framing.stream) {
         headers.set(std::string(Http::Headers::ContentLength), std::to_string(response.body.size()));
     }
 
@@ -103,7 +106,7 @@ HttpSerializer::Output HttpSerializer::serialize(HttpResponse response, const Fr
 
     Output result{.headers = std::move(output), .body = std::nullopt};
 
-    if (!framing.headersOnly && !bodyForbidden && !response.body.done()) {
+    if (!framing.stream && !framing.headersOnly && !bodyForbidden && !response.body.done()) {
         result.body.emplace(std::move(response.body));
     }
 

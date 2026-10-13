@@ -1,6 +1,9 @@
 #include <charconv>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+
+#include <sys/wait.h>
 
 #include <gtest/gtest.h>
 
@@ -17,6 +20,13 @@ namespace {
     namespace fs = std::filesystem;
     using Clock = std::chrono::steady_clock;
     using namespace std::chrono_literals;
+
+    constexpr std::size_t kMebibyte = 1024u * 1024u;
+    constexpr std::size_t kHeaderLimit = 64u * 1024u;
+    constexpr std::size_t kResponseLimit = 256u * kMebibyte;
+    constexpr std::size_t kCgiHugeSize = 200u * kMebibyte;
+    constexpr std::size_t kCgiPostSize = 100u * kMebibyte;
+    constexpr int kRepeatedRequests = 20;
 
     [[noreturn]] void systemError(const char* operation) {
         throw std::system_error(errno, std::generic_category(), operation);
@@ -66,6 +76,7 @@ namespace {
         std::string statusLine;
         std::map<std::string, std::string> headers;
         std::string body;
+        std::size_t bodySize = 0;
     };
 
     class TestClient {
@@ -133,18 +144,19 @@ namespace {
             }
         }
 
-        ReceivedResponse readResponse(bool headersOnly = false) {
-            const auto deadline = Clock::now() + 15s;
+        ReceivedResponse
+        readResponse(bool headersOnly = false, const std::function<void(std::string_view)>& consume = {}) {
+            const auto deadline = Clock::now() + 30s;
             std::size_t headerEnd;
 
             while ((headerEnd = pending_.find("\r\n\r\n")) == std::string::npos) {
-                if (pending_.size() > 64 * 1024) {
+                if (pending_.size() > kHeaderLimit) {
                     throw std::runtime_error("Response headers are too large");
                 }
                 receiveMore(deadline);
             }
 
-            if (headerEnd > 64 * 1024) {
+            if (headerEnd > kHeaderLimit) {
                 throw std::runtime_error("Response headers are too large");
             }
 
@@ -174,6 +186,47 @@ namespace {
                 }
             }
 
+            pending_.erase(0, headerEnd + 4);
+
+            if (headersOnly || response.statusLine.starts_with("HTTP/1.1 204 ") ||
+                response.statusLine.starts_with("HTTP/1.1 304 ")) {
+                return response;
+            }
+
+            const auto encoding = response.headers.find("transfer-encoding");
+            if (encoding != response.headers.end()) {
+                if (encoding->second != "chunked" || response.headers.contains("content-length")) {
+                    throw std::runtime_error("Invalid response framing");
+                }
+                while (true) {
+                    std::size_t lineEnd;
+                    while ((lineEnd = pending_.find("\r\n")) == std::string::npos) {
+                        if (pending_.size() > kHeaderLimit) {
+                            throw std::runtime_error("Chunk size line is too large");
+                        }
+                        receiveMore(deadline);
+                    }
+                    std::size_t size = 0;
+                    const char* end = pending_.data() + lineEnd;
+                    const auto parsed = std::from_chars(pending_.data(), end, size, 16);
+                    if (parsed.ec != std::errc{} || parsed.ptr != end || size > kResponseLimit - response.bodySize) {
+                        throw std::runtime_error("Invalid or excessive chunk size");
+                    }
+                    pending_.erase(0, lineEnd + 2);
+                    consumeBody(size, deadline, response, consume);
+                    while (pending_.size() < 2) {
+                        receiveMore(deadline);
+                    }
+                    if (!pending_.starts_with("\r\n")) {
+                        throw std::runtime_error("Missing chunk terminator");
+                    }
+                    pending_.erase(0, 2);
+                    if (size == 0) {
+                        return response;
+                    }
+                }
+            }
+
             const auto lengthHeader = response.headers.find("content-length");
             if (lengthHeader == response.headers.end()) {
                 throw std::runtime_error("Missing Content-Length");
@@ -181,32 +234,26 @@ namespace {
 
             const std::string& length = lengthHeader->second;
             std::size_t bodySize = 0;
-
             const auto [end, error] = std::from_chars(length.data(), length.data() + length.size(), bodySize);
 
-            if (error != std::errc{} || end != length.data() + length.size() || bodySize > 64u * 1024u * 1024u) {
+            if (error != std::errc{} || end != length.data() + length.size() || bodySize > kResponseLimit) {
                 throw std::runtime_error("Invalid or excessive Content-Length");
             }
 
-            if (headersOnly) {
-                bodySize = 0;
-            }
-
-            const std::size_t bodyStart = headerEnd + 4;
-            const std::size_t messageSize = bodyStart + bodySize;
-
-            while (pending_.size() < messageSize) {
-                receiveMore(deadline);
-            }
-
-            response.body = pending_.substr(bodyStart, bodySize);
-            pending_.erase(0, messageSize);
+            consumeBody(bodySize, deadline, response, consume);
             return response;
         }
 
         void waitForResponseStart() {
             if (pending_.empty()) {
                 receiveMore(Clock::now() + 5s);
+            }
+        }
+
+        void waitForBytes(std::string_view bytes) {
+            const auto deadline = Clock::now() + 5s;
+            while (pending_.find(bytes) == std::string::npos) {
+                receiveMore(deadline);
             }
         }
 
@@ -283,6 +330,28 @@ namespace {
         FileDescriptor socket_;
         std::string pending_;
 
+        void consumeBody(
+            std::size_t size,
+            Clock::time_point deadline,
+            ReceivedResponse& response,
+            const std::function<void(std::string_view)>& consume
+        ) {
+            while (size > 0) {
+                if (pending_.empty()) {
+                    receiveMore(deadline);
+                }
+                const std::size_t count = std::min(size, pending_.size());
+                if (consume) {
+                    consume(std::string_view(pending_).substr(0, count));
+                } else {
+                    response.body.append(pending_, 0, count);
+                }
+                response.bodySize += count;
+                pending_.erase(0, count);
+                size -= count;
+            }
+        }
+
         void receiveMore(Clock::time_point deadline) {
             while (true) {
                 waitReady(socket_.get(), POLLIN, deadline);
@@ -324,6 +393,7 @@ namespace {
 
             ServerConfig serverConfig;
             serverConfig.root = root_;
+            serverConfig.clientMaxBodySize = kCgiPostSize;
             serverConfig.errorPages[HttpStatus::NotFound] = "error.html";
 
             serverConfig.listen = {{"127.0.0.1", 0}};
@@ -349,7 +419,8 @@ namespace {
             Files::write(root_ / "cgi/marker.sh", "sleep 2\ntouch marker\n");
             Files::write(
                 root_ / "cgi/huge.sh",
-                "printf 'Content-Type: application/octet-stream\\r\\n\\r\\n'\nhead -c 135000000 /dev/zero\n"
+                "printf 'Content-Type: application/octet-stream\\r\\n\\r\\n'\nhead -c " + std::to_string(kCgiHugeSize) +
+                    " /dev/zero\ntouch finished\n"
             );
 
             serverConfig.locations = {location, cgi};
@@ -457,6 +528,22 @@ namespace {
             return body;
         }
 
+#ifdef __linux__
+        std::uintmax_t readPeakMemory() const {
+            std::ifstream status("/proc/" + std::to_string(child_) + "/status");
+            for (std::string line; std::getline(status, line);) {
+                if (line.starts_with("VmHWM:")) {
+                    std::istringstream value(line.substr(6));
+                    std::uintmax_t kib = 0;
+                    if (value >> kib) {
+                        return kib * 1024;
+                    }
+                }
+            }
+            throw std::runtime_error("Cannot read server peak memory");
+        }
+#endif
+
         void expectOK(TestClient& client, const std::string& expected) const {
             const auto response = client.readResponse();
 
@@ -551,7 +638,11 @@ namespace {
     TEST_F(ServerTest, AnswersCgiAndReusesTheConnection) {
         TestClient client(port_);
         client.sendAll(Requests::rawGet("/cgi/hello.sh"));
-        expectOK(client, "hello from cgi");
+        const auto response = client.readResponse();
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        EXPECT_EQ(response.body, "hello from cgi");
+        EXPECT_EQ(response.headers.at("transfer-encoding"), "chunked");
+        EXPECT_FALSE(response.headers.contains("content-length"));
 
         client.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(client, smallBody_);
@@ -565,8 +656,48 @@ namespace {
         const auto response = client.readResponse(true);
 
         EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
-        EXPECT_EQ(response.headers.at("content-length"), "14");
+        EXPECT_FALSE(response.headers.contains("transfer-encoding"));
+        EXPECT_FALSE(response.headers.contains("content-length"));
         client.expectEof();
+    }
+
+    TEST_F(ServerTest, PreservesCgiContentLengthAndReusesConnection) {
+        Files::write(
+            root_ / "cgi/length.sh",
+            "printf 'Content-Type: text/plain\\r\\nContent-Length: 8\\r\\n\\r\\ncomplete'\nexit 1\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/length.sh"));
+        const auto response = client.readResponse();
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        EXPECT_EQ(response.headers.at("content-length"), "8");
+        EXPECT_FALSE(response.headers.contains("transfer-encoding"));
+        EXPECT_EQ(response.body, "complete");
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, DrainsHeadAndBodylessCgiOutputBeforeNextResponse) {
+        for (const int status : {200, 204, 304}) {
+            SCOPED_TRACE(status);
+            Files::write(
+                root_ / "cgi/bodyless.sh",
+                "printf 'Status: " + std::to_string(status) +
+                    "\\r\\nContent-Type: text/plain\\r\\nContent-Length: 123\\r\\n\\r\\n'\n"
+                    "head -c 3000000 /dev/zero\n"
+            );
+            TestClient client(port_);
+            const std::string method = status == 200 ? "HEAD" : "GET";
+            client.sendAll(method + " /cgi/bodyless.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+            const auto response = client.readResponse(status == 200);
+            EXPECT_TRUE(response.statusLine.starts_with("HTTP/1.1 " + std::to_string(status) + " "));
+            EXPECT_FALSE(response.headers.contains("transfer-encoding"));
+            EXPECT_TRUE(response.body.empty());
+            client.sendAll(Requests::rawGet("/small.txt", "close"));
+            expectOK(client, smallBody_);
+            client.expectEof();
+        }
     }
 
     TEST_F(ServerTest, AnswersBadGatewayForInvalidCgiOutputAndKeepsServing) {
@@ -576,6 +707,28 @@ namespace {
         EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
         client.expectEof();
         expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, StopsInvalidCgiBeforeSendingAPipelinedFile) {
+        Files::write(root_ / "cgi/invalid.sh", "echo $$ > invalid.pid\nprintf 'nonsense\\r\\n\\r\\n'\nexec sleep 30\n");
+        const std::string content(3 * kMebibyte, 'f');
+        Files::write(root_ / "next.bin", content);
+        TestClient client(port_, kHeaderLimit);
+        client.sendAll(Requests::rawGet("/cgi/invalid.sh") + Requests::rawGet("/next.bin"));
+
+        ASSERT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
+        std::ifstream pidFile(root_ / "cgi/invalid.pid");
+        pid_t pid = 0;
+        ASSERT_TRUE(static_cast<bool>(pidFile >> pid));
+        ASSERT_GT(pid, 0);
+        errno = 0;
+        EXPECT_EQ(::kill(pid, 0), -1);
+        EXPECT_EQ(errno, ESRCH);
+
+        expectOK(client, content);
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
     }
 
     TEST_F(ServerTest, SendsLargeCgiOutputWhole) {
@@ -605,11 +758,129 @@ namespace {
         client.expectEof();
     }
 
-    TEST_F(ServerTest, AnswersBadGatewayWhenCgiOutputIsTooLarge) {
-        TestClient client(port_);
-        client.sendAll(Requests::rawGet("/cgi/huge.sh", "close"));
+    TEST_F(ServerTest, Streams200MiBToSlowClientWithBoundedMemory) {
+#ifdef __linux__
+        constexpr std::size_t kMemoryGrowthLimit = 16u * kMebibyte;
+        const auto before = readPeakMemory();
+#endif
+        TestClient client(port_, 64 * 1024);
+        client.sendAll(Requests::rawGet("/cgi/huge.sh"));
+        client.waitForResponseStart();
+        ::poll(nullptr, 0, 200);
+        EXPECT_FALSE(fs::exists(root_ / "cgi/finished"));
+        expectFreshConnectionWorks();
+#ifdef __linux__
+        EXPECT_LT(readPeakMemory(), before + kMemoryGrowthLimit);
+#endif
+        bool valid = true;
+        std::size_t received = 0;
+        std::size_t nextPause = kMebibyte;
+        const auto response = client.readResponse(false, [&](std::string_view bytes) {
+            valid = valid && bytes.find_first_not_of('\0') == std::string_view::npos;
+            received += bytes.size();
+            if (received >= nextPause) {
+                nextPause += kMebibyte;
+                ::poll(nullptr, 0, 2);
+#ifdef __linux__
+                EXPECT_LT(readPeakMemory(), before + kMemoryGrowthLimit);
+#endif
+            }
+        });
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+        EXPECT_EQ(response.headers.at("transfer-encoding"), "chunked");
+        EXPECT_EQ(response.bodySize, kCgiHugeSize);
+        EXPECT_TRUE(valid);
+        EXPECT_TRUE(fs::exists(root_ / "cgi/finished"));
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
 
-        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
+    TEST_F(ServerTest, EchoesTwenty100MiBPostsThroughCgi) {
+        TestClient client(port_);
+        constexpr std::size_t blockSize = 64u * 1024u;
+        const std::string block(blockSize, 'e');
+        for (int request = 0; request < kRepeatedRequests; ++request) {
+            SCOPED_TRACE(request);
+            client.sendAll(
+                "POST /cgi/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: " + std::to_string(kCgiPostSize) +
+                "\r\n\r\n"
+            );
+            for (std::size_t sent = 0; sent < kCgiPostSize; sent += block.size()) {
+                client.sendAll(block);
+            }
+            bool valid = true;
+            const auto response = client.readResponse(false, [&](std::string_view bytes) {
+                valid = valid && bytes.find_first_not_of('e') == std::string_view::npos;
+            });
+            ASSERT_EQ(response.statusLine, "HTTP/1.1 200 OK");
+            ASSERT_EQ(response.bodySize, kCgiPostSize);
+            ASSERT_TRUE(valid);
+            EXPECT_EQ(response.headers.at("transfer-encoding"), "chunked");
+        }
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, CompletesTwentySmallCgiRequestsWithin200MillisecondsEach) {
+        Files::write(root_ / "cgi/nonzero.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\ncomplete'\nexit 1\n");
+        TestClient client(port_);
+        for (int request = 0; request < kRepeatedRequests; ++request) {
+            SCOPED_TRACE(request);
+            const auto start = Clock::now();
+            client.sendAll(Requests::rawGet("/cgi/nonzero.sh"));
+            expectOK(client, "complete");
+            EXPECT_LT(Clock::now() - start, 200ms);
+        }
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, FinishesCgiResponseAtPipeEofBeforeProcessExit) {
+        Files::write(
+            root_ / "cgi/eof.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\ncomplete'\nexec 1>&-\nsleep 3\nexit 1\n"
+        );
+        TestClient client(port_);
+        const auto start = Clock::now();
+        client.sendAll(Requests::rawGet("/cgi/eof.sh"));
+        expectOK(client, "complete");
+        EXPECT_LT(Clock::now() - start, 200ms);
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, ClosesCgiResponseWhenScriptExitsDuringContentLengthBody) {
+        Files::write(
+            root_ / "cgi/truncated.sh",
+            "printf 'Content-Type: text/plain\\r\\nContent-Length: 10\\r\\n\\r\\npartial'\n"
+            "while [ ! -e release ]; do sleep 0.01; done\nexit 1\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/truncated.sh"));
+        client.waitForBytes("partial");
+        Files::write(root_ / "cgi/release", "");
+        const auto response = client.readUntilEof();
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        EXPECT_TRUE(response.ends_with("\r\n\r\npartial"));
+        EXPECT_EQ(response.find("502 Bad Gateway"), std::string::npos);
+        expectFreshConnectionWorks();
+    }
+
+    TEST_F(ServerTest, SendsOnlyContentLengthBeforeClosingOnExcessCgiOutput) {
+        Files::write(
+            root_ / "cgi/excess.sh",
+            "printf 'Content-Type: text/plain\\r\\nContent-Length: 5\\r\\n\\r\\nhe'\n"
+            "while [ ! -e release ]; do sleep 0.01; done\nprintf 'llo and excess'\n"
+        );
+        TestClient client(port_);
+        client.sendAll(Requests::rawGet("/cgi/excess.sh") + Requests::rawGet("/small.txt"));
+        client.waitForBytes("\r\n\r\nhe");
+        Files::write(root_ / "cgi/release", "");
+
+        expectOK(client, "hello");
         client.expectEof();
         expectFreshConnectionWorks();
     }

@@ -303,4 +303,50 @@ namespace {
         EXPECT_TRUE(headerValues(serialized, "Transfer-Encoding").empty());
     }
 
+    TEST_F(HttpSerializerTest, StreamPreservesDeclaredContentLength) {
+        response_.headers.set("Content-Length", "123");
+
+        const auto result = HttpSerializer::serialize(std::move(response_), {.stream = true});
+
+        expectHeader(result.headers, "Content-Length", "123");
+        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
+        EXPECT_FALSE(result.body.has_value());
+    }
+
+    TEST_F(HttpSerializerTest, StreamWritesSelectedChunkedFraming) {
+        response_.headers.set("Content-Length", "123");
+
+        const auto result = HttpSerializer::serialize(std::move(response_), {.stream = true, .chunked = true});
+
+        expectHeader(result.headers, "Transfer-Encoding", "chunked");
+        EXPECT_TRUE(headerValues(result.headers, "Content-Length").empty());
+        EXPECT_FALSE(result.body.has_value());
+    }
+
+    TEST_F(HttpSerializerTest, StreamDoesNotChooseChunkedOrInventContentLength) {
+        const auto result = HttpSerializer::serialize(std::move(response_), {.stream = true});
+
+        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
+        EXPECT_TRUE(headerValues(result.headers, "Content-Length").empty());
+        EXPECT_FALSE(result.body.has_value());
+    }
+
+    TEST_F(HttpSerializerTest, StreamHeadersOnlyPreservesProvidedLength) {
+        response_.headers.set("Content-Length", "123");
+
+        const auto result = HttpSerializer::serialize(std::move(response_), {.headersOnly = true, .stream = true});
+
+        expectHeader(result.headers, "Content-Length", "123");
+        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
+        EXPECT_FALSE(result.body.has_value());
+    }
+
+    TEST_F(HttpSerializerTest, StreamHeadersOnlyDoesNotInventContentLength) {
+        const auto result = HttpSerializer::serialize(std::move(response_), {.headersOnly = true, .stream = true});
+
+        EXPECT_TRUE(headerValues(result.headers, "Content-Length").empty());
+        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
+        EXPECT_FALSE(result.body.has_value());
+    }
+
 } // namespace
