@@ -1,5 +1,7 @@
 #include "http/RequestDispatcher.hpp"
 
+#include <utility>
+
 #include "CgiHandler.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "RedirectHandler.hpp"
@@ -7,16 +9,15 @@
 #include "StaticHandler.hpp"
 #include "UploadHandler.hpp"
 
-HandlerResult RequestDispatcher::dispatch(
-    const HttpRequest& request, const ServerConfig& server, const ConnectionInfo& connectionInfo
-) {
+HandlerResult
+RequestDispatcher::dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& connectionInfo) {
     const std::optional<ResolvedRoute> route = Router::resolve(request, server);
 
     if (!route) {
         return ErrorResponseFactory::create(HttpStatus::NotFound, Router::mapErrorPages(server));
     }
 
-    if (request.body.size() > route->clientMaxBodySize) {
+    if (route->clientMaxBodySize != 0 && request.body.size() > route->clientMaxBodySize) {
         return ErrorResponseFactory::create(HttpStatus::PayloadTooLarge, *route);
     }
 
@@ -29,7 +30,7 @@ HandlerResult RequestDispatcher::dispatch(
     }
 
     if (route->cgi) {
-        return CgiHandler::handle(request, *route, connectionInfo);
+        return CgiHandler::handle(std::move(request), *route, connectionInfo);
     }
 
     if (route->upload && request.method == HttpMethod::Post) {

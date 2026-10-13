@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <sys/resource.h>
 #include <utility>
 #include <variant>
 
@@ -55,6 +57,15 @@ namespace {
             server_.locations = {site, cgi};
             fakeNow = std::chrono::steady_clock::time_point{};
             session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{"10.0.0.7", 8080}, readFakeNow);
+        }
+
+        void prepareUpload() {
+            fs::create_directories(root_ / "incoming");
+            LocationConfig upload{};
+            upload.path = "/upload";
+            upload.allowedMethods = {HttpMethod::Post};
+            upload.upload = UploadConfig{fs::path("incoming")};
+            server_.locations.push_back(upload);
         }
 
         std::string deliver(HttpSession::Action action) {
@@ -110,6 +121,244 @@ namespace {
             return bytes;
         }
     };
+
+    TEST_F(HttpSessionTest, RejectsContentLengthAtTheRouteLimitBeforeReadingBody) {
+        server_.locations.front().clientMaxBodySize = 4;
+        const auto response =
+            deliver(session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+    }
+
+    TEST_F(HttpSessionTest, RejectsChunkedBodyOverTheRouteLimit) {
+        server_.locations.front().clientMaxBodySize = 4;
+        EXPECT_TRUE(
+            std::holds_alternative<HttpSession::Read>(
+                session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n")
+            )
+        );
+        const auto response = deliver(session_->receive("2\r\nde\r\n0\r\n\r\n"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+    }
+
+    TEST_F(HttpSessionTest, KeepsLimitsSeparateFromUnlimitedLocations) {
+        server_.clientMaxBodySize = 4;
+        server_.locations.back().clientMaxBodySize = 0;
+        auto action =
+            session_->receive("GET /cgi/app.py HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello");
+        ASSERT_TRUE(std::holds_alternative<CgiRequest>(action));
+        EXPECT_EQ(std::get<CgiRequest>(action).body, "hello");
+        deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 0\r\n\r\n"));
+        deliver(session_->endOutput());
+        const auto response =
+            deliver(session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+    }
+
+    TEST_F(HttpSessionTest, ContinuesBeforeWaitingForBodyAndKeepsAliveAfterTheResponse) {
+        const auto interim = deliver(
+            session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n")
+        );
+        EXPECT_EQ(interim, "HTTP/1.1 100 Continue\r\n\r\n");
+        ASSERT_TRUE(ended<HttpSession::Read>());
+        const auto response = deliver(session_->receive("hello"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 "));
+        EXPECT_TRUE(ended<HttpSession::Read>());
+        EXPECT_TRUE(deliver(session_->receive(Requests::rawGet("/"))).starts_with("HTTP/1.1 200 "));
+    }
+
+    TEST_F(HttpSessionTest, ContinuesWithBodyAlreadyBufferedAndPipelined) {
+        auto action = session_->receive(
+            "GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\nhe"
+        );
+        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(action));
+        EXPECT_EQ(std::get<HttpSession::Write>(action).bytes, "HTTP/1.1 100 Continue\r\n\r\n");
+        session_->receive("llo" + Requests::rawGet("/missing"));
+        const auto responses = deliver(session_->emit());
+        EXPECT_TRUE(responses.starts_with("HTTP/1.1 200 "));
+        EXPECT_NE(responses.find("HTTP/1.1 404 "), std::string::npos);
+    }
+
+    TEST_F(HttpSessionTest, RejectsExpectWithoutSendingContinueWhenLengthExceedsLimit) {
+        server_.locations.front().clientMaxBodySize = 4;
+        const auto response = deliver(
+            session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n")
+        );
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+        EXPECT_EQ(response.find("100 Continue"), std::string::npos);
+    }
+
+    TEST_F(HttpSessionTest, RejectsUnknownExpectationBeforeWaitingForBody) {
+        const auto response = deliver(
+            session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: magic\r\n\r\n")
+        );
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 417 Expectation Failed"));
+    }
+
+    TEST_F(HttpSessionTest, RejectsExpectForADisallowedMethodBeforeWaitingForBody) {
+        const auto response = deliver(
+            session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n")
+        );
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 405 "));
+        EXPECT_EQ(response.find("100 Continue"), std::string::npos);
+    }
+
+    TEST_F(HttpSessionTest, RejectsExpectForAMissingRouteBeforeWaitingForBody) {
+        server_.locations.erase(server_.locations.begin());
+        const auto response = deliver(session_->receive(
+            "POST /missing HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n"
+        ));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 404 "));
+        EXPECT_EQ(response.find("100 Continue"), std::string::npos);
+    }
+
+    TEST_F(HttpSessionTest, DrainsRejectedBodyAndClosesAtItsEnd) {
+        server_.locations.front().clientMaxBodySize = 4;
+        const auto response =
+            deliver(session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhe"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+        EXPECT_TRUE(closes(response));
+        ASSERT_TRUE(ended<HttpSession::Read>());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive("ll")));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receive("o" + Requests::rawGet("/"))));
+    }
+
+    TEST_F(HttpSessionTest, ClosesRejectedBodyAfterLingeringTimeout) {
+        server_.locations.front().clientMaxBodySize = 4;
+        deliver(session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 9\r\n\r\n"));
+        ASSERT_TRUE(ended<HttpSession::Read>());
+        fakeNow += 4s;
+        EXPECT_FALSE(session_->expire());
+        session_->receive("abc");
+        fakeNow += 4s;
+        EXPECT_FALSE(session_->expire());
+        fakeNow += 1s;
+        ASSERT_TRUE(session_->expire());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*session_->expire()));
+    }
+
+    TEST_F(HttpSessionTest, BoundsLingeringEvenWhenRejectedBodyKeepsArriving) {
+        server_.locations.front().clientMaxBodySize = 4;
+        deliver(session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n"));
+        for (int seconds = 0; seconds < 28; seconds += 4) {
+            fakeNow += 4s;
+            session_->receive("a");
+            EXPECT_FALSE(session_->expire());
+        }
+        fakeNow += 2s;
+        ASSERT_TRUE(session_->expire());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*session_->expire()));
+    }
+
+    TEST_F(HttpSessionTest, DrainsRejectedChunkedBodyWithoutParsingAnotherRequest) {
+        server_.locations.front().clientMaxBodySize = 4;
+        const auto response = deliver(session_->receive(
+            "GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n3\r\nd"
+        ));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+        ASSERT_TRUE(ended<HttpSession::Read>());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive("ef\r\n0\r\n")));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receive("\r\n" + Requests::rawGet("/"))));
+    }
+
+    TEST_F(HttpSessionTest, WritesUploadChunksBeforeTheRequestFinishes) {
+        prepareUpload();
+        EXPECT_TRUE(
+            std::holds_alternative<HttpSession::Read>(
+                session_->receive("POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n")
+            )
+        );
+        ASSERT_TRUE(fs::exists(root_ / "incoming/data.bin"));
+        EXPECT_EQ(fs::file_size(root_ / "incoming/data.bin"), 0u);
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive(std::string("a\0b", 3))));
+        EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), std::string("a\0b", 3));
+        const auto response = deliver(session_->receive("cd" + Requests::rawGet("/")));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 201 "));
+        EXPECT_NE(response.find("Location: /upload/data.bin\r\n"), std::string::npos);
+        EXPECT_NE(response.find("HTTP/1.1 200 "), std::string::npos);
+        EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), std::string("a\0bcd", 5));
+    }
+
+    TEST_F(HttpSessionTest, WritesPartialChunkedUploadBeforeItsChunkEnds) {
+        prepareUpload();
+        EXPECT_TRUE(
+            std::holds_alternative<HttpSession::Read>(session_->receive(
+                "POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nabc"
+            ))
+        );
+        EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), "abc");
+        const auto response = deliver(session_->receive("de\r\n0\r\n\r\n"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 201 "));
+        EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), "abcde");
+    }
+
+    TEST_F(HttpSessionTest, DeletesUploadWhenTheBodyExceedsItsLimit) {
+        prepareUpload();
+        server_.locations.back().clientMaxBodySize = 4;
+        session_->receive(
+            "POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n"
+        );
+        ASSERT_TRUE(fs::exists(root_ / "incoming/data.bin"));
+        EXPECT_TRUE(deliver(session_->receive("2\r\nde\r\n0\r\n\r\n")).starts_with("HTTP/1.1 413 "));
+        EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
+    }
+
+    TEST_F(HttpSessionTest, DeletesIncompleteUploadWhenTheClientLeaves) {
+        prepareUpload();
+        session_->receive("POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nabc");
+        ASSERT_TRUE(fs::exists(root_ / "incoming/data.bin"));
+        session_.reset();
+        EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
+    }
+
+    TEST_F(HttpSessionTest, DeletesIncompleteUploadWhenBodyTimesOut) {
+        prepareUpload();
+        session_->receive("POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nabc");
+        fakeNow += 60s;
+        auto action = session_->expire();
+        ASSERT_TRUE(action);
+        EXPECT_TRUE(deliver(std::move(*action)).starts_with("HTTP/1.1 408 "));
+        EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
+    }
+
+    TEST_F(HttpSessionTest, RejectsExistingUploadBeforeContinueWithoutChangingTheFile) {
+        prepareUpload();
+        Files::write(root_ / "incoming/data.bin", "original");
+        const auto response = deliver(session_->receive(
+            "POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n"
+        ));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 409 "));
+        EXPECT_EQ(response.find("100 Continue"), std::string::npos);
+        EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), "original");
+    }
+
+    TEST_F(HttpSessionTest, RejectsUploadEscapingItsRootBeforeReadingTheBody) {
+        prepareUpload();
+        fs::create_directory_symlink(temp_.path(), root_ / "incoming/outside");
+        const auto response = deliver(
+            session_->receive("POST /upload/outside/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n")
+        );
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 403 "));
+        EXPECT_FALSE(fs::exists(temp_.path() / "data.bin"));
+    }
+
+    TEST_F(HttpSessionTest, DeletesUploadAndReturns500WhenWritingFails) {
+        prepareUpload();
+        session_->receive("POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n");
+        rlimit previous{};
+        ASSERT_EQ(::getrlimit(RLIMIT_FSIZE, &previous), 0);
+        const auto previousHandler = std::signal(SIGXFSZ, SIG_IGN);
+        ASSERT_NE(previousHandler, SIG_ERR);
+        rlimit limited = previous;
+        limited.rlim_cur = 1;
+        const int changed = ::setrlimit(RLIMIT_FSIZE, &limited);
+        auto action = session_->receive("abcde");
+        const int restored = ::setrlimit(RLIMIT_FSIZE, &previous);
+        std::signal(SIGXFSZ, previousHandler);
+        ASSERT_EQ(changed, 0);
+        ASSERT_EQ(restored, 0);
+        EXPECT_TRUE(deliver(std::move(action)).starts_with("HTTP/1.1 500 "));
+        EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
+    }
 
     TEST_F(HttpSessionTest, WaitsForTheWholeRequestBeforeResponding) {
         EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive("GET / HTTP/1.1\r\nHo")));
@@ -274,7 +523,10 @@ namespace {
 
         EXPECT_TRUE(response.starts_with("HTTP/1.1 408 "));
         EXPECT_TRUE(closes(response));
-        EXPECT_TRUE(ended<HttpSession::Close>());
+        EXPECT_TRUE(ended<HttpSession::Read>());
+        fakeNow += 5s;
+        ASSERT_TRUE(session_->expire().has_value());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*session_->expire()));
     }
 
     TEST_F(HttpSessionTest, KeepsASlowButSteadyBody) {

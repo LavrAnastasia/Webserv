@@ -188,8 +188,8 @@ namespace {
 
             pending_.erase(0, headerEnd + 4);
 
-            if (headersOnly || response.statusLine.starts_with("HTTP/1.1 204 ") ||
-                response.statusLine.starts_with("HTTP/1.1 304 ")) {
+            if (headersOnly || response.statusLine.starts_with("HTTP/1.1 100 ") ||
+                response.statusLine.starts_with("HTTP/1.1 204 ") || response.statusLine.starts_with("HTTP/1.1 304 ")) {
                 return response;
             }
 
@@ -423,7 +423,15 @@ namespace {
                     " /dev/zero\ntouch finished\n"
             );
 
-            serverConfig.locations = {location, cgi};
+            LocationConfig limited = cgi;
+            limited.path = "/limited";
+            limited.clientMaxBodySize = kMebibyte;
+            LocationConfig upload{};
+            upload.path = "/upload";
+            upload.allowedMethods = {HttpMethod::Post};
+            upload.upload = UploadConfig{fs::path("incoming")};
+            fs::create_directories(root_ / "incoming");
+            serverConfig.locations = {location, cgi, limited, upload};
 
             Configuration config;
             config.servers.push_back(serverConfig);
@@ -796,10 +804,83 @@ namespace {
         client.expectEof();
     }
 
+    TEST_F(ServerTest, Uploads50MiBWithBoundedMemoryAndMatchingBytes) {
+        constexpr std::size_t uploadSize = 50u * kMebibyte;
+        constexpr std::size_t blockSize = 64u * 1024u;
+        std::string block(blockSize, '\0');
+        for (std::size_t i = 0; i < block.size(); ++i) {
+            block[i] = static_cast<char>(i % 251);
+        }
+        TestClient client(port_);
+#ifdef __linux__
+        const auto before = readPeakMemory();
+        constexpr std::size_t kMemoryGrowthLimit = 8u * kMebibyte;
+#endif
+        client.sendAll(
+            "POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: " + std::to_string(uploadSize) +
+            "\r\n\r\n"
+        );
+        for (std::size_t sent = 0; sent < uploadSize; sent += block.size()) {
+            client.sendAll(block);
+        }
+        const auto response = client.readResponse();
+        ASSERT_EQ(response.statusLine, "HTTP/1.1 201 Created");
+        EXPECT_EQ(response.headers.at("location"), "/upload/data.bin");
+        ASSERT_EQ(fs::file_size(root_ / "incoming/data.bin"), uploadSize);
+        std::ifstream file(root_ / "incoming/data.bin", std::ios::binary);
+        std::string bytes(blockSize, '\0');
+        for (std::size_t read = 0; read < uploadSize; read += block.size()) {
+            file.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            ASSERT_EQ(file.gcount(), static_cast<std::streamsize>(block.size()));
+            ASSERT_EQ(bytes, block);
+        }
+#ifdef __linux__
+        const auto growth = readPeakMemory() - before;
+        RecordProperty("upload_peak_growth_bytes", std::to_string(growth));
+        EXPECT_LT(growth, kMemoryGrowthLimit);
+#endif
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, Returns413WhenTheClientSendsAllBodyBeforeReading) {
+        TestClient client(port_);
+        constexpr std::size_t bodySize = 2u * kMebibyte;
+        constexpr std::size_t blockSize = 64u * 1024u;
+        const std::string block(blockSize, 'x');
+        client.sendAll(
+            "POST /limited/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: " + std::to_string(bodySize) +
+            "\r\n\r\n"
+        );
+        for (std::size_t sent = 0; sent < bodySize; sent += block.size()) {
+            client.sendAll(block);
+        }
+        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 413 Payload Too Large");
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, ContinuesBeforeTheClientSendsCgiBody) {
+        TestClient client(port_);
+        client.sendAll(
+            "POST /cgi/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n"
+        );
+        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 100 Continue");
+        client.sendAll("hello");
+        expectOK(client, "hello");
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
     TEST_F(ServerTest, EchoesTwenty100MiBPostsThroughCgi) {
         TestClient client(port_);
         constexpr std::size_t blockSize = 64u * 1024u;
         const std::string block(blockSize, 'e');
+#ifdef __linux__
+        const auto before = readPeakMemory();
+        constexpr std::size_t kMemoryOverhead = 16u * kMebibyte;
+#endif
         for (int request = 0; request < kRepeatedRequests; ++request) {
             SCOPED_TRACE(request);
             client.sendAll(
@@ -815,6 +896,11 @@ namespace {
             });
             ASSERT_EQ(response.statusLine, "HTTP/1.1 200 OK");
             ASSERT_EQ(response.bodySize, kCgiPostSize);
+#ifdef __linux__
+            const auto growth = readPeakMemory() - before;
+            RecordProperty("cgi_peak_growth_bytes", std::to_string(growth));
+            EXPECT_LT(growth, kCgiPostSize + kMemoryOverhead);
+#endif
             ASSERT_TRUE(valid);
             EXPECT_EQ(response.headers.at("transfer-encoding"), "chunked");
         }

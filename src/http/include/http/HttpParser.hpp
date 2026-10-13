@@ -2,12 +2,19 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 
 #include "http/HttpRequest.hpp"
 #include "http/HttpStatus.hpp"
 
 struct NeedMoreData {};
+struct HeadersReady {
+    const HttpRequest* request;
+};
+struct BodyData {
+    std::string bytes;
+};
 struct Complete {
     HttpRequest request;
 };
@@ -15,11 +22,11 @@ struct Failed {
     HttpStatus status;
 };
 
-using ParseResult = std::variant<NeedMoreData, Complete, Failed>;
+using ParseResult = std::variant<NeedMoreData, HeadersReady, BodyData, Complete, Failed>;
 
 class HttpParser {
 private:
-    enum class Step { Continue, WaitForData };
+    enum class Step { Continue, WaitForData, HeadersReady, BodyData };
 
     enum class ParserState {
         StartLine,
@@ -28,6 +35,7 @@ private:
         ChunkSize,
         ChunkData,
         ChunkEnd,
+        ChunkDelimiter,
         Complete,
     };
 
@@ -38,14 +46,20 @@ private:
     std::size_t _contentLength;
     std::size_t _currentChunkSize;
     std::size_t _maxBodySize;
+    std::size_t _received;
+    bool _discard = false;
+    bool _stream = false;
+    std::string _chunk;
 
     Step fail(HttpStatus status);
+    void collect(std::size_t size);
     Step handleStartLine();
     Step handleHeaders();
     Step handleBody();
     Step handleChunkSize();
     Step handleChunkData();
     Step handleChunkEnd();
+    Step handleChunkDelimiter();
     std::optional<std::size_t> parseContentLength() const;
     bool fits(std::size_t size) const;
 
@@ -53,6 +67,11 @@ public:
     explicit HttpParser(std::size_t maxBodySize);
     ParseResult append(const char* data, std::size_t size);
     void reset();
+    void queue(std::string_view bytes);
+    void discard();
+    void stream();
+    bool isComplete() const;
+    bool limit(std::size_t size);
     bool isIdle() const;
     bool hasHeaders() const;
 };

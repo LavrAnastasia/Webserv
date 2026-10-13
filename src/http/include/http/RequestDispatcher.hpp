@@ -13,5 +13,5 @@ using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 class RequestDispatcher {
 public:
     static HandlerResult
-    dispatch(const HttpRequest& request, const ServerConfig& server, const ConnectionInfo& connectionInfo);
+    dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& connectionInfo);
 };

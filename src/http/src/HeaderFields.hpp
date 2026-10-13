@@ -7,6 +7,7 @@ namespace Http::Headers {
     constexpr std::string_view ContentLength = "Content-Length";
     constexpr std::string_view ContentType = "Content-Type";
     constexpr std::string_view TransferEncoding = "Transfer-Encoding";
+    constexpr std::string_view Expect = "Expect";
     constexpr std::string_view Host = "Host";
     constexpr std::string_view Date = "Date";
     constexpr std::string_view Allow = "Allow";
@@ -19,6 +20,10 @@ namespace Http::Headers {
     constexpr std::string_view TE = "TE";
     constexpr std::string_view Trailer = "Trailer";
     constexpr std::string_view Upgrade = "Upgrade";
+
+    namespace Expectation {
+        constexpr std::string_view Continue = "100-continue";
+    }
 
     namespace ConnectionOption {
         constexpr std::string_view Close = "close";

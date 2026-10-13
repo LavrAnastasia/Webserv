@@ -84,7 +84,7 @@ CgiProcess& CgiProcess::operator=(CgiProcess&& other) noexcept {
     return *this;
 }
 
-std::optional<CgiProcess> CgiProcess::launch(const CgiRequest& request) {
+std::optional<CgiProcess> CgiProcess::launch(CgiRequest request) {
     std::error_code error;
 
     if (!std::filesystem::is_regular_file(request.interpreter, error) ||
@@ -120,7 +120,7 @@ std::optional<CgiProcess> CgiProcess::launch(const CgiRequest& request) {
         std::_Exit(kExecFailed);
     }
 
-    return CgiProcess(pid, std::move(input->writeEnd), std::move(output->readEnd), request.body);
+    return CgiProcess(pid, std::move(input->writeEnd), std::move(output->readEnd), std::move(request.body));
 }
 
 int CgiProcess::inputFd() const {

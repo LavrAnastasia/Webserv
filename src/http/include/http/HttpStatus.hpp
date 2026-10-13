@@ -23,6 +23,7 @@ enum class HttpStatus {
     Conflict = 409,
     PayloadTooLarge = 413,
     UriTooLong = 414,
+    ExpectationFailed = 417,
     RequestHeaderFieldsTooLarge = 431,
 
     InternalServerError = 500,

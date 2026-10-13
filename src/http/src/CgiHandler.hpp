@@ -9,6 +9,5 @@ struct ConnectionInfo;
 
 class CgiHandler {
 public:
-    static HandlerResult
-    handle(const HttpRequest& request, const ResolvedRoute& route, const ConnectionInfo& connectionInfo);
+    static HandlerResult handle(HttpRequest request, const ResolvedRoute& route, const ConnectionInfo& connectionInfo);
 };

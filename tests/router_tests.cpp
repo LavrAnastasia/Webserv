@@ -222,12 +222,12 @@ namespace {
         expectResponse(Requests::get("/file.txt", std::string(17, 'x')), HttpStatus::PayloadTooLarge);
     }
 
-    TEST_F(RouterTest, ZeroBodyLimitIsAnExplicitOverride) {
+    TEST_F(RouterTest, ZeroBodyLimitAllowsBodyWithoutALimit) {
         Files::write(root_ / "file.txt", "contents");
         server_.locations.front().clientMaxBodySize = 0;
 
         expectResponse(Requests::get("/file.txt"), HttpStatus::OK, "contents");
-        expectResponse(Requests::get("/file.txt", "x"), HttpStatus::PayloadTooLarge);
+        expectResponse(Requests::get("/file.txt", "x"), HttpStatus::OK, "contents");
     }
 
     TEST_F(RouterTest, InheritsFromServerNotFromLessSpecificLocation) {

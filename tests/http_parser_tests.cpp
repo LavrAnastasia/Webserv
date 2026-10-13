@@ -20,7 +20,11 @@ namespace {
     const std::string CHUNKED = POST + "Transfer-Encoding: chunked\r\n\r\n";
 
     ParseResult result(HttpParser& parser, std::string_view bytes) {
-        return parser.append(bytes.empty() ? "" : bytes.data(), bytes.size());
+        ParseResult parsed = parser.append(bytes.empty() ? "" : bytes.data(), bytes.size());
+        if (std::holds_alternative<HeadersReady>(parsed)) {
+            parsed = parser.append(nullptr, 0);
+        }
+        return parsed;
     }
 
     ParseResult parse(const std::string& raw) {
@@ -345,6 +349,48 @@ namespace {
 
     TEST(HttpParserTest, ZeroContentLength) {
         expectBody(parse(withLength(0)), "");
+    }
+
+    TEST(HttpParserTest, ReportsHeadersBeforeConsumingBufferedBody) {
+        HttpParser parser(BODY_LIMIT);
+        const std::string raw = withLength(5) + "hello";
+        const ParseResult headers = parser.append(raw.data(), raw.size());
+        ASSERT_TRUE(std::holds_alternative<HeadersReady>(headers));
+        EXPECT_TRUE(std::get<HeadersReady>(headers).request->body.empty());
+        EXPECT_FALSE(parser.limit(4));
+        expectStatus(parser.append(nullptr, 0), HttpStatus::PayloadTooLarge);
+    }
+
+    TEST(HttpParserTest, StreamsBodyWithoutStoringItInTheRequest) {
+        for (const bool chunked : {false, true}) {
+            SCOPED_TRACE(chunked);
+            HttpParser parser(BODY_LIMIT);
+            const std::string headers = chunked ? CHUNKED : withLength(5);
+            ASSERT_TRUE(std::holds_alternative<HeadersReady>(parser.append(headers.data(), headers.size())));
+            parser.stream();
+            const std::string first = chunked ? "5\r\nabc" : "abc";
+            auto part = parser.append(first.data(), first.size());
+            ASSERT_TRUE(std::holds_alternative<BodyData>(part));
+            EXPECT_EQ(std::get<BodyData>(part).bytes, "abc");
+            EXPECT_TRUE(std::holds_alternative<NeedMoreData>(parser.append(nullptr, 0)));
+            const std::string last = chunked ? "de\r\n0\r\n\r\n" : "de";
+            part = parser.append(last.data(), last.size());
+            ASSERT_TRUE(std::holds_alternative<BodyData>(part));
+            EXPECT_EQ(std::get<BodyData>(part).bytes, "de");
+            expectBody(parser.append(nullptr, 0), "");
+        }
+    }
+
+    TEST(HttpParserTest, CountsStreamedBodyAgainstTheLimit) {
+        HttpParser parser(4);
+        ASSERT_TRUE(std::holds_alternative<HeadersReady>(parser.append(CHUNKED.data(), CHUNKED.size())));
+        parser.stream();
+        const std::string first = "3\r\nabc\r\n";
+        ASSERT_TRUE(std::holds_alternative<BodyData>(parser.append(first.data(), first.size())));
+        const std::string last = "2\r\nde\r\n0\r\n\r\n";
+        expectStatus(parser.append(last.data(), last.size()), HttpStatus::PayloadTooLarge);
+        parser.discard();
+        expectBody(parser.append(nullptr, 0), "");
     }
 
     TEST(HttpParserTest, BinaryBody) {

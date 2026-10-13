@@ -50,7 +50,10 @@ namespace {
         HttpParser parser(server_.maxBodySize());
         const std::string request =
             "GET /index.html HTTP/1.1\r\nHost: localhost\r\nContent-Length: 16\r\n\r\n" + std::string(16, 'a');
-        const ParseResult parsed = parser.append(request.data(), request.size());
+        ParseResult parsed = parser.append(request.data(), request.size());
+        if (std::holds_alternative<HeadersReady>(parsed)) {
+            parsed = parser.append(nullptr, 0);
+        }
 
         ASSERT_TRUE(std::holds_alternative<Complete>(parsed));
         const auto result = RequestDispatcher::dispatch(std::get<Complete>(parsed).request, server_, ConnectionInfo{});
