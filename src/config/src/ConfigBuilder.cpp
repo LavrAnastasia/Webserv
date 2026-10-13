@@ -72,7 +72,7 @@ ServerConfig ConfigBuilder::buildServerConfig(const ConfigNode& node) {
     std::unordered_set<Config::Directive> directives;
 
     for (const ConfigNode& child : *node.body) {
-        if (child.body.has_value()) {
+        if (ConfigValidator::isBlock(child)) {
             config.locations.push_back(buildLocationConfig(child));
         } else {
             const auto directive = ConfigValidator::validateDirective(Config::Block::Server, child);

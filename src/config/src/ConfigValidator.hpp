@@ -18,6 +18,7 @@ private:
     static void validateLocationBlock(const ConfigNode& node);
 
 public:
+    static bool isBlock(const ConfigNode& node);
     static void validate(const Configuration& config);
     static void validate(const LocationConfig& config);
     static void validate(const ServerConfig& config);

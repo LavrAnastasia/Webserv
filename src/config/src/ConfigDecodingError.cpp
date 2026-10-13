@@ -20,6 +20,9 @@ std::string ConfigDecodingError::formatMessage(Reason reason, const std::string&
 
         case Reason::Duplicate:
             return "duplicate " + context;
+
+        case Reason::DotComponent:
+            return context + " must not contain '.' or '..'";
     }
 
     return "unknown config decoding error: " + context;

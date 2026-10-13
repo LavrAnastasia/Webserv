@@ -6,7 +6,7 @@
 
 class ConfigSyntaxError : public ConfigError {
 public:
-    enum class Reason { ExpectedNodeName, ExpectedTerminator, UnexpectedClosingBrace, UnclosedBlock };
+    enum class Reason { ExpectedNodeName, ExpectedTerminator, UnexpectedClosingBrace, UnclosedBlock, NestingTooDeep };
 
     ConfigSyntaxError(Reason reason, const std::string& context = "");
 

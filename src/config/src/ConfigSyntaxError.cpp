@@ -17,6 +17,9 @@ std::string ConfigSyntaxError::formatMessage(Reason reason, const std::string& c
 
         case Reason::UnclosedBlock:
             return "expected '}' to close block '" + context + "'";
+
+        case Reason::NestingTooDeep:
+            return "block '" + context + "' is nested too deep";
     }
 
     return "unknown config syntax error";
