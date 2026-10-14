@@ -81,7 +81,7 @@ namespace {
 
 std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
     if (value.empty() || value.front() != '/') {
-        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "path: " + std::string(value));
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "location path: " + std::string(value));
     }
 
     return std::string(value);
