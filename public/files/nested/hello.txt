@@ -1,0 +1,4 @@
+Nested folder
+
+autoindex applies to every folder inside the location,
+so /files/nested/ is listed too.

@@ -228,6 +228,22 @@ namespace {
         EXPECT_NE(actualBody.find("<a href=\"readme.txt\">readme.txt</a>"), std::string::npos);
     }
 
+    TEST_F(StaticHandlerTest, AutoindexHidesDotFiles) {
+        server_.locations.front().index = "";
+        server_.locations.front().autoindex = true;
+        Files::write(root_ / "docs" / ".hidden", "hidden");
+        Files::write(root_ / "docs" / "readme.txt", "documentation");
+
+        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
+        auto& response = std::get<HttpResponse>(result);
+        const std::string actualBody = Responses::read(response.body);
+
+        ASSERT_EQ(response.status, HttpStatus::OK);
+        EXPECT_NE(actualBody.find("readme.txt"), std::string::npos);
+        EXPECT_EQ(actualBody.find(".hidden"), std::string::npos);
+    }
+
     TEST_F(StaticHandlerTest, AutoindexEscapesHtmlAndEncodesLinks) {
         server_.locations.front().autoindex = true;
         Files::write(root_ / "<docs>" / "a & <b>.txt", "contents");

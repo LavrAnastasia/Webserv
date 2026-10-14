@@ -25,4 +25,5 @@ class ConfigSpecification {
 public:
     static const Config::DirectiveRule& directiveRule(std::string_view name);
     static const Config::DirectiveRule& directiveRule(Config::Directive directive);
+    static bool contains(std::string_view name);
 };

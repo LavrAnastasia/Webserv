@@ -86,6 +86,10 @@ const Config::DirectiveRule& ConfigSpecification::directiveRule(std::string_view
     return ruleIt->second;
 }
 
+bool ConfigSpecification::contains(std::string_view name) {
+    return directiveRules.contains(name);
+}
+
 const Config::DirectiveRule& ConfigSpecification::directiveRule(Config::Directive directive) {
     for (const auto& [name, rule] : directiveRules) {
         if (rule.directive == directive) {

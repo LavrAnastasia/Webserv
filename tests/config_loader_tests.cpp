@@ -308,4 +308,14 @@ namespace {
         EXPECT_THROW(loadText(source), ConfigError);
     }
 
+    TEST_F(ConfigLoaderTest, RejectsDeeplyNestedBlocks) {
+        std::string source;
+
+        for (int i = 0; i < 100000; ++i) {
+            source += "a {";
+        }
+
+        EXPECT_THROW(loadText(source), ConfigError);
+    }
+
 } // namespace

@@ -10,6 +10,7 @@ public:
         UnsupportedValue,
         OutOfRange,
         Duplicate,
+        DotComponent,
     };
 
     ConfigDecodingError(Reason reason, const std::string& context);

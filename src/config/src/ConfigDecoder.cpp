@@ -81,7 +81,7 @@ namespace {
 
 std::string ConfigDecoder::decodeLocationPath(std::string_view value) {
     if (value.empty() || value.front() != '/') {
-        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "path: " + std::string(value));
+        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "location path: " + std::string(value));
     }
 
     return std::string(value);
@@ -117,7 +117,7 @@ std::string ConfigDecoder::decodeIndex(std::string_view value) {
     }
 
     if (Fs::hasDotComponents(std::filesystem::path(value))) {
-        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "index: " + std::string(value));
+        throw ConfigDecodingError(ConfigDecodingError::Reason::DotComponent, "index");
     }
 
     return std::string(value);
@@ -178,8 +178,12 @@ ConfigDecoder::decodeErrorPage(const std::vector<std::string>& values) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::EmptyValue, "error page path");
     }
 
-    if (!path.string().starts_with('/') || Fs::hasDotComponents(path)) {
+    if (!path.string().starts_with('/')) {
         throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "error page path: " + path.string());
+    }
+
+    if (Fs::hasDotComponents(path)) {
+        throw ConfigDecodingError(ConfigDecodingError::Reason::DotComponent, "error page path");
     }
 
     std::unordered_map<HttpStatus, std::filesystem::path> pages;
@@ -250,7 +254,7 @@ UploadConfig ConfigDecoder::decodeUpload(std::string_view value) {
     }
 
     if (Fs::hasDotComponents(path)) {
-        throw ConfigDecodingError(ConfigDecodingError::Reason::InvalidFormat, "upload path: " + path.string());
+        throw ConfigDecodingError(ConfigDecodingError::Reason::DotComponent, "upload path");
     }
 
     return UploadConfig{.uploadPath = path};

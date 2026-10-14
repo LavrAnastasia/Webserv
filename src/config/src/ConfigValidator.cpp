@@ -47,6 +47,10 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
 
 // Public
 
+bool ConfigValidator::isBlock(const ConfigNode& node) {
+    return blocks.contains(node.name) || (node.body.has_value() && !ConfigSpecification::contains(node.name));
+}
+
 void ConfigValidator::validate(const Configuration& config) {
     std::vector<ListenConfig> seen;
 
@@ -83,7 +87,7 @@ void ConfigValidator::validate(const LocationConfig& config) {
     }
 
     if (config.allowedMethods.empty()) {
-        throw ConfigValidationError(ConfigValidationError::Reason::MissingDirective, "method");
+        throw ConfigValidationError(ConfigValidationError::Reason::MissingDirective, "methods");
     }
 }
 void ConfigValidator::validate(const ServerConfig& config) {
@@ -111,6 +115,14 @@ void ConfigValidator::validate(const ServerConfig& config) {
 }
 
 void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node) {
+    if (!isBlock(node)) {
+        const auto reason = ConfigSpecification::contains(node.name)
+            ? ConfigValidationError::Reason::DirectiveNotAllowed
+            : ConfigValidationError::Reason::UnknownDirective;
+
+        throw ConfigValidationError(reason, node.name);
+    }
+
     const auto blockIt = blocks.find(node.name);
 
     if (blockIt == blocks.end()) {
@@ -131,6 +143,13 @@ void ConfigValidator::validateBlock(Config::Block block, const ConfigNode& node)
 }
 
 Config::Directive ConfigValidator::validateDirective(Config::Block block, const ConfigNode& node) {
+    if (isBlock(node)) {
+        const auto reason = blocks.contains(node.name) ? ConfigValidationError::Reason::BlockNotAllowed
+                                                       : ConfigValidationError::Reason::UnknownBlock;
+
+        throw ConfigValidationError(reason, node.name);
+    }
+
     const auto& rule = ConfigSpecification::directiveRule(node.name);
 
     if (node.body.has_value()) {

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>webserv demo</title>
+    <style>
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            font-family: monospace;
+            background: #fafafa;
+        }
+
+        main {
+            text-align: center;
+        }
+
+        pre {
+            margin: 0 0 16px;
+            font-size: 48px;
+            color: #8b5cf6;
+        }
+
+        h1 {
+            margin: 0 0 24px;
+            font-size: 24px;
+            font-weight: 400;
+        }
+
+        table {
+            margin: 0 auto;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        td {
+            padding: 4px 12px;
+        }
+
+        td:first-child {
+            color: #6b7280;
+        }
+
+        a {
+            color: #8b5cf6;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <pre>₍^. .^₎⟆</pre>
+        <h1>webserv demo</h1>
+        <table>
+            <tr><td>root</td><td><a href="/docs/page.html">/docs/page.html</a></td></tr>
+            <tr><td>index</td><td><a href="/guide/">/guide/</a></td></tr>
+            <tr><td>slash redirect</td><td><a href="/guide">/guide</a></td></tr>
+            <tr><td>autoindex</td><td><a href="/files/">/files/</a></td></tr>
+            <tr><td>uploads</td><td><a href="/uploads/">/uploads/</a></td></tr>
+            <tr><td>error_page 404</td><td><a href="/missing">/missing</a></td></tr>
+            <tr><td>error_page 403</td><td><a href="/archive/">/archive/</a></td></tr>
+            <tr><td>cgi .sh</td><td><a href="/cgi-bin/cat.sh?name=Anna">/cgi-bin/cat.sh?name=Anna</a></td></tr>
+            <tr><td>cgi .py</td><td><a href="/cgi-bin/snake.py">/cgi-bin/snake.py</a></td></tr>
+            <tr><td>return 301</td><td><a href="/old">/old</a></td></tr>
+            <tr><td>return 302</td><td><a href="/mdn">/mdn</a></td></tr>
+            <tr><td>return 200</td><td><a href="/ping">/ping</a></td></tr>
+            <tr><td>second server</td><td><a href="http://127.0.0.1:8082/">127.0.0.1:8082</a></td></tr>
+        </table>
+    </main>
+</body>
+</html>

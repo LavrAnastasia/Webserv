@@ -4,12 +4,21 @@
 #include "ConfigSyntaxError.hpp"
 #include "ConfigToken.hpp"
 
-std::vector<ConfigNode> ConfigParser::buildBody(TokenIterator& it, TokenIterator end, const std::string& blockName) {
+namespace {
+    constexpr std::size_t kMaxDepth = 3;
+}
+
+std::vector<ConfigNode>
+ConfigParser::buildBody(TokenIterator& it, TokenIterator end, const std::string& blockName, std::size_t depth) {
+    if (depth > kMaxDepth) {
+        throw ConfigSyntaxError(ConfigSyntaxError::Reason::NestingTooDeep, blockName);
+    }
+
     std::vector<ConfigNode> nodes{};
 
     ++it;
     while (it != end && it->type != TokenType::RightBrace) {
-        const auto node = buildNode(it, end);
+        const auto node = buildNode(it, end, depth);
         nodes.push_back(node);
     }
     if (it == end) {
@@ -19,7 +28,7 @@ std::vector<ConfigNode> ConfigParser::buildBody(TokenIterator& it, TokenIterator
     return nodes;
 }
 
-ConfigNode ConfigParser::buildNode(TokenIterator& it, TokenIterator end) {
+ConfigNode ConfigParser::buildNode(TokenIterator& it, TokenIterator end, std::size_t depth) {
     if (it->type == TokenType::RightBrace) {
         throw ConfigSyntaxError(ConfigSyntaxError::Reason::UnexpectedClosingBrace);
     }
@@ -51,7 +60,7 @@ ConfigNode ConfigParser::buildNode(TokenIterator& it, TokenIterator end) {
     }
 
     if (it->type == TokenType::LeftBrace) {
-        node.body = buildBody(it, end, node.name);
+        node.body = buildBody(it, end, node.name, depth + 1);
         return node;
     }
 
@@ -62,7 +71,7 @@ std::vector<ConfigNode> ConfigParser::parse(const std::vector<Token>& tokens) {
     std::vector<ConfigNode> result{};
 
     for (auto it = tokens.begin(); it != tokens.end();) {
-        const auto node = buildNode(it, tokens.end());
+        const auto node = buildNode(it, tokens.end(), 0);
         result.push_back(node);
     }
 
