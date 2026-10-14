@@ -1,0 +1,5 @@
+Space in a file name
+
+This file name has a space.
+In the listing its link is my%20notes.txt,
+and the server decodes it back to "my notes.txt" to find the file.
