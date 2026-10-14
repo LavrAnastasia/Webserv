@@ -33,47 +33,39 @@ UploadHandler::~UploadHandler() {
 
 std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const ResolvedRoute& route) {
     constexpr mode_t kFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-    std::error_code error;
-    const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
-    if (!fs::is_directory(uploadPath, error)) {
-        return error && error != std::errc::no_such_file_or_directory && error != std::errc::not_a_directory
-            ? Http::Status::from(error)
-            : HttpStatus::InternalServerError;
-    }
-    const fs::path uploadRoot = fs::canonical(uploadPath, error);
-    if (error) {
-        return Http::Status::from(error);
-    }
+    try {
+        const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
+        if (!fs::is_directory(uploadPath)) {
+            return HttpStatus::InternalServerError;
+        }
+        const fs::path uploadRoot = fs::canonical(uploadPath);
 
-    const fs::path relative = request.path.substr(route.locationPath.size());
-    if (relative.empty() || relative == std::string(1, Http::Syntax::PathPrefix)) {
-        return HttpStatus::Conflict;
-    }
-    const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relative), error);
-    if (error) {
-        return Http::Status::from(error);
-    }
-    if (!Fs::isPrefixOf(uploadRoot, target)) {
-        return HttpStatus::Forbidden;
-    }
-    if (fs::exists(target, error)) {
-        return HttpStatus::Conflict;
-    }
-    if (error) {
-        return Http::Status::from(error);
-    }
-    if (!fs::is_directory(target.parent_path(), error)) {
-        return HttpStatus::InternalServerError;
-    }
+        const fs::path relative = request.path.substr(route.locationPath.size());
+        if (relative.empty() || relative == std::string(1, Http::Syntax::PathPrefix)) {
+            return HttpStatus::Conflict;
+        }
+        const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relative));
+        if (!Fs::isPrefixOf(uploadRoot, target)) {
+            return HttpStatus::Forbidden;
+        }
+        if (fs::exists(target)) {
+            return HttpStatus::Conflict;
+        }
+        if (!fs::is_directory(target.parent_path())) {
+            return HttpStatus::InternalServerError;
+        }
 
-    fd_ = ::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode);
-    if (fd_ == kInvalidFd) {
-        return HttpStatus::InternalServerError;
+        fd_ = ::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode);
+        if (fd_ == kInvalidFd) {
+            return HttpStatus::InternalServerError;
+        }
+        path_ = target;
+        location_ = Http::Url::encodePath(request.path);
+        pages_ = route.errorPages;
+        return std::nullopt;
+    } catch (const fs::filesystem_error& error) {
+        return Http::Status::from(error.code());
     }
-    path_ = target;
-    location_ = Http::Url::encodePath(request.path);
-    pages_ = route.errorPages;
-    return std::nullopt;
 }
 
 bool UploadHandler::receive(std::string_view bytes) {
