@@ -1,6 +1,5 @@
 #include "UploadHandler.hpp"
 
-#include <cerrno>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -69,7 +68,7 @@ std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const 
 
     fd_ = ::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode);
     if (fd_ == kInvalidFd) {
-        return errno == EEXIST ? HttpStatus::Conflict : HttpStatus::InternalServerError;
+        return HttpStatus::InternalServerError;
     }
     path_ = target;
     location_ = Http::Url::encodePath(request.path);
@@ -80,9 +79,6 @@ std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const 
 bool UploadHandler::receive(std::string_view bytes) {
     while (!bytes.empty()) {
         const ssize_t written = ::write(fd_, bytes.data(), bytes.size());
-        if (written < 0 && errno == EINTR) {
-            continue;
-        }
         if (written <= 0) {
             return false;
         }
