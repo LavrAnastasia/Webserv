@@ -53,6 +53,10 @@ namespace {
         std::vector<fs::directory_entry> entries;
 
         for (const fs::directory_entry& entry : fs::directory_iterator(directoryPath)) {
+            if (entry.path().filename().string().starts_with('.')) {
+                continue;
+            }
+
             entries.push_back(entry);
         }
 
