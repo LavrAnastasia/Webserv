@@ -1,20 +1,19 @@
 #include "net/Poller.hpp"
-#include <cerrno> // for 'errno' variable and EINTR constant
+#include <cerrno> // errno and EINTR
 #include <system_error>
 
 void Poller::addSocket(int fd) {
     pollfd newEvent;
-    newEvent.fd = fd; // the socket to monitor
-    newEvent.events = POLLIN; // POLLIN = watch for inbound data
-    newEvent.revents = 0; // result: filled in by OS
+    newEvent.fd = fd; // the socket to watch
+    newEvent.events = POLLIN; // wake up when there is data to read
+    newEvent.revents = 0; // filled in by poll()
     pollFds_.push_back(newEvent);
 }
 
 /*
-    called by EventLoop to toggle between receive and send modes
-    1. receive (POLLIN) (wake me up when client has sent bytes to my read bucket)
-    2. send (POLLOUT) (wake me up when there is room to send queued response bytes)
-
+    called by EventLoop to switch a socket between receive and send modes
+    POLLIN  - wake up when the client has sent bytes
+    POLLOUT - wake up when there is room to send queued response bytes
 */
 void Poller::modifySocket(int fd, short newEvents) {
     for (pollfd& p : pollFds_) {
@@ -30,47 +29,30 @@ void Poller::removeSocket(int fd) {
 }
 
 std::vector<pollfd> Poller::waitForEvents() {
-    int activeCount = poll(pollFds_.data(), pollFds_.size(), 1000); //how many sockets active?
+    int activeCount = poll(pollFds_.data(), pollFds_.size(), 1000); // waits at most 1 s, so timeouts are checked
     if (activeCount < 0) {
         if (errno == EINTR) {
-            return {}; // benign OS interruption -no need to crash server
+            return {}; // interrupted by a signal, not an error
         }
         throw std::system_error(errno, std::generic_category(), "poll()");
     }
     std::vector<pollfd> activeSockets;
     for (const pollfd& p : pollFds_) {
-        // if revents != 0, some network activity happened
+        // revents != 0: something happened on this socket
         if (p.revents != 0) {
             activeSockets.push_back(p);
-        } // check p.revents value with bitwise 'and' operation
+        }
     }
     return activeSockets;
 }
 
 /*
-    how pollfd.revents flags are checked: if (p.revents & POLLIN) etc.
-    common pollfd.revents flags:    POLLIN (data ready to read)
-                                    POLLOUT (data ready to write)
-                                    POLLHUP (client hung up; on macOS can mean it only stopped sending)
-                                    POLLERR (abrupt failure ex. crashed router)
+    revents flags, checked as (p.revents & FLAG):
+        POLLIN  - data ready to read
+        POLLOUT - room to write
+        POLLHUP - peer hung up (on macOS it can mean the peer only stopped sending)
+        POLLERR - socket error
 
-    erase_if syntax:    pollFds_ = the list to look at
-                        [fd] = capture clause (what to look for)
-                        (const pollfd& p) = parameter (p = temporary variable name)
-                        {
-                            return p.fd == fd:
-                        } = rule: if p.fd matces [fd], delete (and exit function)
-                        NOTE: whole list is always checked, and return keyword
-                        is internal to erase_if (item is deleted if return value == true)
-
-
-    poll() function signature: int poll(struct pollfd *fds, nfds_t nfds, int timeout);
-        struct pollfd *fds = pointer to array of pollfd structs (poll is written in C so no vectors)
-        nfds_t nfds = number of structs in the array
-        int timeout = how long OS should wait for events before returning to program
-                    -if > 0: wait for specified number of ms.
-                    -if 0: check sockets immediately without pausing program
-                    -if < 0: infinite block, wake up only when socket receives data
-        NOTE: pollFds_.data() returns C-style memory address of first item in vector,
-        and is necessary since poll() doesn't understand vectors
+    poll(fds, count, timeout): timeout in ms; > 0 waits up to that long, 0 returns at once, < 0 waits forever.
+    pollFds_.data() passes the vector as the C array poll() expects.
 */
