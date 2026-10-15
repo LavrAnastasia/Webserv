@@ -370,7 +370,7 @@ namespace {
         fakeNow += 60s;
         const auto action = session_->expire();
         ASSERT_TRUE(action);
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
+        EXPECT_TRUE(deliver(*action).starts_with("HTTP/1.1 408 "));
         EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
     }
 
@@ -563,7 +563,7 @@ namespace {
         EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
     }
 
-    TEST_F(HttpSessionTest, ClosesImmediatelyWhenTheBodyTimesOut) {
+    TEST_F(HttpSessionTest, Answers408AndClosesWhenTheBodyTimesOut) {
         session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nabc");
 
         fakeNow += 59s;
@@ -573,7 +573,10 @@ namespace {
         const auto action = session_->expire();
 
         ASSERT_TRUE(action.has_value());
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
+        const auto response = deliver(*action);
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 408 "));
+        EXPECT_TRUE(closes(response));
+        EXPECT_TRUE(ended<HttpSession::Close>());
     }
 
     TEST_F(HttpSessionTest, KeepsASlowButSteadyBody) {

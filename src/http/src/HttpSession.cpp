@@ -213,8 +213,9 @@ std::optional<HttpSession::Action> HttpSession::expire() {
     }
 
     Log::info("client timed out while sending request body, client: " + info_.remoteAddr);
-    handler_.reset();
-    return Close{};
+    receivingBody_ = false;
+    framing_.close = true;
+    return reject(HttpStatus::RequestTimeout);
 }
 
 HttpSession::Action HttpSession::receiveOutput(std::string_view output) {
