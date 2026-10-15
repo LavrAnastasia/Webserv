@@ -226,15 +226,18 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 405 "));
         EXPECT_NE(response.find("Allow: GET, HEAD\r\n"), std::string::npos);
         EXPECT_EQ(response.find("100 Continue"), std::string::npos);
+        EXPECT_TRUE(closes(response));
     }
 
-    TEST_F(HttpSessionTest, RejectsADisallowedMethodWithoutExpectBeforeWaitingForBody) {
+    TEST_F(HttpSessionTest, DiscardsTheBodyOfADisallowedMethodAndKeepsTheConnection) {
         const auto response =
             deliver(session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n"));
         EXPECT_TRUE(response.starts_with("HTTP/1.1 405 "));
         EXPECT_NE(response.find("Allow: GET, HEAD\r\n"), std::string::npos);
+        EXPECT_FALSE(closes(response));
         ASSERT_TRUE(ended<HttpSession::Read>());
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receive("hello")));
+        const auto next = deliver(session_->receive("hello" + Requests::rawGet("/")));
+        EXPECT_TRUE(next.starts_with("HTTP/1.1 200 "));
     }
 
     TEST_F(HttpSessionTest, RejectsExpectForAMissingRouteBeforeWaitingForBody) {

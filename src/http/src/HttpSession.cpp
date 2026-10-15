@@ -83,6 +83,10 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     }
     receivingBody_ = false;
 
+    if (!handler_) {
+        return reject(HttpStatus::InternalServerError);
+    }
+
     HandlerResult handled = handler_->handle();
     handler_.reset();
 
@@ -104,7 +108,11 @@ std::optional<HttpSession::Action> HttpSession::accept(HeadersReady headers) {
     auto dispatched = RequestDispatcher::dispatch(std::move(headers.request), headers.length, server_, info_);
 
     if (auto* response = std::get_if<HttpResponse>(&dispatched)) {
-        return reject(std::move(*response));
+        if (expectContinue || response->status == HttpStatus::PayloadTooLarge) {
+            return reject(std::move(*response));
+        }
+        phase_ = Phase::Responding;
+        return respond(std::move(*response));
     }
 
     handler_ = std::move(std::get<std::unique_ptr<RequestHandler>>(dispatched));
@@ -133,7 +141,11 @@ HttpSession::Action HttpSession::drain() {
     while (true) {
         const ParseResult result = parser_.parse();
         if (std::holds_alternative<Complete>(result)) {
-            return Close{};
+            if (framing_.close) {
+                return Close{};
+            }
+            receivingBody_ = false;
+            return finish();
         }
         if (std::holds_alternative<BodyData>(result)) {
             continue;
