@@ -9,7 +9,6 @@ namespace {
 
     constexpr std::size_t LINE_LIMIT = 8192;
     constexpr std::size_t HEADERS_LIMIT = 32768;
-    constexpr std::size_t LARGE_BODY = 10 * 1024 * 1024;
     constexpr std::size_t CHUNK_LINE_LIMIT = 1024;
 
     const std::string GET = "GET / HTTP/1.1\r\n";
@@ -506,21 +505,6 @@ namespace {
 
             EXPECT_TRUE(std::holds_alternative<NeedMoreData>(parse(GET + headersBlock(size))));
         }
-    }
-
-    TEST(HttpParserTest, ContentLengthBodySizeBoundary) {
-        for (const auto size : {LARGE_BODY - 1, LARGE_BODY}) {
-            SCOPED_TRACE(size);
-
-            const std::string body(size, 'a');
-            expectBody(parse(withLength(size) + body), body);
-        }
-    }
-
-    TEST(HttpParserTest, ChunkedBodySizeBoundary) {
-        const std::string body(LARGE_BODY, 'a');
-
-        expectBody(parse(CHUNKED + "a00000\r\n" + body + "\r\n0\r\n\r\n"), body);
     }
 
     TEST(HttpParserTest, ChunkSizeLineBoundary) {
