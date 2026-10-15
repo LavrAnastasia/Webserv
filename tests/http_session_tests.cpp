@@ -142,6 +142,22 @@ namespace {
         EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
     }
 
+    TEST_F(HttpSessionTest, RejectsAnnouncedChunkOverTheRouteLimitBeforeItsData) {
+        server_.locations.front().clientMaxBodySize = 4;
+        const auto response = deliver(
+            session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nFFFFFFFF\r\n")
+        );
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
+    }
+
+    TEST_F(HttpSessionTest, AcceptsChunkedBodyExactlyAtTheRouteLimit) {
+        server_.locations.front().clientMaxBodySize = 5;
+        const auto response = deliver(session_->receive(
+            "GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n"
+        ));
+        EXPECT_FALSE(response.starts_with("HTTP/1.1 413 "));
+    }
+
     TEST_F(HttpSessionTest, KeepsLimitsSeparateFromUnlimitedLocations) {
         server_.clientMaxBodySize = 4;
         server_.locations.back().clientMaxBodySize = std::numeric_limits<std::size_t>::max();

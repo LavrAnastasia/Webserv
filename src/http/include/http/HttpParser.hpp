@@ -25,12 +25,11 @@ using ParseResult = std::variant<NeedMoreData, HeadersReady, BodyData, Complete,
 
 class HttpParser {
 private:
-    enum class Step { Continue, WaitForData, HeadersReady, BodyData, TooLarge };
+    enum class Step { Continue, WaitForData, HeadersReady, BodyData };
 
     enum class ParserState {
         StartLine,
         Headers,
-        BodyStart,
         Body,
         ChunkSize,
         ChunkData,
@@ -45,7 +44,6 @@ private:
     HttpRequest _request;
     std::size_t _contentLength;
     std::size_t _currentChunkSize;
-    std::size_t _maxBodySize;
     std::size_t _received;
     std::string _chunk;
 
@@ -59,14 +57,13 @@ private:
     Step handleChunkEnd();
     Step handleChunkDelimiter();
     std::optional<std::size_t> parseContentLength() const;
-    bool fits(std::size_t size) const;
 
 public:
-    explicit HttpParser(std::size_t maxBodySize);
+    HttpParser();
     void receive(std::string_view bytes);
     ParseResult parse();
     void reset();
-    void limit(std::size_t size);
+    std::size_t announcedBodySize() const;
     bool isIdle() const;
     bool hasHeaders() const;
 };

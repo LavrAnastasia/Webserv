@@ -9,7 +9,7 @@ namespace {
 
     constexpr std::size_t LINE_LIMIT = 8192;
     constexpr std::size_t HEADERS_LIMIT = 32768;
-    constexpr std::size_t BODY_LIMIT = 10 * 1024 * 1024;
+    constexpr std::size_t LARGE_BODY = 10 * 1024 * 1024;
     constexpr std::size_t CHUNK_LINE_LIMIT = 1024;
 
     const std::string GET = "GET / HTTP/1.1\r\n";
@@ -28,8 +28,6 @@ namespace {
     struct Reader {
         HttpParser parser;
         HttpRequest request{};
-
-        explicit Reader(std::size_t limit) : parser(limit) {}
 
         void reset() {
             parser.reset();
@@ -56,7 +54,7 @@ namespace {
     }
 
     ReadResult parse(const std::string& raw) {
-        Reader reader(BODY_LIMIT);
+        Reader reader;
         return result(reader, raw);
     }
 
@@ -310,8 +308,6 @@ namespace {
          GET + headersBlock(HEADERS_LIMIT + 1) + "\r\n\r\n",
          HttpStatus::RequestHeaderFieldsTooLarge},
         {"UnterminatedHeadersTooLarge", GET + headersBlock(HEADERS_LIMIT + 1), HttpStatus::RequestHeaderFieldsTooLarge},
-        {"ContentLengthTooLarge", withLength(BODY_LIMIT + 1), HttpStatus::PayloadTooLarge},
-        {"ChunkBodyTooLarge", CHUNKED + "a00001\r\n", HttpStatus::PayloadTooLarge},
         {"ChunkSizeLineTooLong", CHUNKED + chunkLine(CHUNK_LINE_LIMIT + 1) + "\r\n"},
         {"UnterminatedChunkSizeLineTooLong", CHUNKED + chunkLine(CHUNK_LINE_LIMIT + 1)},
     };
@@ -336,7 +332,7 @@ namespace {
         for (std::size_t split = 1; split < test.raw.size(); ++split) {
             SCOPED_TRACE("split at " + std::to_string(split));
 
-            Reader parser(BODY_LIMIT);
+            Reader parser;
 
             const auto first = result(parser, std::string_view(test.raw).substr(0, split));
             ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
@@ -347,7 +343,7 @@ namespace {
 
     TEST_P(HttpParserFragmentTest, ByteByByte) {
         const auto& test = GetParam();
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         for (std::size_t i = 0; i < test.raw.size(); ++i) {
             SCOPED_TRACE("byte " + std::to_string(i));
@@ -380,20 +376,18 @@ namespace {
     }
 
     TEST(HttpParserTest, ReportsHeadersBeforeConsumingBufferedBody) {
-        HttpParser parser(BODY_LIMIT);
+        HttpParser parser;
         parser.receive(withLength(5) + "hello");
         const ParseResult headers = parser.parse();
         ASSERT_TRUE(std::holds_alternative<HeadersReady>(headers));
         EXPECT_TRUE(std::get<HeadersReady>(headers).request.body.empty());
         EXPECT_EQ(std::get<HeadersReady>(headers).length, 5u);
-        parser.limit(4);
-        expectStatus(parser.parse(), HttpStatus::PayloadTooLarge);
     }
 
     TEST(HttpParserTest, EmitsBodyWithoutStoringItInTheRequest) {
         for (const bool chunked : {false, true}) {
             SCOPED_TRACE(chunked);
-            HttpParser parser(BODY_LIMIT);
+            HttpParser parser;
             parser.receive(chunked ? CHUNKED : withLength(5));
             const auto headers = parser.parse();
             ASSERT_TRUE(std::holds_alternative<HeadersReady>(headers));
@@ -411,18 +405,22 @@ namespace {
         }
     }
 
-    TEST(HttpParserTest, CountsEmittedBodyAgainstTheLimitAndPreservesFramingAfterRejection) {
-        HttpParser parser(4);
-        parser.receive(CHUNKED);
+    TEST(HttpParserTest, AnnouncesBodySizeBeforeTheData) {
+        HttpParser parser;
+        parser.receive(withLength(5));
         ASSERT_TRUE(std::holds_alternative<HeadersReady>(parser.parse()));
-        parser.receive("3\r\nabc\r\n");
+        EXPECT_EQ(parser.announcedBodySize(), 5u);
+
+        parser.reset();
+        parser.receive(CHUNKED + "3\r\nabc\r\n2\r\n");
+        ASSERT_TRUE(std::holds_alternative<HeadersReady>(parser.parse()));
         ASSERT_TRUE(std::holds_alternative<BodyData>(parser.parse()));
-        parser.receive("2\r\nde\r\n0\r\n\r\n");
-        expectStatus(parser.parse(), HttpStatus::PayloadTooLarge);
-        auto part = parser.parse();
-        ASSERT_TRUE(std::holds_alternative<BodyData>(part));
-        EXPECT_EQ(std::get<BodyData>(part).bytes, "de");
-        EXPECT_TRUE(std::holds_alternative<Complete>(parser.parse()));
+        EXPECT_TRUE(std::holds_alternative<NeedMoreData>(parser.parse()));
+        EXPECT_EQ(parser.announcedBodySize(), 5u);
+    }
+
+    TEST(HttpParserTest, RejectsChunkSizesThatOverflowTheBodySize) {
+        expectStatus(parse(CHUNKED + "1\r\na\r\nFFFFFFFFFFFFFFFF\r\n"), HttpStatus::BadRequest);
     }
 
     TEST(HttpParserTest, BinaryBody) {
@@ -432,7 +430,7 @@ namespace {
     }
 
     TEST(HttpParserTest, WaitsForRemainingBody) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         const auto first = result(parser, withLength(5) + "hel");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
@@ -441,7 +439,7 @@ namespace {
     }
 
     TEST(HttpParserTest, PreservesNextRequestAfterBody) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         const auto first = result(parser, withLength(5) + "hello" + GET + "Host: localhost\r\n\r\n");
 
@@ -479,7 +477,7 @@ namespace {
     }
 
     TEST(HttpParserTest, WaitsForFinalChunkAndDelimiter) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         const auto first = result(parser, CHUNKED + "1\r\na\r\n");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
@@ -511,7 +509,7 @@ namespace {
     }
 
     TEST(HttpParserTest, ContentLengthBodySizeBoundary) {
-        for (const auto size : {BODY_LIMIT - 1, BODY_LIMIT}) {
+        for (const auto size : {LARGE_BODY - 1, LARGE_BODY}) {
             SCOPED_TRACE(size);
 
             const std::string body(size, 'a');
@@ -520,42 +518,9 @@ namespace {
     }
 
     TEST(HttpParserTest, ChunkedBodySizeBoundary) {
-        const std::string body(BODY_LIMIT, 'a');
+        const std::string body(LARGE_BODY, 'a');
 
         expectBody(parse(CHUNKED + "a00000\r\n" + body + "\r\n0\r\n\r\n"), body);
-    }
-
-    TEST(HttpParserTest, CumulativeChunkedBodyTooLarge) {
-        const std::string body(BODY_LIMIT, 'a');
-
-        expectStatus(parse(CHUNKED + "a00000\r\n" + body + "\r\n1\r\n"), HttpStatus::PayloadTooLarge);
-    }
-
-    TEST(HttpParserTest, UsesGivenBodyLimit) {
-        Reader fitting(5);
-        Reader tooLarge(5);
-        Reader chunked(5);
-
-        expectBody(result(fitting, withLength(5) + "abcde"), "abcde");
-        expectStatus(result(tooLarge, withLength(6)), HttpStatus::PayloadTooLarge);
-        expectStatus(result(chunked, CHUNKED + "3\r\nabc\r\n3\r\n"), HttpStatus::PayloadTooLarge);
-    }
-
-    TEST(HttpParserTest, ChunkedBodyAtGivenLimit) {
-        Reader parser(5);
-
-        expectBody(result(parser, CHUNKED + "3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n"), "abcde");
-    }
-
-    TEST(HttpParserTest, KeepsBodyLimitAfterReset) {
-        Reader parser(5);
-        const std::string request = CHUNKED + "4\r\nabcd\r\n0\r\n\r\n";
-
-        expectBody(result(parser, request), "abcd");
-        parser.reset();
-        expectBody(result(parser, request), "abcd");
-        parser.reset();
-        expectStatus(result(parser, withLength(6)), HttpStatus::PayloadTooLarge);
     }
 
     TEST(HttpParserTest, ChunkSizeLineBoundary) {
@@ -569,7 +534,7 @@ namespace {
     }
 
     TEST(HttpParserTest, SplitStartLineDelimiterAtLimit) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         const auto first = result(parser, startLine(LINE_LIMIT) + "\r");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
@@ -583,7 +548,7 @@ namespace {
         const std::string delimiter = "\r\n\r\n";
         const std::size_t split = GetParam();
 
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         const auto first = result(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
@@ -596,7 +561,7 @@ namespace {
     );
 
     TEST(HttpParserTest, SplitChunkDelimiterAtLimit) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
 
         const auto first = result(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
@@ -605,7 +570,7 @@ namespace {
     }
 
     TEST(HttpParserTest, RejectsStartLineOverflowAroundPartialDelimiter) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
         const auto first = result(parser, startLine(LINE_LIMIT) + "\r");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
@@ -617,7 +582,7 @@ namespace {
         const std::string delimiter = "\r\n\r\n";
         for (std::size_t split = 1; split < delimiter.size(); ++split) {
             SCOPED_TRACE(split);
-            Reader parser(BODY_LIMIT);
+            Reader parser;
             const auto first = result(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
             ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 
@@ -630,7 +595,7 @@ namespace {
     }
 
     TEST(HttpParserTest, RejectsChunkSizeOverflowAroundPartialDelimiter) {
-        Reader parser(BODY_LIMIT);
+        Reader parser;
         const auto first = result(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
         ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
 

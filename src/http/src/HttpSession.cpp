@@ -1,6 +1,5 @@
 #include "http/HttpSession.hpp"
 
-#include <limits>
 #include <utility>
 
 #include "CgiStream.hpp"
@@ -30,8 +29,7 @@ HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info) : Http
 }
 
 HttpSession::HttpSession(const ServerConfig& server, ConnectionInfo info, Clock clock)
-    : server_(server), info_(std::move(info)), clock_(clock), parser_(std::numeric_limits<std::size_t>::max()),
-      lastReceived_(clock_()) {
+    : server_(server), info_(std::move(info)), clock_(clock), lastReceived_(clock_()) {
 }
 
 HttpSession::~HttpSession() = default;
@@ -57,6 +55,9 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     }
 
     while (true) {
+        if (handler_ && parser_.announcedBodySize() > handler_->limit()) {
+            return reject(HttpStatus::PayloadTooLarge);
+        }
         if (HeadersReady* headers = std::get_if<HeadersReady>(&result)) {
             if (auto action = accept(std::move(*headers))) {
                 return std::move(*action);
@@ -107,7 +108,6 @@ std::optional<HttpSession::Action> HttpSession::accept(HeadersReady headers) {
     }
 
     handler_ = std::move(std::get<std::unique_ptr<RequestHandler>>(dispatched));
-    parser_.limit(handler_->limit());
 
     if (expectContinue && receivingBody_) {
         phase_ = Phase::Continuing;
@@ -136,10 +136,6 @@ HttpSession::Action HttpSession::drain() {
             return Close{};
         }
         if (std::holds_alternative<BodyData>(result)) {
-            continue;
-        }
-        if (const auto* failed = std::get_if<Failed>(&result);
-            failed && failed->status == HttpStatus::PayloadTooLarge) {
             continue;
         }
         return Read{};
