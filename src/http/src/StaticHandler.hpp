@@ -1,10 +1,14 @@
 #pragma once
 
+
+#include "RequestHandler.hpp"
 #include "ResolvedRoute.hpp"
 #include "http/HttpRequest.hpp"
-#include "http/HttpResponse.hpp"
 
-class StaticHandler {
+class StaticHandler : public RequestHandler {
 public:
-    static HttpResponse handle(const HttpRequest& request, const ResolvedRoute& route);
+    using RequestHandler::RequestHandler;
+
+    static DispatchResult start(HttpRequest request, ResolvedRoute route);
+    HandlerResult handle() override;
 };

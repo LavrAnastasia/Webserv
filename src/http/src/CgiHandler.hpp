@@ -1,14 +1,23 @@
 #pragma once
 
-#include "http/HttpRequest.hpp"
-#include "http/RequestDispatcher.hpp"
+#include <cstddef>
+#include <optional>
+#include <string_view>
 
+#include "RequestHandler.hpp"
 #include "ResolvedRoute.hpp"
+#include "http/ConnectionInfo.hpp"
+#include "http/HttpRequest.hpp"
 
-struct ConnectionInfo;
-
-class CgiHandler {
+class CgiHandler : public RequestHandler {
 public:
-    static HandlerResult
-    handle(const HttpRequest& request, const ResolvedRoute& route, const ConnectionInfo& connectionInfo);
+    CgiHandler(HttpRequest request, ResolvedRoute route, ConnectionInfo info);
+
+    static DispatchResult
+    start(HttpRequest request, ResolvedRoute route, ConnectionInfo info, std::optional<std::size_t> length);
+    bool receive(std::string_view body) override;
+    HandlerResult handle() override;
+
+private:
+    ConnectionInfo info_;
 };

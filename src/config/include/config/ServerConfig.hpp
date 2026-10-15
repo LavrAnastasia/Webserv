@@ -15,11 +15,9 @@ struct ServerConfig {
 
     std::filesystem::path root;
     std::string index = "index.html";
-    std::size_t clientMaxBodySize = 1 * 1024 * 1024;
+    std::size_t clientMaxBodySize = 1 * 1024 * 1024; // 1 MB
 
     std::unordered_map<HttpStatus, std::filesystem::path> errorPages;
 
     std::vector<LocationConfig> locations;
-
-    std::size_t maxBodySize() const;
 };

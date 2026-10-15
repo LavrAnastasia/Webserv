@@ -161,17 +161,6 @@ namespace {
         ASSERT_EQ(config.servers.front().listen.size(), 2u);
     }
 
-    TEST_F(ConfigLoaderTest, MaxBodySizeIsLargestOfServerAndLocations) {
-        const auto config = loadText(makeConfig(
-            "listen 127.0.0.1:8080;\nroot ./public;\nclient_max_body_size 8;\n",
-            "location / { methods GET; }\n"
-            "location /upload { methods POST; client_max_body_size 64; }\n"
-            "location /small { methods POST; client_max_body_size 2; }\n"
-        ));
-
-        EXPECT_EQ(config.servers.front().maxBodySize(), 64u);
-    }
-
     TEST_F(ConfigLoaderTest, LoadsAbsoluteCgiInterpreterWithoutCheckingTheFile) {
         const auto config =
             loadText(makeConfig(SERVER_DIRECTIVES, "location / { methods GET; cgi .py /not/installed/python3; }\n"));
@@ -273,6 +262,11 @@ namespace {
         {"InvalidAutoindex", makeConfig(SERVER_DIRECTIVES, "location / { methods GET; autoindex maybe; }\n")},
         {"NegativeBodyLimit", makeConfig(SERVER_DIRECTIVES + "client_max_body_size -1;\n")},
         {"InvalidBodyLimitSuffix", makeConfig(SERVER_DIRECTIVES + "client_max_body_size 1g;\n")},
+        {"InformationalReturnStatus", makeConfig(SERVER_DIRECTIVES, "location / { methods GET; return 100; }\n")},
+        {"IndexWithDotSegment", makeConfig(SERVER_DIRECTIVES + "index ../secret.html;\n")},
+        {"ErrorPageWithDotSegment", makeConfig(SERVER_DIRECTIVES + "error_page 404 /../404.html;\n")},
+        {"UploadPathWithDotSegment",
+         makeConfig(SERVER_DIRECTIVES, "location / { methods GET POST; upload_path ../outside; }\n")},
     };
 
     INSTANTIATE_TEST_SUITE_P(

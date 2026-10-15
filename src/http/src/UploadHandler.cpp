@@ -1,84 +1,87 @@
 #include "UploadHandler.hpp"
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <utility>
+
 #include "ErrorResponseFactory.hpp"
 #include "ErrorStatus.hpp"
 #include "HeaderFields.hpp"
 #include "HttpResponseFactory.hpp"
+#include "HttpSyntax.hpp"
 #include "UrlCodec.hpp"
 #include "fs/Path.hpp"
 
-#include <filesystem>
-#include <fstream>
-#include <system_error>
-
 namespace fs = std::filesystem;
 
-HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
-    try {
-        // build configured upload path relative to route root
-        const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
+namespace {
+    constexpr mode_t kFileMode = S_IRUSR | S_IWUSR;
+} // namespace
 
-        // configured upload path must exist and be a directory
+UploadHandler::UploadHandler(HttpRequest request, ResolvedRoute route, FileDescriptor file, fs::path path)
+    : RequestHandler(std::move(request), std::move(route)), file_(std::move(file)), path_(std::move(path)) {
+}
+
+UploadHandler::~UploadHandler() {
+    if (!path_.empty()) {
+        std::error_code error;
+        fs::remove(path_, error);
+    }
+}
+
+DispatchResult UploadHandler::start(HttpRequest request, ResolvedRoute route) {
+    try {
+        const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
         if (!fs::is_directory(uploadPath)) {
             return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
-
-        // canonicalize validated upload directory
         const fs::path uploadRoot = fs::canonical(uploadPath);
 
-        // extract request-relative upload path
-        const fs::path relativePath = request.path.substr(route.locationPath.size());
-
-        if (relativePath.empty() || relativePath == "/") {
+        const fs::path relative = request.path.substr(route.locationPath.size());
+        if (relative.empty() || relative == std::string(1, Http::Syntax::PathPrefix)) {
             return ErrorResponseFactory::create(HttpStatus::Conflict, route);
         }
-
-        // build filesystem target in configured upload root, then normalize it
-        const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relativePath));
-
-        // target escapes upload root -> 403 forbidden
+        const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relative));
         if (!Fs::isPrefixOf(uploadRoot, target)) {
             return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
-
-        // target already exists -> 409 conflict
         if (fs::exists(target)) {
             return ErrorResponseFactory::create(HttpStatus::Conflict, route);
         }
-
-        // parent path isn't a directory -> 500 internal server error
         if (!fs::is_directory(target.parent_path())) {
             return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
 
-        // open target for binary output
-        std::ofstream file(target, std::ios::binary);
-
-        // failed to open/create destination file -> error 500
-        if (!file) {
+        FileDescriptor file(::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode));
+        if (!file.isOpen()) {
             return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
 
-        file.write(request.body.data(), static_cast<std::streamsize>(request.body.size()));
-        file.close();
-
-        // write or close failure puts stream into failed state -> error 500
-        if (!file) {
-            // stores remove() failure error code to avoid thrown exception
-            std::error_code cleanupError;
-            // best-effort cleanup: use error_code overload so remove can't throw
-            fs::remove(target, cleanupError);
-
-            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
-        }
-
-        // upload completed successfully
-        return HttpResponseFactory::create(
-            HttpStatus::Created, HttpHeaders{{Http::Headers::Location, Http::Url::encodePath(request.path)}}
-        );
+        return std::make_unique<UploadHandler>(std::move(request), std::move(route), std::move(file), target);
     } catch (const fs::filesystem_error& error) {
-        // handle failures from throwing std::filesystem operations
-        // and map underlying error to corresponding HTTP status
         return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
     }
+}
+
+bool UploadHandler::receive(std::string_view body) {
+    while (!body.empty()) {
+        const ssize_t written = ::write(file_.get(), body.data(), body.size());
+        if (written <= 0) {
+            return false;
+        }
+        body.remove_prefix(static_cast<std::size_t>(written));
+    }
+    return true;
+}
+
+HandlerResult UploadHandler::handle() {
+    if (!file_.close()) {
+        return reject(HttpStatus::InternalServerError);
+    }
+    path_.clear();
+    return HttpResponseFactory::create(
+        HttpStatus::Created, HttpHeaders{{Http::Headers::Location, Http::Url::encodePath(request_.path)}}
+    );
 }

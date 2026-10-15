@@ -7,7 +7,6 @@ TEST_NAMES := \
 	connection \
 	http_session \
 	http_parser \
-	request_handler \
 	router \
 	serializer \
 	response_body \

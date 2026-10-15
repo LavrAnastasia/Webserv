@@ -4,6 +4,9 @@
 namespace Http::Status {
     std::string toString(HttpStatus status) {
         switch (status) {
+            case HttpStatus::Continue:
+                return "Continue";
+
             case HttpStatus::OK:
                 return "OK";
 
@@ -52,6 +55,9 @@ namespace Http::Status {
             case HttpStatus::UriTooLong:
                 return "URI Too Long";
 
+            case HttpStatus::ExpectationFailed:
+                return "Expectation Failed";
+
             case HttpStatus::RequestHeaderFieldsTooLarge:
                 return "Request Header Fields Too Large";
 
@@ -83,7 +89,7 @@ namespace Http::Status {
     std::optional<HttpStatus> fromCode(int code) {
         const HttpStatus status = static_cast<HttpStatus>(code);
 
-        return toString(status).empty() ? std::nullopt : std::optional<HttpStatus>(status);
+        return isInformational(status) || toString(status).empty() ? std::nullopt : std::optional<HttpStatus>(status);
     }
 
     HttpStatus from(const std::error_code& error) {

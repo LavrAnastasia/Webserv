@@ -2,7 +2,6 @@
 
 #include "ConfigParser.hpp"
 #include "ConfigSyntaxError.hpp"
-#include "ConfigToken.hpp"
 
 namespace {
     constexpr std::size_t kMaxDepth = 3;

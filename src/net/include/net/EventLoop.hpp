@@ -28,7 +28,7 @@ private:
     void handleClientActivity(int clientFd, uint32_t events);
     void handleCgiActivity(int clientFd, int pipeFd, short events);
     void execute(int clientFd, HttpSession::Action action);
-    void launchCgi(ConnectionRegistry::Client& client, const CgiRequest& request);
+    void launchCgi(ConnectionRegistry::Client& client, CgiRequest request);
     void closeCgi(int clientFd);
     void closeConnection(int fd);
     void cleanupTimedOutConnections();

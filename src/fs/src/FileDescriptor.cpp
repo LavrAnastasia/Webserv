@@ -35,11 +35,15 @@ bool FileDescriptor::isOpen() const {
     return fd_ >= 0;
 }
 
-void FileDescriptor::close() {
-    if (isOpen()) {
-        ::close(fd_);
-        fd_ = -1;
+bool FileDescriptor::close() {
+    if (!isOpen()) {
+        return true;
     }
+
+    const bool closed = ::close(fd_) == 0;
+    fd_ = -1;
+
+    return closed;
 }
 
 bool FileDescriptor::setNonBlocking() {

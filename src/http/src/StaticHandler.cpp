@@ -15,7 +15,6 @@
 #include <utility>
 #include <vector>
 
-
 namespace {
     namespace fs = std::filesystem;
 
@@ -172,39 +171,43 @@ namespace {
     }
 } // namespace
 
-HttpResponse StaticHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
-    if (request.path.empty() || request.path.front() != '/') {
-        return ErrorResponseFactory::create(HttpStatus::BadRequest, route);
+DispatchResult StaticHandler::start(HttpRequest request, ResolvedRoute route) {
+    return std::make_unique<StaticHandler>(std::move(request), std::move(route));
+}
+
+HandlerResult StaticHandler::handle() {
+    if (request_.path.empty() || request_.path.front() != '/') {
+        return ErrorResponseFactory::create(HttpStatus::BadRequest, route_);
     }
 
     try {
-        const fs::path root = fs::weakly_canonical(route.root);
-        const fs::path requestedPath = Fs::resolve(root, fs::path(request.path));
+        const fs::path root = fs::weakly_canonical(route_.root);
+        const fs::path requestedPath = Fs::resolve(root, fs::path(request_.path));
 
-        if (request.method == HttpMethod::Delete)
-            return handleDeleteRequest(requestedPath, root, route);
+        if (request_.method == HttpMethod::Delete)
+            return handleDeleteRequest(requestedPath, root, route_);
 
         const fs::path filePath = fs::weakly_canonical(requestedPath);
 
         if (!Fs::isPrefixOf(root, filePath)) {
-            return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+            return ErrorResponseFactory::create(HttpStatus::Forbidden, route_);
         }
 
         const fs::file_status fileStatus = fs::status(filePath);
 
         if (!fs::exists(fileStatus)) {
-            return ErrorResponseFactory::create(HttpStatus::NotFound, route);
+            return ErrorResponseFactory::create(HttpStatus::NotFound, route_);
         }
 
         if (fs::is_directory(fileStatus)) {
-            return handleDirectoryRequest(filePath, root, request, route);
+            return handleDirectoryRequest(filePath, root, request_, route_);
         }
 
         if (!fs::is_regular_file(fileStatus)) {
-            return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
+            return ErrorResponseFactory::create(HttpStatus::Forbidden, route_);
         }
-        return handleFileRequest(filePath, route);
+        return handleFileRequest(filePath, route_);
     } catch (const fs::filesystem_error& error) {
-        return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
+        return ErrorResponseFactory::create(Http::Status::from(error.code()), route_);
     }
 }

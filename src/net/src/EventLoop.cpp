@@ -1,6 +1,5 @@
 #include "net/EventLoop.hpp"
 #include "log/Log.hpp"
-#include "net/TcpServer.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -151,14 +150,14 @@ void EventLoop::execute(int clientFd, HttpSession::Action action) {
     } else if (HttpSession::Stream* stream = std::get_if<HttpSession::Stream>(&action)) {
         client->connection.queue(std::move(stream->bytes));
         poller_.modifySocket(clientFd, POLLOUT);
-    } else if (const CgiRequest* request = std::get_if<CgiRequest>(&action)) {
-        launchCgi(*client, *request);
+    } else if (CgiRequest* request = std::get_if<CgiRequest>(&action)) {
+        launchCgi(*client, std::move(*request));
     } else {
         poller_.modifySocket(clientFd, POLLIN);
     }
 }
 
-void EventLoop::launchCgi(ConnectionRegistry::Client& client, const CgiRequest& request) {
+void EventLoop::launchCgi(ConnectionRegistry::Client& client, CgiRequest request) {
     const int clientFd = client.connection.getFd();
 
     if (cgiRegistry_.size() >= kMaxCgi) {
@@ -167,11 +166,13 @@ void EventLoop::launchCgi(ConnectionRegistry::Client& client, const CgiRequest& 
         return;
     }
 
-    std::optional<CgiProcess> process = CgiProcess::launch(request);
+    const std::string script = request.script.string();
+    const std::string interpreter = request.interpreter.string();
+    std::optional<CgiProcess> process = CgiProcess::launch(std::move(request));
 
     if (!process) {
         Log::error(
-            "failed to start CGI " + request.script.string() + " with " + request.interpreter.string() +
+            "failed to start CGI " + script + " with " + interpreter +
             ", client: " + client.connection.info().remoteAddr
         );
         execute(clientFd, client.session.fail(HttpSession::CgiFailure::Launch));

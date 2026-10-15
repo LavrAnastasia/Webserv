@@ -21,7 +21,6 @@ namespace {
     std::string headerVariableName(std::string_view name) {
         std::string result = "HTTP_";
 
-        // pre-allocate memory to avoid unnecessary reallocations while appending
         result.reserve(result.size() + name.size());
 
         for (const unsigned char c : name) {
@@ -53,7 +52,6 @@ namespace {
 
     void addHttpHeaders(std::vector<std::string>& env, const HttpHeaders& headers) {
         for (const std::string& name : headers.names()) {
-            // ContentType and ContentLength handled separately in build(), Proxy skipped intentionally
             if (HttpHeaders::equals(name, Http::Headers::ContentType) ||
                 HttpHeaders::equals(name, Http::Headers::ContentLength) ||
                 HttpHeaders::equals(name, Http::Headers::Proxy)) {

@@ -12,7 +12,7 @@
 #include "http/HttpStatus.hpp"
 
 namespace {
-    constexpr std::size_t kHeaderLimit = 16 * 1024;
+    constexpr std::size_t kHeaderLimit = 16 * 1024; // 16 KB
     constexpr std::size_t kStatusCodeSize = 3;
     constexpr int kMinStatus = 200;
     constexpr int kMaxStatus = 599;

@@ -11,7 +11,6 @@
 #include "ConfigDirective.hpp"
 #include "ConfigNode.hpp"
 
-
 class ConfigValidator {
 private:
     static void validateServerBlock(const ConfigNode& node);

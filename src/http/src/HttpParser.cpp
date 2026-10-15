@@ -1,5 +1,8 @@
+#include <algorithm>
 #include <charconv>
+#include <limits>
 #include <string_view>
+#include <utility>
 
 #include "HeaderFields.hpp"
 #include "HeadersParser.hpp"
@@ -40,19 +43,28 @@ namespace {
 
 } // namespace
 
-HttpParser::HttpParser(std::size_t maxBodySize)
+HttpParser::HttpParser()
     : _buffer(), _state(ParserState::StartLine), _failure(), _request(), _contentLength(0), _currentChunkSize(0),
-      _maxBodySize(maxBodySize) {
+      _received(0) {
 }
 
 HttpParser::Step HttpParser::fail(HttpStatus status) {
     _failure = status;
+    _buffer.clear();
 
     return Step::Continue;
 }
 
-ParseResult HttpParser::append(const char* data, std::size_t size) {
-    _buffer.append(data, size);
+void HttpParser::receive(std::string_view bytes) {
+    if (!_failure) {
+        _buffer.append(bytes);
+    }
+}
+
+ParseResult HttpParser::parse() {
+    if (_failure) {
+        return Failed{*_failure};
+    }
 
     while (true) {
         Step step = Step::WaitForData;
@@ -76,12 +88,26 @@ ParseResult HttpParser::append(const char* data, std::size_t size) {
             case ParserState::ChunkEnd:
                 step = handleChunkEnd();
                 break;
+            case ParserState::ChunkDelimiter:
+                step = handleChunkDelimiter();
+                break;
             case ParserState::Complete:
-                return Complete{_request};
+                return Complete{};
         }
 
         if (_failure) {
             return Failed{*_failure};
+        }
+
+        if (step == Step::BodyData) {
+            return BodyData{std::move(_bodyData)};
+        }
+
+        if (step == Step::HeadersData) {
+            return HeadersData{
+                std::move(_request),
+                _state == ParserState::ChunkSize ? std::nullopt : std::optional<std::size_t>(_contentLength)
+            };
         }
 
         if (step == Step::WaitForData) {
@@ -153,7 +179,7 @@ HttpParser::Step HttpParser::handleHeaders() {
     if (transferEncoding) {
         if (Http::Ascii::tolower(*transferEncoding) == Http::Headers::TransferCoding::Chunked) {
             _state = ParserState::ChunkSize;
-            return Step::Continue;
+            return Step::HeadersData;
         }
         return fail(HttpStatus::NotImplemented);
     }
@@ -164,26 +190,25 @@ HttpParser::Step HttpParser::handleHeaders() {
     }
     _contentLength = *contentLength;
 
-    if (!fits(_contentLength)) {
-        return fail(HttpStatus::PayloadTooLarge);
-    }
     if (_contentLength > 0) {
         _state = ParserState::Body;
     } else {
         _state = ParserState::Complete;
     }
-    return Step::Continue;
+    return Step::HeadersData;
 }
 
 HttpParser::Step HttpParser::handleBody() {
-    if (_buffer.size() < _contentLength) {
-        return Step::WaitForData;
-    }
+    const std::size_t size = std::min(_buffer.size(), _contentLength - _received);
+    cutBody(size);
 
-    _request.body = _buffer.substr(0, _contentLength);
-    _buffer.erase(0, _contentLength);
-    _state = ParserState::Complete;
-    return Step::Continue;
+    if (_received == _contentLength) {
+        _state = ParserState::Complete;
+    }
+    if (size != 0) {
+        return Step::BodyData;
+    }
+    return _received == _contentLength ? Step::Continue : Step::WaitForData;
 }
 
 HttpParser::Step HttpParser::handleChunkSize() {
@@ -215,17 +240,13 @@ HttpParser::Step HttpParser::handleChunkSize() {
     if (!chunkSize) {
         return fail(HttpStatus::BadRequest);
     }
+    if (*chunkSize > std::numeric_limits<std::size_t>::max() - _contentLength) {
+        return fail(HttpStatus::BadRequest);
+    }
     _currentChunkSize = *chunkSize;
-    if (!fits(_currentChunkSize)) {
-        return fail(HttpStatus::PayloadTooLarge);
-    }
+    _contentLength += _currentChunkSize;
+    _state = _currentChunkSize == 0 ? ParserState::ChunkEnd : ParserState::ChunkData;
 
-    if (_currentChunkSize == 0) {
-        _state = ParserState::ChunkEnd;
-        return Step::Continue;
-    }
-
-    _state = ParserState::ChunkData;
     return Step::Continue;
 }
 
@@ -244,17 +265,27 @@ HttpParser::Step HttpParser::handleChunkEnd() {
 }
 
 HttpParser::Step HttpParser::handleChunkData() {
-    if (_buffer.size() < _currentChunkSize)
+    const std::size_t size = std::min(_buffer.size(), _currentChunkSize);
+    cutBody(size);
+    _currentChunkSize -= size;
+
+    if (_currentChunkSize == 0) {
+        _state = ParserState::ChunkDelimiter;
+    }
+    if (size != 0) {
+        return Step::BodyData;
+    }
+    return _currentChunkSize == 0 ? Step::Continue : Step::WaitForData;
+}
+
+HttpParser::Step HttpParser::handleChunkDelimiter() {
+    if (_buffer.size() < Http::Syntax::CRLF.size()) {
         return Step::WaitForData;
-    if (_buffer.size() - _currentChunkSize < Http::Syntax::CRLF.size())
-        return Step::WaitForData;
-    if (_buffer.compare(_currentChunkSize, Http::Syntax::CRLF.size(), Http::Syntax::CRLF) != 0) {
+    }
+    if (!_buffer.starts_with(Http::Syntax::CRLF)) {
         return fail(HttpStatus::BadRequest);
     }
-
-    _request.body += _buffer.substr(0, _currentChunkSize);
-    _buffer.erase(0, _currentChunkSize + Http::Syntax::CRLF.size());
-
+    _buffer.erase(0, Http::Syntax::CRLF.size());
     _state = ParserState::ChunkSize;
     return Step::Continue;
 }
@@ -269,19 +300,14 @@ std::optional<std::size_t> HttpParser::parseContentLength() const {
     return parseUnsigned(*value, 10);
 }
 
-bool HttpParser::fits(std::size_t size) const {
-    // TODO: WEB-34 when the body is read in chunks, count received bytes instead of body.size()
-    const std::size_t received = _request.body.size();
-
-    return received <= _maxBodySize && size <= _maxBodySize - received;
-}
-
 void HttpParser::reset() {
     _state = ParserState::StartLine;
     _failure = std::nullopt;
     _request = HttpRequest();
     _contentLength = 0;
     _currentChunkSize = 0;
+    _received = 0;
+    _bodyData.clear();
 }
 
 bool HttpParser::isIdle() const {
@@ -290,4 +316,14 @@ bool HttpParser::isIdle() const {
 
 bool HttpParser::hasHeaders() const {
     return _state != ParserState::StartLine && _state != ParserState::Headers;
+}
+
+std::size_t HttpParser::announcedBodySize() const {
+    return _contentLength;
+}
+
+void HttpParser::cutBody(std::size_t size) {
+    _bodyData.assign(_buffer, 0, size);
+    _buffer.erase(0, size);
+    _received += size;
 }

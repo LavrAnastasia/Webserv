@@ -26,7 +26,7 @@ const ServerConfig* TcpServer::getConfigForFd(int listenFd) const {
     Called by EventLoop when Poller triggers a POLLIN on a listening port.
     Finds the corresponding ServerSocket object and tells it to accept the new client.
     Obtains client info from the ServerSocket and returns it as a ClientInfo object.
-    ClientInfo ip and port variables are passed by reference and populated by
+    ClientInfo ip variable is passed by reference and populated by
     acceptConnection()
 */
 std::variant<TcpServer::ClientInfo, TcpServer::AcceptError> TcpServer::acceptClient(int listenFd) {
@@ -36,7 +36,7 @@ std::variant<TcpServer::ClientInfo, TcpServer::AcceptError> TcpServer::acceptCli
     }
 
     ClientInfo info;
-    info.fd = server->acceptConnection(info.ip, info.port);
+    info.fd = server->acceptConnection(info.ip);
 
     if (info.fd < 0) {
         // errno after accept() is allowed: the subject forbids it only after read/write

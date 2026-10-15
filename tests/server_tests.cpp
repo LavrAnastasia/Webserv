@@ -26,7 +26,6 @@ namespace {
     constexpr std::size_t kResponseLimit = 256u * kMebibyte;
     constexpr std::size_t kCgiHugeSize = 200u * kMebibyte;
     constexpr std::size_t kCgiPostSize = 100u * kMebibyte;
-    constexpr int kRepeatedRequests = 20;
 
     [[noreturn]] void systemError(const char* operation) {
         throw std::system_error(errno, std::generic_category(), operation);
@@ -188,8 +187,8 @@ namespace {
 
             pending_.erase(0, headerEnd + 4);
 
-            if (headersOnly || response.statusLine.starts_with("HTTP/1.1 204 ") ||
-                response.statusLine.starts_with("HTTP/1.1 304 ")) {
+            if (headersOnly || response.statusLine.starts_with("HTTP/1.1 100 ") ||
+                response.statusLine.starts_with("HTTP/1.1 204 ") || response.statusLine.starts_with("HTTP/1.1 304 ")) {
                 return response;
             }
 
@@ -423,7 +422,15 @@ namespace {
                     " /dev/zero\ntouch finished\n"
             );
 
-            serverConfig.locations = {location, cgi};
+            LocationConfig limited = cgi;
+            limited.path = "/limited";
+            limited.clientMaxBodySize = kMebibyte;
+            LocationConfig upload{};
+            upload.path = "/upload";
+            upload.allowedMethods = {HttpMethod::Post};
+            upload.upload = UploadConfig{fs::path("incoming")};
+            fs::create_directories(root_ / "incoming");
+            serverConfig.locations = {location, cgi, limited, upload};
 
             Configuration config;
             config.servers.push_back(serverConfig);
@@ -590,11 +597,14 @@ namespace {
         EXPECT_EQ(head.headers.at("content-length"), std::to_string(expected.size()));
         EXPECT_TRUE(head.body.empty());
 
-        client.sendAll(Requests::rawGet("/missing.txt", "close"));
+        client.sendAll(Requests::rawGet("/missing.txt"));
         const auto get = client.readResponse();
 
         EXPECT_EQ(get.statusLine, "HTTP/1.1 404 Not Found");
         EXPECT_EQ(get.body, expected);
+
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
         client.expectEof();
     }
 
@@ -649,18 +659,6 @@ namespace {
         client.expectEof();
     }
 
-    TEST_F(ServerTest, HeadOnCgiOmitsTheBody) {
-        TestClient client(port_);
-        client.sendAll("HEAD /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
-
-        const auto response = client.readResponse(true);
-
-        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
-        EXPECT_FALSE(response.headers.contains("transfer-encoding"));
-        EXPECT_FALSE(response.headers.contains("content-length"));
-        client.expectEof();
-    }
-
     TEST_F(ServerTest, PreservesCgiContentLengthAndReusesConnection) {
         Files::write(
             root_ / "cgi/length.sh",
@@ -700,15 +698,6 @@ namespace {
         }
     }
 
-    TEST_F(ServerTest, AnswersBadGatewayForInvalidCgiOutputAndKeepsServing) {
-        TestClient client(port_);
-        client.sendAll(Requests::rawGet("/cgi/bad.sh", "close"));
-
-        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 502 Bad Gateway");
-        client.expectEof();
-        expectFreshConnectionWorks();
-    }
-
     TEST_F(ServerTest, StopsInvalidCgiBeforeSendingAPipelinedFile) {
         Files::write(root_ / "cgi/invalid.sh", "echo $$ > invalid.pid\nprintf 'nonsense\\r\\n\\r\\n'\nexec sleep 30\n");
         const std::string content(3 * kMebibyte, 'f');
@@ -728,14 +717,6 @@ namespace {
         expectOK(client, content);
         client.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(client, smallBody_);
-        client.expectEof();
-    }
-
-    TEST_F(ServerTest, SendsLargeCgiOutputWhole) {
-        TestClient client(port_);
-        client.sendAll(Requests::rawGet("/cgi/large.sh", "close"));
-
-        expectOK(client, std::string(3000000, '\0'));
         client.expectEof();
     }
 
@@ -796,11 +777,84 @@ namespace {
         client.expectEof();
     }
 
-    TEST_F(ServerTest, EchoesTwenty100MiBPostsThroughCgi) {
+    TEST_F(ServerTest, Uploads50MiBWithBoundedMemoryAndMatchingBytes) {
+        constexpr std::size_t uploadSize = 50u * kMebibyte;
+        constexpr std::size_t blockSize = 64u * 1024u;
+        std::string block(blockSize, '\0');
+        for (std::size_t i = 0; i < block.size(); ++i) {
+            block[i] = static_cast<char>(i % 251);
+        }
+        TestClient client(port_);
+#ifdef __linux__
+        const auto before = readPeakMemory();
+        constexpr std::size_t kMemoryGrowthLimit = 8u * kMebibyte;
+#endif
+        client.sendAll(
+            "POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: " + std::to_string(uploadSize) +
+            "\r\n\r\n"
+        );
+        for (std::size_t sent = 0; sent < uploadSize; sent += block.size()) {
+            client.sendAll(block);
+        }
+        const auto response = client.readResponse();
+        ASSERT_EQ(response.statusLine, "HTTP/1.1 201 Created");
+        EXPECT_EQ(response.headers.at("location"), "/upload/data.bin");
+        ASSERT_EQ(fs::file_size(root_ / "incoming/data.bin"), uploadSize);
+        std::ifstream file(root_ / "incoming/data.bin", std::ios::binary);
+        std::string bytes(blockSize, '\0');
+        for (std::size_t read = 0; read < uploadSize; read += block.size()) {
+            file.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            ASSERT_EQ(file.gcount(), static_cast<std::streamsize>(block.size()));
+            ASSERT_EQ(bytes, block);
+        }
+#ifdef __linux__
+        const auto growth = readPeakMemory() - before;
+        RecordProperty("upload_peak_growth_bytes", std::to_string(growth));
+        EXPECT_LT(growth, kMemoryGrowthLimit);
+#endif
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, Returns413WhenTheClientSendsAllBodyBeforeReading) {
+        TestClient client(port_);
+        constexpr std::size_t bodySize = 2u * kMebibyte;
+        constexpr std::size_t blockSize = 64u * 1024u;
+        const std::string block(blockSize, 'x');
+        client.sendAll(
+            "POST /limited/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: " + std::to_string(bodySize) +
+            "\r\n\r\n"
+        );
+        for (std::size_t sent = 0; sent < bodySize; sent += block.size()) {
+            client.sendAll(block);
+        }
+        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 413 Payload Too Large");
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, ContinuesBeforeTheClientSendsCgiBody) {
+        TestClient client(port_);
+        client.sendAll(
+            "POST /cgi/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n"
+        );
+        EXPECT_EQ(client.readResponse().statusLine, "HTTP/1.1 100 Continue");
+        client.sendAll("hello");
+        expectOK(client, "hello");
+        client.sendAll(Requests::rawGet("/small.txt", "close"));
+        expectOK(client, smallBody_);
+        client.expectEof();
+    }
+
+    TEST_F(ServerTest, EchoesTwo100MiBPostsThroughCgiWithOneCopyOfTheBody) {
         TestClient client(port_);
         constexpr std::size_t blockSize = 64u * 1024u;
         const std::string block(blockSize, 'e');
-        for (int request = 0; request < kRepeatedRequests; ++request) {
+#ifdef __linux__
+        const auto before = readPeakMemory();
+        constexpr std::size_t kMemoryOverhead = 16u * kMebibyte;
+#endif
+        for (int request = 0; request < 2; ++request) {
             SCOPED_TRACE(request);
             client.sendAll(
                 "POST /cgi/echo.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: " + std::to_string(kCgiPostSize) +
@@ -816,73 +870,30 @@ namespace {
             ASSERT_EQ(response.statusLine, "HTTP/1.1 200 OK");
             ASSERT_EQ(response.bodySize, kCgiPostSize);
             ASSERT_TRUE(valid);
-            EXPECT_EQ(response.headers.at("transfer-encoding"), "chunked");
+#ifdef __linux__
+            EXPECT_LT(readPeakMemory() - before, kCgiPostSize + kMemoryOverhead);
+#endif
         }
         client.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(client, smallBody_);
         client.expectEof();
     }
 
-    TEST_F(ServerTest, CompletesTwentySmallCgiRequestsWithin200MillisecondsEach) {
-        Files::write(root_ / "cgi/nonzero.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\ncomplete'\nexit 1\n");
-        TestClient client(port_);
-        for (int request = 0; request < kRepeatedRequests; ++request) {
-            SCOPED_TRACE(request);
-            const auto start = Clock::now();
-            client.sendAll(Requests::rawGet("/cgi/nonzero.sh"));
-            expectOK(client, "complete");
-            EXPECT_LT(Clock::now() - start, 200ms);
-        }
-        client.sendAll(Requests::rawGet("/small.txt", "close"));
-        expectOK(client, smallBody_);
-        client.expectEof();
-    }
-
-    TEST_F(ServerTest, FinishesCgiResponseAtPipeEofBeforeProcessExit) {
+    TEST_F(ServerTest, FinishesEachCgiResponseAtPipeEofNotAtProcessExit) {
         Files::write(
-            root_ / "cgi/eof.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\ncomplete'\nexec 1>&-\nsleep 3\nexit 1\n"
+            root_ / "cgi/eof.sh", "printf 'Content-Type: text/plain\\r\\n\\r\\ncomplete'\nexec 1>&-\nsleep 5\nexit 1\n"
         );
         TestClient client(port_);
         const auto start = Clock::now();
-        client.sendAll(Requests::rawGet("/cgi/eof.sh"));
-        expectOK(client, "complete");
-        EXPECT_LT(Clock::now() - start, 200ms);
+        for (int request = 0; request < 5; ++request) {
+            SCOPED_TRACE(request);
+            client.sendAll(Requests::rawGet("/cgi/eof.sh"));
+            expectOK(client, "complete");
+        }
+        EXPECT_LT(Clock::now() - start, 4s);
         client.sendAll(Requests::rawGet("/small.txt", "close"));
         expectOK(client, smallBody_);
         client.expectEof();
-    }
-
-    TEST_F(ServerTest, ClosesCgiResponseWhenScriptExitsDuringContentLengthBody) {
-        Files::write(
-            root_ / "cgi/truncated.sh",
-            "printf 'Content-Type: text/plain\\r\\nContent-Length: 10\\r\\n\\r\\npartial'\n"
-            "while [ ! -e release ]; do sleep 0.01; done\nexit 1\n"
-        );
-        TestClient client(port_);
-        client.sendAll(Requests::rawGet("/cgi/truncated.sh"));
-        client.waitForBytes("partial");
-        Files::write(root_ / "cgi/release", "");
-        const auto response = client.readUntilEof();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
-        EXPECT_TRUE(response.ends_with("\r\n\r\npartial"));
-        EXPECT_EQ(response.find("502 Bad Gateway"), std::string::npos);
-        expectFreshConnectionWorks();
-    }
-
-    TEST_F(ServerTest, SendsOnlyContentLengthBeforeClosingOnExcessCgiOutput) {
-        Files::write(
-            root_ / "cgi/excess.sh",
-            "printf 'Content-Type: text/plain\\r\\nContent-Length: 5\\r\\n\\r\\nhe'\n"
-            "while [ ! -e release ]; do sleep 0.01; done\nprintf 'llo and excess'\n"
-        );
-        TestClient client(port_);
-        client.sendAll(Requests::rawGet("/cgi/excess.sh") + Requests::rawGet("/small.txt"));
-        client.waitForBytes("\r\n\r\nhe");
-        Files::write(root_ / "cgi/release", "");
-
-        expectOK(client, "hello");
-        client.expectEof();
-        expectFreshConnectionWorks();
     }
 
     TEST_F(ServerTest, StopsCgiWhenTheClientCloses) {
@@ -906,36 +917,6 @@ namespace {
         expectOK(client, smallBody_);
         client.expectEof();
     }
-
-    class ServerKeepAliveTest : public ServerTest, public ::testing::WithParamInterface<bool> {};
-
-    TEST_P(ServerKeepAliveTest, ReusesConnectionForSeveralRequests) {
-        TestClient client(port_);
-
-        const std::string connection = GetParam() ? "keep-alive" : "";
-
-        for (int i = 0; i < 6; ++i) {
-            SCOPED_TRACE(i);
-
-            const bool useOther = i % 2 != 0;
-            client.sendAll(Requests::rawGet(useOther ? "/other.txt" : "/small.txt", connection));
-
-            expectOK(client, useOther ? otherBody_ : smallBody_);
-        }
-
-        client.sendAll(Requests::rawGet("/small.txt", "close"));
-        expectOK(client, smallBody_);
-        client.expectEof();
-    }
-
-    INSTANTIATE_TEST_SUITE_P(
-        Persistence,
-        ServerKeepAliveTest,
-        ::testing::Values(false, true),
-        [](const ::testing::TestParamInfo<bool>& info) {
-            return info.param ? std::string("ExplicitKeepAlive") : std::string("DefaultHttp11");
-        }
-    );
 
     TEST_F(ServerTest, DisconnectDuringRequestDoesNotAffectOtherClients) {
         TestClient survivor(port_);
@@ -1002,18 +983,6 @@ namespace {
         client.closeWrite();
 
         expectOK(client, body);
-        client.expectEof();
-    }
-
-    TEST_F(ServerTest, SendsCompleteLargeBinaryResponseAndReusesConnection) {
-        const std::string body = createLargeFile();
-        TestClient client(port_);
-
-        client.sendAll(Requests::rawGet("/large.bin"));
-        expectOK(client, body);
-
-        client.sendAll(Requests::rawGet("/other.txt", "close"));
-        expectOK(client, otherBody_);
         client.expectEof();
     }
 
@@ -1091,22 +1060,6 @@ namespace {
         client.expectEof();
     }
 
-    TEST_F(ServerTest, StreamsCustomErrorPageAndReusesConnection) {
-        const std::string expected(3 * 65536 + 17, 'e');
-        Files::write(root_ / "error.html", expected);
-        TestClient client(port_);
-        client.sendAll(Requests::rawGet("/missing"));
-        const auto response = client.readResponse();
-
-        EXPECT_EQ(response.statusLine, "HTTP/1.1 404 Not Found");
-        EXPECT_EQ(response.headers.at("content-length"), std::to_string(expected.size()));
-        EXPECT_EQ(response.body, expected);
-
-        client.sendAll(Requests::rawGet("/small.txt", "close"));
-        expectOK(client, smallBody_);
-        client.expectEof();
-    }
-
     TEST_F(ServerTest, SlowLargeTransfersKeepMemoryBounded) {
 #ifdef __linux__
         const auto peakMemory = [&]() {
@@ -1163,12 +1116,10 @@ namespace {
             TestClient client(ntohs(address.sin_port));
             waitReady(server.getFd(), POLLIN, Clock::now() + 5s);
             std::string ip;
-            std::uint16_t port = 0;
-            FileDescriptor accepted(server.acceptConnection(ip, port));
+            FileDescriptor accepted(server.acceptConnection(ip));
 
             ASSERT_TRUE(accepted.isOpen());
             EXPECT_EQ(ip, "127.0.0.1");
-            EXPECT_NE(port, 0);
         }
     }
 

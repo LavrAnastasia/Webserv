@@ -25,7 +25,6 @@ CONFIG_SRC := $(addprefix src/config/src/, \
 	ConfigError.cpp \
 	ConfigReadError.cpp \
 	ConfigSyntaxError.cpp \
-	ServerConfig.cpp \
 )
 
 FS_SRC := $(addprefix src/fs/src/, \
@@ -63,6 +62,7 @@ HTTP_SRC := $(addprefix src/http/src/, \
 	MimeTypes.cpp \
 	HttpHtmlUtils.cpp \
 	RequestDispatcher.cpp \
+	RequestHandler.cpp \
 	HttpRequest.cpp \
 	CgiEnvironment.cpp \
 	CgiHandler.cpp \

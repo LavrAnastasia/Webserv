@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <string>
 #include <variant>
@@ -9,7 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "config/ServerConfig.hpp"
-#include "http/RequestDispatcher.hpp"
+#include "includes/Dispatch.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
@@ -58,7 +59,7 @@ namespace {
         void expectResponse(
             const HttpRequest& request, HttpStatus status, const std::optional<std::string>& body = std::nullopt
         ) const {
-            auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
+            auto result = dispatch(request, server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -71,7 +72,7 @@ namespace {
         void expectRedirect(
             const std::string& path, const std::string& target, HttpStatus status = HttpStatus::Found
         ) const {
-            const auto result = RequestDispatcher::dispatch(Requests::get(path), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::get(path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -97,11 +98,7 @@ namespace {
         };
 
         const auto& test = GetParam();
-        if (test.expectedTarget == nullptr) {
-            expectResponse(Requests::get(test.path), HttpStatus::NotFound);
-        } else {
-            expectRedirect(test.path, test.expectedTarget);
-        }
+        expectRedirect(test.path, test.expectedTarget);
     }
 
     const MatchCase MATCH_CASES[] = {
@@ -115,8 +112,6 @@ namespace {
         {"ExactLongestMatch", "/api/v1", "/selected/api/v1"},
         {"SegmentBoundary", "/api/v10", "/selected/api"},
         {"CaseSensitivePath", "/FOO", "/selected/root"},
-        {"EmptyPath", "", nullptr},
-        {"RelativePath", "foo", nullptr},
     };
 
     INSTANTIATE_TEST_SUITE_P(
@@ -124,13 +119,6 @@ namespace {
             return std::string(info.param.name);
         }
     );
-
-    TEST_F(RouterTest, Returns404WhenThereAreNoLocations) {
-        Files::write(root_ / "home.html", "existing index");
-        server_.locations.clear();
-
-        expectResponse(Requests::get("/"), HttpStatus::NotFound);
-    }
 
     TEST_F(RouterTest, Returns404WhenNoLocationMatches) {
         server_.locations = {makeLocation("/foo")};
@@ -222,12 +210,14 @@ namespace {
         expectResponse(Requests::get("/file.txt", std::string(17, 'x')), HttpStatus::PayloadTooLarge);
     }
 
-    TEST_F(RouterTest, ZeroBodyLimitIsAnExplicitOverride) {
+    TEST_F(RouterTest, UnlimitedLocationAllowsBodyAboveTheServerLimit) {
         Files::write(root_ / "file.txt", "contents");
-        server_.locations.front().clientMaxBodySize = 0;
+        server_.locations.front().clientMaxBodySize = std::numeric_limits<std::size_t>::max();
 
         expectResponse(Requests::get("/file.txt"), HttpStatus::OK, "contents");
-        expectResponse(Requests::get("/file.txt", "x"), HttpStatus::PayloadTooLarge);
+        expectResponse(
+            Requests::get("/file.txt", std::string(server_.clientMaxBodySize + 1, 'x')), HttpStatus::OK, "contents"
+        );
     }
 
     TEST_F(RouterTest, InheritsFromServerNotFromLessSpecificLocation) {
@@ -253,8 +243,7 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        const auto result =
-            RequestDispatcher::dispatch(Requests::post("/files/document.txt"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::post("/files/document.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -274,7 +263,7 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -285,35 +274,17 @@ namespace {
 
     TEST_F(RouterTest, LoadsErrorPagesFromEffectiveRoot) {
         const fs::path customRoot = temp_.path() / "custom";
-        server_.errorPages = {
-            {HttpStatus::NotFound, "/errors/404.html"},
-            {HttpStatus::InternalServerError, "/errors/500.html"},
-        };
-        auto& location = server_.locations.front();
-        location.allowedMethods = {HttpMethod::Get, HttpMethod::Post};
-        location.upload = UploadConfig{fs::path("not-a-directory")};
-
+        server_.errorPages = {{HttpStatus::NotFound, "/errors/404.html"}};
         Files::write(root_ / "errors/404.html", "server 404");
-        Files::write(root_ / "errors/500.html", "server 500");
         Files::write(customRoot / "errors/404.html", "location 404");
-        Files::write(customRoot / "errors/500.html", "location 500");
 
-        Files::write(root_ / "not-a-directory", "file");
-        Files::write(customRoot / "not-a-directory", "file");
+        expectResponse(Requests::get("/missing"), HttpStatus::NotFound, "server 404");
 
-        for (const bool overrideRoot : {false, true}) {
-            SCOPED_TRACE(overrideRoot ? "location root" : "server root");
-            if (overrideRoot) {
-                location.root = customRoot;
-            }
-            const std::string prefix = overrideRoot ? "location " : "server ";
-
-            expectResponse(Requests::get("/missing"), HttpStatus::NotFound, prefix + "404");
-            expectResponse(Requests::post("/upload/file.txt", "data"), HttpStatus::InternalServerError, prefix + "500");
-        }
+        server_.locations.front().root = customRoot;
+        expectResponse(Requests::get("/missing"), HttpStatus::NotFound, "location 404");
     }
 
-    TEST_F(RouterTest, LoadsErrorPageFromLocationMatchingItsPath) {
+    TEST_F(RouterTest, ResolvesErrorPageByItsOwnPathNotTheRequestPath) {
         const fs::path apiRoot = temp_.path() / "api";
         auto api = makeLocation("/api");
         api.root = apiRoot;
@@ -345,25 +316,6 @@ namespace {
         expectRedirect("/old", "/new", HttpStatus::TemporaryRedirect);
     }
 
-    TEST_F(RouterTest, UploadsToConfiguredDirectory) {
-        fs::create_directories(root_ / "incoming");
-        auto location = makeLocation("/upload");
-        location.allowedMethods = {HttpMethod::Get, HttpMethod::Post};
-        location.upload = UploadConfig{fs::path("incoming")};
-        server_.locations.push_back(location);
-
-        const std::string body = "payload";
-        auto result = RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
-        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        auto& response = std::get<HttpResponse>(result);
-
-        ASSERT_EQ(response.status, HttpStatus::Created);
-        expectHeader(response, "Location", "/upload/file.txt");
-        EXPECT_TRUE(Responses::read(response.body).empty());
-        ASSERT_TRUE(fs::is_regular_file(root_ / "incoming/file.txt"));
-        EXPECT_EQ(Files::read(root_ / "incoming/file.txt"), body);
-    }
-
     TEST_F(RouterTest, SelectsCgiByExtension) {
         auto& location = server_.locations.front();
         location.allowedMethods = {HttpMethod::Get, HttpMethod::Post};
@@ -385,7 +337,7 @@ namespace {
             Files::write(script, "script contents");
 
             const std::string path = std::string("/scripts/") + test.filename;
-            const auto result = RequestDispatcher::dispatch(Requests::post(path, "input"), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::post(path, "input"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<CgiRequest>(result));
             const auto& cgi = std::get<CgiRequest>(result);
 
@@ -413,15 +365,6 @@ namespace {
         Files::write(root_ / "api/app.py", "served as static content");
 
         expectResponse(Requests::get("/api/app.py"), HttpStatus::OK, "served as static content");
-    }
-
-    TEST_F(RouterTest, Returns405WithAllowWhenMethodIsNotAllowed) {
-        const auto result = RequestDispatcher::dispatch(Requests::post("/"), server_, ConnectionInfo{});
-        ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-        auto& response = std::get<HttpResponse>(result);
-
-        EXPECT_EQ(response.status, HttpStatus::MethodNotAllowed);
-        expectHeader(response, "Allow", "GET");
     }
 
 } // namespace

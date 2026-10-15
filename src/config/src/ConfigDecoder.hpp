@@ -14,7 +14,6 @@
 #include "http/HttpMethod.hpp"
 #include "http/HttpStatus.hpp"
 
-
 class ConfigDecoder {
 public:
     static std::string decodeLocationPath(std::string_view value);

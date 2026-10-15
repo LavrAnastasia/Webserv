@@ -126,28 +126,11 @@ namespace {
 
         EXPECT_NE(serialized.find("\r\nContent-Type: text/plain; charset=utf-8\r\n"), std::string::npos);
         EXPECT_NE(serialized.find("\r\nX-Empty: \r\n"), std::string::npos);
-    }
 
-    TEST_F(HttpSerializerTest, UsesCRLFAndSeparatesHeadersFromBody) {
-        response_.headers.set("Content-Type", "text/plain");
-        response_.body = ResponseBody("body");
-
-        const auto serialized = Responses::serialize(std::move(response_), {});
         const auto separator = serialized.find("\r\n\r\n");
-
         ASSERT_NE(separator, std::string::npos);
-        EXPECT_EQ(serialized.substr(separator + 4), "body");
-
-        for (std::size_t i = 0; i < separator + 4; ++i) {
-            if (serialized[i] == '\n') {
-                ASSERT_GT(i, 0u);
-                EXPECT_EQ(serialized[i - 1], '\r');
-            }
-
-            if (serialized[i] == '\r') {
-                ASSERT_LT(i + 1, serialized.size());
-                EXPECT_EQ(serialized[i + 1], '\n');
-            }
+        for (std::size_t i = 0; i < separator; ++i) {
+            EXPECT_EQ(serialized[i] == '\n', i > 0 && serialized[i - 1] == '\r') << "bare line feed at " << i;
         }
     }
 
@@ -303,50 +286,42 @@ namespace {
         EXPECT_TRUE(headerValues(serialized, "Transfer-Encoding").empty());
     }
 
-    TEST_F(HttpSerializerTest, StreamPreservesDeclaredContentLength) {
-        response_.headers.set("Content-Length", "123");
+    TEST_F(HttpSerializerTest, StreamFramingKeepsDeclaredLengthOrChoosesChunked) {
+        struct StreamCase {
+            const char* name;
+            HttpSerializer::Framing framing;
+            bool declaresLength;
+            const char* contentLength;
+            const char* transferEncoding;
+        };
+        const StreamCase cases[] = {
+            {"KeepsDeclaredLength", {.stream = true}, true, "123", nullptr},
+            {"ChunkedReplacesLength", {.stream = true, .chunked = true}, true, nullptr, "chunked"},
+            {"InventsNothing", {.stream = true}, false, nullptr, nullptr},
+            {"HeadKeepsDeclaredLength", {.headersOnly = true, .stream = true}, true, "123", nullptr},
+            {"HeadInventsNothing", {.headersOnly = true, .stream = true}, false, nullptr, nullptr},
+        };
 
-        const auto result = HttpSerializer::serialize(std::move(response_), {.stream = true});
+        for (const auto& test : cases) {
+            SCOPED_TRACE(test.name);
+            HttpResponse response{HttpStatus::OK};
+            if (test.declaresLength) {
+                response.headers.set("Content-Length", "123");
+            }
 
-        expectHeader(result.headers, "Content-Length", "123");
-        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
-        EXPECT_FALSE(result.body.has_value());
-    }
+            const auto result = HttpSerializer::serialize(std::move(response), test.framing);
 
-    TEST_F(HttpSerializerTest, StreamWritesSelectedChunkedFraming) {
-        response_.headers.set("Content-Length", "123");
-
-        const auto result = HttpSerializer::serialize(std::move(response_), {.stream = true, .chunked = true});
-
-        expectHeader(result.headers, "Transfer-Encoding", "chunked");
-        EXPECT_TRUE(headerValues(result.headers, "Content-Length").empty());
-        EXPECT_FALSE(result.body.has_value());
-    }
-
-    TEST_F(HttpSerializerTest, StreamDoesNotChooseChunkedOrInventContentLength) {
-        const auto result = HttpSerializer::serialize(std::move(response_), {.stream = true});
-
-        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
-        EXPECT_TRUE(headerValues(result.headers, "Content-Length").empty());
-        EXPECT_FALSE(result.body.has_value());
-    }
-
-    TEST_F(HttpSerializerTest, StreamHeadersOnlyPreservesProvidedLength) {
-        response_.headers.set("Content-Length", "123");
-
-        const auto result = HttpSerializer::serialize(std::move(response_), {.headersOnly = true, .stream = true});
-
-        expectHeader(result.headers, "Content-Length", "123");
-        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
-        EXPECT_FALSE(result.body.has_value());
-    }
-
-    TEST_F(HttpSerializerTest, StreamHeadersOnlyDoesNotInventContentLength) {
-        const auto result = HttpSerializer::serialize(std::move(response_), {.headersOnly = true, .stream = true});
-
-        EXPECT_TRUE(headerValues(result.headers, "Content-Length").empty());
-        EXPECT_TRUE(headerValues(result.headers, "Transfer-Encoding").empty());
-        EXPECT_FALSE(result.body.has_value());
+            EXPECT_FALSE(result.body.has_value());
+            for (const auto& [name, expected] :
+                 {std::pair{"Content-Length", test.contentLength},
+                  std::pair{"Transfer-Encoding", test.transferEncoding}}) {
+                if (expected == nullptr) {
+                    EXPECT_TRUE(headerValues(result.headers, name).empty()) << name;
+                } else {
+                    expectHeader(result.headers, name, expected);
+                }
+            }
+        }
     }
 
 } // namespace

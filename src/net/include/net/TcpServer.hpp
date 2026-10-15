@@ -4,7 +4,6 @@
 #include "net/SocketManager.hpp"
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -37,7 +36,6 @@ public:
     struct ClientInfo {
         int fd;
         std::string ip;
-        std::uint16_t port; // Port on client's machine
         std::uint16_t serverPort; // Port on our machine (80, 443 etc)
     };
 

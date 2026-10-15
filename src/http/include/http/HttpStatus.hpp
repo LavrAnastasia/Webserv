@@ -4,6 +4,8 @@
 #include <string>
 
 enum class HttpStatus {
+    Continue = 100,
+
     OK = 200,
     Created = 201,
     NoContent = 204,
@@ -23,6 +25,7 @@ enum class HttpStatus {
     Conflict = 409,
     PayloadTooLarge = 413,
     UriTooLong = 414,
+    ExpectationFailed = 417,
     RequestHeaderFieldsTooLarge = 431,
 
     InternalServerError = 500,

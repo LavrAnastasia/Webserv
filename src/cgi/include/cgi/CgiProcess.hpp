@@ -25,7 +25,7 @@ private:
 public:
     enum class Output { Data, End, Error };
 
-    static std::optional<CgiProcess> launch(const CgiRequest& request);
+    static std::optional<CgiProcess> launch(CgiRequest request);
 
     ~CgiProcess();
 

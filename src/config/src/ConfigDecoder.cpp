@@ -145,7 +145,7 @@ std::size_t ConfigDecoder::decodeClientMaxBodySize(std::string_view value) {
         multiplier = 1024;
         value.remove_suffix(1);
     } else if (value.ends_with("m")) {
-        multiplier = 1024 * 1024;
+        multiplier = 1024 * 1024; // 1 MB
         value.remove_suffix(1);
     }
 

@@ -141,15 +141,14 @@ namespace {
         return decodedPath;
     }
 
-    void fillPathAndQuery(HttpRequest& request) {
-        std::size_t queryPos;
-        queryPos = request.target.find(Http::Syntax::QuerySeparator);
+    void fillPathAndQuery(HttpRequest& request, const std::string& target) {
+        const std::size_t queryPos = target.find(Http::Syntax::QuerySeparator);
         if (queryPos == std::string::npos) {
-            request.path = request.target;
+            request.path = target;
             request.query = "";
         } else {
-            request.path = request.target.substr(0, queryPos);
-            request.query = request.target.substr(queryPos + 1);
+            request.path = target.substr(0, queryPos);
+            request.query = target.substr(queryPos + 1);
         }
     }
 } // namespace
@@ -194,11 +193,9 @@ RequestLineResult RequestLineParser::run() {
 
     HttpRequest request;
     request.method = *method;
-    request.target = target;
     request.version = version;
-    request.body = "";
 
-    fillPathAndQuery(request);
+    fillPathAndQuery(request, target);
 
     std::optional<std::string> decodedPath = decodePath(request.path);
 

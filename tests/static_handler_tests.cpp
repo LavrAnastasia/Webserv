@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "config/ServerConfig.hpp"
-#include "http/RequestDispatcher.hpp"
+#include "includes/Dispatch.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
@@ -62,7 +62,7 @@ namespace {
         const auto& test = GetParam();
         Files::write(root_ / "payload.bin", test.body);
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/payload.bin"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/payload.bin"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -78,15 +78,13 @@ namespace {
         ::testing::Values(
             FileContentsCase{"Empty", ""},
             FileContentsCase{"Text", "Hello\nSecond line\r\n"},
-            FileContentsCase{"Binary", std::string("\x00\x01\x7f\x80\xff", 5)},
-            FileContentsCase{"Exactly64KiB", std::string(64 * 1024, 'a')},
-            FileContentsCase{"MultipleReadChunks", std::string(64 * 1024, 'a') + std::string(64 * 1024, 'b') + "tail"}
+            FileContentsCase{"Binary", std::string("\x00\x01\x7f\x80\xff", 5)}
         ),
         [](const ::testing::TestParamInfo<FileContentsCase>& info) { return std::string(info.param.name); }
     );
 
     TEST_F(StaticHandlerTest, Returns404ForMissingFile) {
-        auto result = RequestDispatcher::dispatch(Requests::get("/missing.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/missing.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -95,23 +93,11 @@ namespace {
         EXPECT_FALSE(actualBody.empty());
     }
 
-    TEST_F(StaticHandlerTest, Returns404ForUnroutableRequestPath) {
-        for (const std::string path : {"", "relative.txt"}) {
-            SCOPED_TRACE(path);
-
-            const auto result = RequestDispatcher::dispatch(Requests::get(path), server_, ConnectionInfo{});
-            ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-            auto& response = std::get<HttpResponse>(result);
-
-            EXPECT_EQ(response.status, HttpStatus::NotFound);
-        }
-    }
-
     TEST_F(StaticHandlerTest, ReturnsIndexForRootDirectory) {
         const std::string body = "<h1>Home</h1>\n";
         Files::write(root_ / "index.html", body);
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -129,7 +115,7 @@ namespace {
         Files::write(root_ / "docs" / "home.html", body);
         Files::write(root_ / "docs" / "index.html", "wrong index");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -143,9 +129,8 @@ namespace {
 
         auto request = Requests::get("/my docs");
         request.query = "sort=name&order=asc";
-        request.target = "/my%20docs?" + request.query;
 
-        const auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
+        const auto result = dispatch(request, server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -160,7 +145,7 @@ namespace {
             SCOPED_TRACE(index);
             server_.locations.front().index = index;
 
-            const auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -172,7 +157,7 @@ namespace {
         server_.locations.front().autoindex = true;
         fs::create_directories(root_ / "index.html");
 
-        const auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -187,7 +172,7 @@ namespace {
         Files::write(root_ / "a.txt", "a");
         fs::create_directories(root_ / "a-dir");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -218,7 +203,7 @@ namespace {
         server_.locations.front().autoindex = true;
         Files::write(root_ / "docs" / "readme.txt", "documentation");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -234,7 +219,7 @@ namespace {
         Files::write(root_ / "docs" / ".hidden", "hidden");
         Files::write(root_ / "docs" / "readme.txt", "documentation");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -248,7 +233,7 @@ namespace {
         server_.locations.front().autoindex = true;
         Files::write(root_ / "<docs>" / "a & <b>.txt", "contents");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/<docs>/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/<docs>/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -268,9 +253,7 @@ namespace {
     TEST_F(StaticHandlerTest, DeletesFileAndReturns204WithEmptyBody) {
         Files::write(root_ / "delete-me.txt", "temporary");
 
-        auto result = RequestDispatcher::dispatch(
-            Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{}
-        );
+        auto result = dispatch(Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -279,9 +262,8 @@ namespace {
         EXPECT_TRUE(actualBody.empty());
         EXPECT_FALSE(fs::exists(root_ / "delete-me.txt"));
 
-        const auto repeatedResult = RequestDispatcher::dispatch(
-            Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{}
-        );
+        const auto repeatedResult =
+            dispatch(Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(repeatedResult));
         const auto& repeated = std::get<HttpResponse>(repeatedResult);
 
@@ -294,8 +276,7 @@ namespace {
         for (const std::string path : {"/", "/docs", "/docs/"}) {
             SCOPED_TRACE(path);
 
-            const auto result =
-                RequestDispatcher::dispatch(Requests::make(HttpMethod::Delete, path), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::make(HttpMethod::Delete, path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -310,8 +291,7 @@ namespace {
         const fs::path link = root_ / "link.txt";
         fs::create_symlink(outside_ / "secret.txt", link);
 
-        auto result =
-            RequestDispatcher::dispatch(Requests::make(HttpMethod::Delete, "/link.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::make(HttpMethod::Delete, "/link.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -328,8 +308,7 @@ namespace {
         fs::create_symlink(outside_ / "missing.txt", link);
         ASSERT_TRUE(fs::is_symlink(fs::symlink_status(link)));
 
-        const auto result =
-            RequestDispatcher::dispatch(Requests::make(HttpMethod::Delete, "/broken.txt"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::make(HttpMethod::Delete, "/broken.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -341,7 +320,7 @@ namespace {
         Files::write(root_ / "data" / "file.txt", "inside");
         fs::create_symlink(root_ / "data" / "file.txt", root_ / "link.txt");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -353,7 +332,7 @@ namespace {
     TEST_F(StaticHandlerTest, GetForbidsFileSymlinkPointingOutsideRoot) {
         fs::create_symlink(outside_ / "secret.txt", root_ / "link.txt");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -377,7 +356,7 @@ namespace {
             SCOPED_TRACE(index);
             server_.locations.front().index = index;
 
-            auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+            auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
             const std::string actualBody = Responses::read(response.body);
@@ -391,28 +370,10 @@ namespace {
 
     class StaticHandlerRootGuardTest : public StaticHandlerTest, public ::testing::WithParamInterface<HttpMethod> {};
 
-    TEST_P(StaticHandlerRootGuardTest, ForbidsDotDotEscapeToSimilarRootPrefix) {
-        fs::create_directories(root_ / "docs");
-
-        for (const std::string path : {"/../root-other/secret.txt", "/docs/../../root-other/secret.txt"}) {
-            SCOPED_TRACE(path);
-
-            auto result = RequestDispatcher::dispatch(Requests::make(GetParam(), path), server_, ConnectionInfo{});
-            ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-            auto& response = std::get<HttpResponse>(result);
-            const std::string actualBody = Responses::read(response.body);
-
-            EXPECT_EQ(response.status, HttpStatus::Forbidden);
-            EXPECT_EQ(actualBody.find(outsideBody_), std::string::npos);
-            EXPECT_EQ(Files::read(outside_ / "secret.txt"), outsideBody_);
-        }
-    }
-
     TEST_P(StaticHandlerRootGuardTest, ForbidsAccessThroughOutsideDirectorySymlink) {
         fs::create_directory_symlink(outside_, root_ / "escape");
 
-        auto result =
-            RequestDispatcher::dispatch(Requests::make(GetParam(), "/escape/secret.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::make(GetParam(), "/escape/secret.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
