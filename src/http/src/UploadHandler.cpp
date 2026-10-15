@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 
 namespace {
     constexpr int kInvalidFd = -1;
-    constexpr mode_t kFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+    constexpr mode_t kFileMode = S_IRUSR | S_IWUSR;
 } // namespace
 
 UploadHandler::UploadHandler() : fd_(kInvalidFd) {

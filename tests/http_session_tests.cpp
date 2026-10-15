@@ -3,10 +3,12 @@
 #include <csignal>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <utility>
 #include <variant>
 
@@ -142,7 +144,7 @@ namespace {
 
     TEST_F(HttpSessionTest, KeepsLimitsSeparateFromUnlimitedLocations) {
         server_.clientMaxBodySize = 4;
-        server_.locations.back().clientMaxBodySize = 0;
+        server_.locations.back().clientMaxBodySize = std::numeric_limits<std::size_t>::max();
         auto action =
             session_->receive("GET /cgi/app.py HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello");
         ASSERT_TRUE(std::holds_alternative<CgiRequest>(action));
@@ -293,6 +295,21 @@ namespace {
         EXPECT_NE(response.find("Location: /upload/data.bin\r\n"), std::string::npos);
         EXPECT_NE(response.find("HTTP/1.1 200 "), std::string::npos);
         EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), std::string("a\0bcd", 5));
+    }
+
+    TEST_F(HttpSessionTest, CreatesUploadsWithOwnerOnlyAccess) {
+        prepareUpload();
+        const mode_t previous = ::umask(0);
+        auto action =
+            session_->receive("POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello");
+        ::umask(previous);
+
+        ASSERT_TRUE(deliver(std::move(action)).starts_with("HTTP/1.1 201 "));
+        EXPECT_EQ(
+            fs::status(root_ / "incoming/data.bin").permissions() & fs::perms::all,
+            fs::perms::owner_read | fs::perms::owner_write
+        );
+        EXPECT_EQ(Files::read(root_ / "incoming/data.bin"), "hello");
     }
 
     TEST_F(HttpSessionTest, WritesPartialChunkedUploadBeforeItsChunkEnds) {

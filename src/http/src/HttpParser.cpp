@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <charconv>
-#include <limits>
 #include <string_view>
 #include <utility>
 
@@ -330,7 +329,7 @@ bool HttpParser::hasHeaders() const {
 }
 
 bool HttpParser::limit(std::size_t size) {
-    _maxBodySize = size == 0 ? std::numeric_limits<std::size_t>::max() : size;
+    _maxBodySize = size;
     return _state != ParserState::BodyStart || fits(_contentLength);
 }
 

@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <string>
 #include <variant>
@@ -225,12 +226,14 @@ namespace {
         expectResponse(Requests::get("/file.txt", std::string(17, 'x')), HttpStatus::PayloadTooLarge);
     }
 
-    TEST_F(RouterTest, ZeroBodyLimitAllowsBodyWithoutALimit) {
+    TEST_F(RouterTest, UnlimitedLocationAllowsBodyAboveTheServerLimit) {
         Files::write(root_ / "file.txt", "contents");
-        server_.locations.front().clientMaxBodySize = 0;
+        server_.locations.front().clientMaxBodySize = std::numeric_limits<std::size_t>::max();
 
         expectResponse(Requests::get("/file.txt"), HttpStatus::OK, "contents");
-        expectResponse(Requests::get("/file.txt", "x"), HttpStatus::OK, "contents");
+        expectResponse(
+            Requests::get("/file.txt", std::string(server_.clientMaxBodySize + 1, 'x')), HttpStatus::OK, "contents"
+        );
     }
 
     TEST_F(RouterTest, InheritsFromServerNotFromLessSpecificLocation) {

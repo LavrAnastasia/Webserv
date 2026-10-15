@@ -1,5 +1,6 @@
 #include "http/RequestDispatcher.hpp"
 
+#include <limits>
 #include <utility>
 
 #include "CgiHandler.hpp"
@@ -11,6 +12,10 @@
 #include "StaticHandler.hpp"
 #include "UploadHandler.hpp"
 
+namespace {
+    constexpr std::size_t kUnlimitedBodySize = std::numeric_limits<std::size_t>::max();
+} // namespace
+
 std::unique_ptr<RequestPlan> RequestDispatcher::select(HttpRequest request, const ServerConfig& server) {
     auto route = Router::resolve(request, server);
     auto plan = std::make_unique<RequestPlan>();
@@ -18,6 +23,7 @@ std::unique_ptr<RequestPlan> RequestDispatcher::select(HttpRequest request, cons
     if (route) {
         plan->route = std::move(*route);
     } else {
+        plan->route.clientMaxBodySize = kUnlimitedBodySize;
         plan->route.errorPages = Router::mapErrorPages(server);
     }
 
