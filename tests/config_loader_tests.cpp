@@ -263,6 +263,10 @@ namespace {
         {"NegativeBodyLimit", makeConfig(SERVER_DIRECTIVES + "client_max_body_size -1;\n")},
         {"InvalidBodyLimitSuffix", makeConfig(SERVER_DIRECTIVES + "client_max_body_size 1g;\n")},
         {"InformationalReturnStatus", makeConfig(SERVER_DIRECTIVES, "location / { methods GET; return 100; }\n")},
+        {"IndexWithDotSegment", makeConfig(SERVER_DIRECTIVES + "index ../secret.html;\n")},
+        {"ErrorPageWithDotSegment", makeConfig(SERVER_DIRECTIVES + "error_page 404 /../404.html;\n")},
+        {"UploadPathWithDotSegment",
+         makeConfig(SERVER_DIRECTIVES, "location / { methods GET POST; upload_path ../outside; }\n")},
     };
 
     INSTANTIATE_TEST_SUITE_P(

@@ -124,6 +124,33 @@ namespace {
         }
     };
 
+    TEST_F(HttpSessionTest, RejectsDotSegmentsInTheRequestPath) {
+        for (const std::string path : {"/../index.html", "/%2e%2e/index.html"}) {
+            SCOPED_TRACE(path);
+            session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{}, readFakeNow);
+            const auto response = deliver(session_->receive("GET " + path + " HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 400 "));
+        }
+    }
+
+    TEST_F(HttpSessionTest, PassesAChunkedBodyAndRequestVariablesToCgi) {
+        server_.locations.back().allowedMethods.insert(HttpMethod::Post);
+        const auto action = session_->receive(
+            "POST /cgi/app.py?a=1 HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+            "5\r\nhello\r\n3\r\nabc\r\n0\r\n\r\n"
+        );
+        ASSERT_TRUE(std::holds_alternative<CgiRequest>(action));
+        const auto& request = std::get<CgiRequest>(action);
+        EXPECT_EQ(request.body, "helloabc");
+        for (const std::string& variable :
+             {std::string("REQUEST_METHOD=POST"),
+              std::string("QUERY_STRING=a=1"),
+              std::string("CONTENT_LENGTH=8"),
+              "SCRIPT_FILENAME=" + fs::weakly_canonical(root_ / "cgi/app.py").string()}) {
+            EXPECT_NE(std::ranges::find(request.env, variable), request.env.end()) << variable;
+        }
+    }
+
     TEST_F(HttpSessionTest, RejectsContentLengthAtTheRouteLimitBeforeReadingBody) {
         server_.locations.front().clientMaxBodySize = 4;
         const auto response =
