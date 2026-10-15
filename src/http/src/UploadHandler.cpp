@@ -15,17 +15,10 @@
 namespace fs = std::filesystem;
 
 namespace {
-    constexpr int kInvalidFd = -1;
     constexpr mode_t kFileMode = S_IRUSR | S_IWUSR;
 } // namespace
 
-UploadHandler::UploadHandler() : fd_(kInvalidFd) {
-}
-
 UploadHandler::~UploadHandler() {
-    if (fd_ != kInvalidFd) {
-        ::close(fd_);
-    }
     if (!path_.empty()) {
         std::error_code error;
         fs::remove(path_, error);
@@ -55,8 +48,8 @@ std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const 
             return HttpStatus::InternalServerError;
         }
 
-        fd_ = ::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode);
-        if (fd_ == kInvalidFd) {
+        file_ = FileDescriptor(::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode));
+        if (!file_.isOpen()) {
             return HttpStatus::InternalServerError;
         }
         path_ = target;
@@ -70,7 +63,7 @@ std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const 
 
 bool UploadHandler::receive(std::string_view bytes) {
     while (!bytes.empty()) {
-        const ssize_t written = ::write(fd_, bytes.data(), bytes.size());
+        const ssize_t written = ::write(file_.get(), bytes.data(), bytes.size());
         if (written <= 0) {
             return false;
         }
@@ -80,9 +73,7 @@ bool UploadHandler::receive(std::string_view bytes) {
 }
 
 HttpResponse UploadHandler::end() {
-    const int result = ::close(fd_);
-    fd_ = kInvalidFd;
-    if (result != 0) {
+    if (!file_.close()) {
         return ErrorResponseFactory::create(HttpStatus::InternalServerError, pages_);
     }
     path_.clear();

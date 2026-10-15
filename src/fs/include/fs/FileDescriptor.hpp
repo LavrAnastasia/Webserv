@@ -16,7 +16,7 @@ public:
 
     int get() const;
     bool isOpen() const;
-    void close();
+    bool close();
     bool setNonBlocking();
     bool setCloseOnExec();
 };

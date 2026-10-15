@@ -3,12 +3,13 @@
 #include <string_view>
 
 #include "ResolvedRoute.hpp"
+#include "fs/FileDescriptor.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 
 class UploadHandler {
 public:
-    UploadHandler();
+    UploadHandler() = default;
     ~UploadHandler();
     UploadHandler(const UploadHandler&) = delete;
     UploadHandler& operator=(const UploadHandler&) = delete;
@@ -18,7 +19,7 @@ public:
     HttpResponse end();
 
 private:
-    int fd_;
+    FileDescriptor file_;
     std::filesystem::path path_;
     std::string location_;
     ErrorPages pages_;
