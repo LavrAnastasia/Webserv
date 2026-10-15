@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <variant>
 
 #include "config/ServerConfig.hpp"
@@ -10,8 +11,10 @@
 
 using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 
+struct RequestPlan;
+
 class RequestDispatcher {
 public:
-    static HandlerResult
-    dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& connectionInfo);
+    static std::unique_ptr<RequestPlan> select(HttpRequest request, const ServerConfig& server);
+    static HandlerResult dispatch(RequestPlan plan, const ConnectionInfo& connectionInfo);
 };

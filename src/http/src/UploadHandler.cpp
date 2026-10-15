@@ -16,7 +16,8 @@ namespace fs = std::filesystem;
 
 namespace {
     constexpr int kInvalidFd = -1;
-}
+    constexpr mode_t kFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+} // namespace
 
 UploadHandler::UploadHandler() : fd_(kInvalidFd) {
 }
@@ -32,7 +33,6 @@ UploadHandler::~UploadHandler() {
 }
 
 std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const ResolvedRoute& route) {
-    constexpr mode_t kFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
     try {
         const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
         if (!fs::is_directory(uploadPath)) {
@@ -87,15 +87,4 @@ HttpResponse UploadHandler::end() {
     }
     path_.clear();
     return HttpResponseFactory::create(HttpStatus::Created, HttpHeaders{{Http::Headers::Location, location_}});
-}
-
-HttpResponse UploadHandler::handle(const HttpRequest& request, const ResolvedRoute& route) {
-    UploadHandler upload;
-    if (const auto status = upload.open(request, route)) {
-        return ErrorResponseFactory::create(*status, route);
-    }
-    if (!upload.receive(request.body)) {
-        return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
-    }
-    return upload.end();
 }

@@ -77,6 +77,11 @@ HttpSerializer::Output HttpSerializer::serialize(HttpResponse response, const Fr
         .append(Http::Status::toString(response.status))
         .append(Http::Syntax::CRLF);
 
+    if (response.status == HttpStatus::Continue) {
+        output.append(Http::Syntax::CRLF);
+        return Output{.headers = std::move(output), .body = std::nullopt};
+    }
+
     HttpHeaders headers = std::move(response.headers);
 
     headers.erase(Http::Headers::TransferEncoding);

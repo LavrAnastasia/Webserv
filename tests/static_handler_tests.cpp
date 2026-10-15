@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/http/src/RequestPlan.hpp"
 #include "config/ServerConfig.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "includes/Files.hpp"
@@ -14,6 +15,11 @@
 namespace {
 
     namespace fs = std::filesystem;
+
+    HandlerResult dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& info) {
+        auto plan = RequestDispatcher::select(std::move(request), server);
+        return RequestDispatcher::dispatch(std::move(*plan), info);
+    }
 
     class StaticHandlerTest : public ::testing::Test {
     protected:
@@ -62,7 +68,7 @@ namespace {
         const auto& test = GetParam();
         Files::write(root_ / "payload.bin", test.body);
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/payload.bin"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/payload.bin"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -86,7 +92,7 @@ namespace {
     );
 
     TEST_F(StaticHandlerTest, Returns404ForMissingFile) {
-        auto result = RequestDispatcher::dispatch(Requests::get("/missing.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/missing.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -99,7 +105,7 @@ namespace {
         for (const std::string path : {"", "relative.txt"}) {
             SCOPED_TRACE(path);
 
-            const auto result = RequestDispatcher::dispatch(Requests::get(path), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::get(path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -111,7 +117,7 @@ namespace {
         const std::string body = "<h1>Home</h1>\n";
         Files::write(root_ / "index.html", body);
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -129,7 +135,7 @@ namespace {
         Files::write(root_ / "docs" / "home.html", body);
         Files::write(root_ / "docs" / "index.html", "wrong index");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -145,7 +151,7 @@ namespace {
         request.query = "sort=name&order=asc";
         request.target = "/my%20docs?" + request.query;
 
-        const auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
+        const auto result = dispatch(request, server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -160,7 +166,7 @@ namespace {
             SCOPED_TRACE(index);
             server_.locations.front().index = index;
 
-            const auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -172,7 +178,7 @@ namespace {
         server_.locations.front().autoindex = true;
         fs::create_directories(root_ / "index.html");
 
-        const auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -187,7 +193,7 @@ namespace {
         Files::write(root_ / "a.txt", "a");
         fs::create_directories(root_ / "a-dir");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -218,7 +224,7 @@ namespace {
         server_.locations.front().autoindex = true;
         Files::write(root_ / "docs" / "readme.txt", "documentation");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -248,7 +254,7 @@ namespace {
         server_.locations.front().autoindex = true;
         Files::write(root_ / "<docs>" / "a & <b>.txt", "contents");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/<docs>/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/<docs>/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -268,9 +274,7 @@ namespace {
     TEST_F(StaticHandlerTest, DeletesFileAndReturns204WithEmptyBody) {
         Files::write(root_ / "delete-me.txt", "temporary");
 
-        auto result = RequestDispatcher::dispatch(
-            Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{}
-        );
+        auto result = dispatch(Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -279,9 +283,8 @@ namespace {
         EXPECT_TRUE(actualBody.empty());
         EXPECT_FALSE(fs::exists(root_ / "delete-me.txt"));
 
-        const auto repeatedResult = RequestDispatcher::dispatch(
-            Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{}
-        );
+        const auto repeatedResult =
+            dispatch(Requests::make(HttpMethod::Delete, "/delete-me.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(repeatedResult));
         const auto& repeated = std::get<HttpResponse>(repeatedResult);
 
@@ -294,8 +297,7 @@ namespace {
         for (const std::string path : {"/", "/docs", "/docs/"}) {
             SCOPED_TRACE(path);
 
-            const auto result =
-                RequestDispatcher::dispatch(Requests::make(HttpMethod::Delete, path), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::make(HttpMethod::Delete, path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -310,8 +312,7 @@ namespace {
         const fs::path link = root_ / "link.txt";
         fs::create_symlink(outside_ / "secret.txt", link);
 
-        auto result =
-            RequestDispatcher::dispatch(Requests::make(HttpMethod::Delete, "/link.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::make(HttpMethod::Delete, "/link.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -328,8 +329,7 @@ namespace {
         fs::create_symlink(outside_ / "missing.txt", link);
         ASSERT_TRUE(fs::is_symlink(fs::symlink_status(link)));
 
-        const auto result =
-            RequestDispatcher::dispatch(Requests::make(HttpMethod::Delete, "/broken.txt"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::make(HttpMethod::Delete, "/broken.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -341,7 +341,7 @@ namespace {
         Files::write(root_ / "data" / "file.txt", "inside");
         fs::create_symlink(root_ / "data" / "file.txt", root_ / "link.txt");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -353,7 +353,7 @@ namespace {
     TEST_F(StaticHandlerTest, GetForbidsFileSymlinkPointingOutsideRoot) {
         fs::create_symlink(outside_ / "secret.txt", root_ / "link.txt");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/link.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
@@ -377,7 +377,7 @@ namespace {
             SCOPED_TRACE(index);
             server_.locations.front().index = index;
 
-            auto result = RequestDispatcher::dispatch(Requests::get("/"), server_, ConnectionInfo{});
+            auto result = dispatch(Requests::get("/"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
             const std::string actualBody = Responses::read(response.body);
@@ -397,7 +397,7 @@ namespace {
         for (const std::string path : {"/../root-other/secret.txt", "/docs/../../root-other/secret.txt"}) {
             SCOPED_TRACE(path);
 
-            auto result = RequestDispatcher::dispatch(Requests::make(GetParam(), path), server_, ConnectionInfo{});
+            auto result = dispatch(Requests::make(GetParam(), path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
             const std::string actualBody = Responses::read(response.body);
@@ -411,8 +411,7 @@ namespace {
     TEST_P(StaticHandlerRootGuardTest, ForbidsAccessThroughOutsideDirectorySymlink) {
         fs::create_directory_symlink(outside_, root_ / "escape");
 
-        auto result =
-            RequestDispatcher::dispatch(Requests::make(GetParam(), "/escape/secret.txt"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::make(GetParam(), "/escape/secret.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);

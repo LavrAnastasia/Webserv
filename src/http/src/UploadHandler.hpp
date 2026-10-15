@@ -16,7 +16,6 @@ public:
     std::optional<HttpStatus> open(const HttpRequest& request, const ResolvedRoute& route);
     bool receive(std::string_view bytes);
     HttpResponse end();
-    static HttpResponse handle(const HttpRequest& request, const ResolvedRoute& route);
 
 private:
     int fd_;

@@ -1,11 +1,13 @@
 #include "http/HttpSession.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
 #include "CgiStream.hpp"
 #include "ErrorResponseFactory.hpp"
-#include "HeaderFields.hpp"
+#include "HttpResponseFactory.hpp"
+#include "RequestPlan.hpp"
 #include "Router.hpp"
 #include "UploadHandler.hpp"
 #include "http/HttpMethod.hpp"
@@ -13,7 +15,7 @@
 #include "log/Log.hpp"
 
 namespace {
-    constexpr std::string_view kContinueResponse = "HTTP/1.1 100 Continue\r\n\r\n";
+    constexpr std::size_t kBodyReserve = 128u * 1024u * 1024u;
     constexpr std::size_t kChunkSize = 64 * 1024;
     constexpr std::chrono::seconds kLingerTimeout{5};
     constexpr std::chrono::seconds kLingerDuration{30};
@@ -40,35 +42,39 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     if (!bytes.empty()) {
         lastReceived_ = clock_();
     }
+    parser_.receive(bytes);
 
     if (phase_ == Phase::Lingering) {
-        return drain(bytes);
+        return drain();
     }
 
     if (phase_ == Phase::Responding || phase_ == Phase::Continuing) {
-        parser_.queue(bytes);
         return Read{};
     }
 
-    ParseResult result = parser_.append(bytes.data(), bytes.size());
+    ParseResult result = parser_.parse();
 
     if (!requestStarted_ && !parser_.isIdle()) {
         requestStarted_ = clock_();
     }
 
     while (true) {
-        if (const HeadersReady* headers = std::get_if<HeadersReady>(&result)) {
-            if (auto action = prepare(*headers->request)) {
+        if (HeadersReady* headers = std::get_if<HeadersReady>(&result)) {
+            if (auto action = select(std::move(*headers))) {
                 return std::move(*action);
             }
         } else if (const BodyData* chunk = std::get_if<BodyData>(&result)) {
-            if (!upload_->receive(chunk->bytes)) {
-                return reject(HttpStatus::InternalServerError);
+            if (auto* upload = std::get_if<std::unique_ptr<UploadHandler>>(&plan_->body)) {
+                if (!(*upload)->receive(chunk->bytes)) {
+                    return reject(HttpStatus::InternalServerError);
+                }
+            } else if (auto* bytes = std::get_if<std::string>(&plan_->body)) {
+                bytes->append(chunk->bytes);
             }
         } else {
             break;
         }
-        result = parser_.append(nullptr, 0);
+        result = parser_.parse();
     }
 
     if (std::holds_alternative<NeedMoreData>(result)) {
@@ -80,19 +86,10 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     if (const Failed* failed = std::get_if<Failed>(&result)) {
         return reject(failed->status);
     }
+    receivingBody_ = false;
 
-    HttpRequest request = std::move(std::get<Complete>(result).request);
-
-    framing_.close = !request.isPersistent();
-    framing_.headersOnly = request.method == HttpMethod::Head;
-
-    if (upload_) {
-        HttpResponse response = upload_->end();
-        upload_.reset();
-        return respond(std::move(response));
-    }
-
-    HandlerResult handled = RequestDispatcher::dispatch(std::move(request), server_, info_);
+    HandlerResult handled = RequestDispatcher::dispatch(std::move(*plan_), info_);
+    plan_.reset();
 
     if (HttpResponse* response = std::get_if<HttpResponse>(&handled)) {
         return respond(std::move(*response));
@@ -102,62 +99,63 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     return std::move(std::get<CgiRequest>(handled));
 }
 
-std::optional<HttpSession::Action> HttpSession::prepare(const HttpRequest& request) {
+std::optional<HttpSession::Action> HttpSession::select(HeadersReady headers) {
+    const HttpRequest& request = headers.request;
     framing_.close = !request.isPersistent();
     framing_.headersOnly = request.method == HttpMethod::Head;
-    const auto route = Router::resolve(request, server_);
+    receivingBody_ = !headers.length || *headers.length != 0;
+    plan_ = RequestDispatcher::select(std::move(headers.request), server_);
 
-    if (route && !parser_.limit(route->clientMaxBodySize)) {
+    if (!parser_.limit(plan_->route.clientMaxBodySize)) {
         return reject(HttpStatus::PayloadTooLarge);
     }
-
-    const auto expect = request.headers.get(Http::Headers::Expect);
-    if (expect && !HttpHeaders::equals(*expect, Http::Headers::Expectation::Continue)) {
-        return reject(HttpStatus::ExpectationFailed);
+    if (auto* response = std::get_if<HttpResponse>(&plan_->handler)) {
+        return reject(std::move(*response));
     }
-    if (!route) {
-        return reject(HttpStatus::NotFound);
-    }
-    if (expect && !route->redirect && !route->allowedMethods.contains(request.method)) {
-        return reject(HttpStatus::MethodNotAllowed);
-    }
-
-    if (!route->redirect && !route->cgi && route->upload && request.method == HttpMethod::Post &&
-        route->allowedMethods.contains(request.method)) {
-        upload_ = std::make_unique<UploadHandler>();
-        if (const auto status = upload_->open(request, *route)) {
+    if (auto* upload = std::get_if<std::unique_ptr<UploadHandler>>(&plan_->body)) {
+        if (const auto status = (*upload)->open(plan_->request, plan_->route)) {
             return reject(*status);
         }
-        parser_.stream();
+    } else if (auto* bytes = std::get_if<std::string>(&plan_->body); bytes && headers.length) {
+        bytes->reserve(std::min(*headers.length, kBodyReserve));
     }
 
-    if (expect && !parser_.isComplete()) {
+    if (plan_->expectContinue && receivingBody_) {
         phase_ = Phase::Continuing;
-        return Write{std::string(kContinueResponse)};
+        return Write{HttpSerializer::serialize(HttpResponseFactory::create(HttpStatus::Continue), {}).headers};
     }
     return std::nullopt;
 }
 
 HttpSession::Action HttpSession::reject(HttpStatus status) {
-    upload_.reset();
-    lingering_ = parser_.hasHeaders() && !parser_.isComplete();
-    if (lingering_) {
-        parser_.discard();
-    }
-    phase_ = Phase::Responding;
-    framing_.close = true;
-    return fail(status);
+    return reject(
+        plan_ ? ErrorResponseFactory::create(status, plan_->route)
+              : ErrorResponseFactory::create(status, Router::mapErrorPages(server_))
+    );
 }
 
-HttpSession::Action HttpSession::drain(std::string_view bytes) {
-    const ParseResult result = parser_.append(bytes.data(), bytes.size());
-    if (std::holds_alternative<Complete>(result)) {
-        return Close{};
+HttpSession::Action HttpSession::reject(HttpResponse response) {
+    plan_.reset();
+    phase_ = Phase::Responding;
+    framing_.close = framing_.close || receivingBody_ || Http::Status::isError(response.status);
+    return respond(std::move(response));
+}
+
+HttpSession::Action HttpSession::drain() {
+    while (true) {
+        const ParseResult result = parser_.parse();
+        if (std::holds_alternative<Complete>(result)) {
+            return Close{};
+        }
+        if (std::holds_alternative<BodyData>(result)) {
+            continue;
+        }
+        if (const auto* failed = std::get_if<Failed>(&result);
+            failed && failed->status == HttpStatus::PayloadTooLarge) {
+            continue;
+        }
+        return Read{};
     }
-    if (std::holds_alternative<Failed>(result)) {
-        parser_.discard();
-    }
-    return Read{};
 }
 
 HttpSession::Action HttpSession::emit() {
@@ -330,11 +328,11 @@ bool HttpSession::append(std::string& bytes) {
 }
 
 HttpSession::Action HttpSession::finish() {
-    if (lingering_) {
+    if (receivingBody_) {
         phase_ = Phase::Lingering;
         lingerStarted_ = clock_();
         lastReceived_ = lingerStarted_;
-        return drain({});
+        return drain();
     }
 
     const bool close = framing_.close;

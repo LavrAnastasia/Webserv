@@ -188,10 +188,17 @@ namespace {
     }
 
     TEST_F(HttpSessionTest, RejectsUnknownExpectationBeforeWaitingForBody) {
-        const auto response = deliver(
-            session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: magic\r\n\r\n")
-        );
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 417 Expectation Failed"));
+        for (const bool matched : {true, false}) {
+            SCOPED_TRACE(matched);
+            if (!matched) {
+                server_.locations.clear();
+                session_ = std::make_unique<HttpSession>(server_, ConnectionInfo{}, readFakeNow);
+            }
+            const auto response = deliver(
+                session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: magic\r\n\r\n")
+            );
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 417 Expectation Failed"));
+        }
     }
 
     TEST_F(HttpSessionTest, RejectsExpectForADisallowedMethodBeforeWaitingForBody) {
@@ -199,7 +206,17 @@ namespace {
             session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n")
         );
         EXPECT_TRUE(response.starts_with("HTTP/1.1 405 "));
+        EXPECT_NE(response.find("Allow: GET, HEAD\r\n"), std::string::npos);
         EXPECT_EQ(response.find("100 Continue"), std::string::npos);
+    }
+
+    TEST_F(HttpSessionTest, RejectsADisallowedMethodWithoutExpectBeforeWaitingForBody) {
+        const auto response =
+            deliver(session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n"));
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 405 "));
+        EXPECT_NE(response.find("Allow: GET, HEAD\r\n"), std::string::npos);
+        ASSERT_TRUE(ended<HttpSession::Read>());
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receive("hello")));
     }
 
     TEST_F(HttpSessionTest, RejectsExpectForAMissingRouteBeforeWaitingForBody) {
@@ -510,7 +527,7 @@ namespace {
     }
 
     TEST_F(HttpSessionTest, AnswersTimeoutWhenTheBodyStopsArriving) {
-        session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nabc");
+        session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nabc");
 
         fakeNow += 59s;
         EXPECT_FALSE(session_->expire().has_value());
@@ -530,7 +547,7 @@ namespace {
     }
 
     TEST_F(HttpSessionTest, KeepsASlowButSteadyBody) {
-        session_->receive("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n");
+        session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n");
 
         for (int byte = 0; byte < 3; ++byte) {
             fakeNow += 50s;

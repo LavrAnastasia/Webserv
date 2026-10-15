@@ -8,8 +8,9 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/http/src/RequestPlan.hpp"
 #include "config/ServerConfig.hpp"
-#include "http/RequestDispatcher.hpp"
+#include "includes/Dispatch.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
@@ -58,7 +59,7 @@ namespace {
         void expectResponse(
             const HttpRequest& request, HttpStatus status, const std::optional<std::string>& body = std::nullopt
         ) const {
-            auto result = RequestDispatcher::dispatch(request, server_, ConnectionInfo{});
+            auto result = dispatch(request, server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -71,7 +72,7 @@ namespace {
         void expectRedirect(
             const std::string& path, const std::string& target, HttpStatus status = HttpStatus::Found
         ) const {
-            const auto result = RequestDispatcher::dispatch(Requests::get(path), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::get(path), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
             auto& response = std::get<HttpResponse>(result);
 
@@ -98,7 +99,9 @@ namespace {
 
         const auto& test = GetParam();
         if (test.expectedTarget == nullptr) {
-            expectResponse(Requests::get(test.path), HttpStatus::NotFound);
+            auto plan = RequestDispatcher::select(Requests::get(test.path), server_);
+            ASSERT_TRUE(std::holds_alternative<HttpResponse>(plan->handler));
+            EXPECT_EQ(std::get<HttpResponse>(plan->handler).status, HttpStatus::NotFound);
         } else {
             expectRedirect(test.path, test.expectedTarget);
         }
@@ -253,8 +256,7 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        const auto result =
-            RequestDispatcher::dispatch(Requests::post("/files/document.txt"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::post("/files/document.txt"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -274,7 +276,7 @@ namespace {
         server_.locations.push_back(selected);
         Files::write(root_ / "files/document.txt", "document");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/files/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -353,7 +355,7 @@ namespace {
         server_.locations.push_back(location);
 
         const std::string body = "payload";
-        auto result = RequestDispatcher::dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::post("/upload/file.txt", body), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 
@@ -385,7 +387,7 @@ namespace {
             Files::write(script, "script contents");
 
             const std::string path = std::string("/scripts/") + test.filename;
-            const auto result = RequestDispatcher::dispatch(Requests::post(path, "input"), server_, ConnectionInfo{});
+            const auto result = dispatch(Requests::post(path, "input"), server_, ConnectionInfo{});
             ASSERT_TRUE(std::holds_alternative<CgiRequest>(result));
             const auto& cgi = std::get<CgiRequest>(result);
 
@@ -416,7 +418,7 @@ namespace {
     }
 
     TEST_F(RouterTest, Returns405WithAllowWhenMethodIsNotAllowed) {
-        const auto result = RequestDispatcher::dispatch(Requests::post("/"), server_, ConnectionInfo{});
+        const auto result = dispatch(Requests::post("/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
 

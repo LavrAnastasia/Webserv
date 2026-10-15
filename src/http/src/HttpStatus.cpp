@@ -1,9 +1,39 @@
 #include "http/HttpStatus.hpp"
 #include "ErrorStatus.hpp"
 
+namespace {
+    constexpr int kLastErrorStatus = 599;
+}
+
 namespace Http::Status {
+    bool isRedirect(HttpStatus status) {
+        switch (status) {
+            case HttpStatus::MovedPermanently:
+            case HttpStatus::Found:
+            case HttpStatus::SeeOther:
+            case HttpStatus::TemporaryRedirect:
+            case HttpStatus::PermanentRedirect:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool isInformational(HttpStatus status) {
+        return status >= HttpStatus::Continue && status < HttpStatus::OK;
+    }
+
+    bool isError(HttpStatus status) {
+        const int code = static_cast<int>(status);
+
+        return status >= HttpStatus::BadRequest && code <= kLastErrorStatus;
+    }
+
     std::string toString(HttpStatus status) {
         switch (status) {
+            case HttpStatus::Continue:
+                return "Continue";
+
             case HttpStatus::OK:
                 return "OK";
 

@@ -10,14 +10,13 @@
 
 struct NeedMoreData {};
 struct HeadersReady {
-    const HttpRequest* request;
+    HttpRequest request;
+    std::optional<std::size_t> length;
 };
 struct BodyData {
     std::string bytes;
 };
-struct Complete {
-    HttpRequest request;
-};
+struct Complete {};
 struct Failed {
     HttpStatus status;
 };
@@ -26,11 +25,12 @@ using ParseResult = std::variant<NeedMoreData, HeadersReady, BodyData, Complete,
 
 class HttpParser {
 private:
-    enum class Step { Continue, WaitForData, HeadersReady, BodyData };
+    enum class Step { Continue, WaitForData, HeadersReady, BodyData, TooLarge };
 
     enum class ParserState {
         StartLine,
         Headers,
+        BodyStart,
         Body,
         ChunkSize,
         ChunkData,
@@ -47,8 +47,6 @@ private:
     std::size_t _currentChunkSize;
     std::size_t _maxBodySize;
     std::size_t _received;
-    bool _discard = false;
-    bool _stream = false;
     std::string _chunk;
 
     Step fail(HttpStatus status);
@@ -65,12 +63,9 @@ private:
 
 public:
     explicit HttpParser(std::size_t maxBodySize);
-    ParseResult append(const char* data, std::size_t size);
+    void receive(std::string_view bytes);
+    ParseResult parse();
     void reset();
-    void queue(std::string_view bytes);
-    void discard();
-    void stream();
-    bool isComplete() const;
     bool limit(std::size_t size);
     bool isIdle() const;
     bool hasHeaders() const;
