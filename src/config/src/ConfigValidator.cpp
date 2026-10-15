@@ -23,8 +23,6 @@ namespace {
     }
 } // namespace
 
-// Private
-
 void ConfigValidator::validateServerBlock(const ConfigNode& node) {
     if (!node.arguments.empty()) {
         throw ConfigValidationError(ConfigValidationError::Reason::WrongArgumentCount, "server block");
@@ -44,8 +42,6 @@ void ConfigValidator::validateLocationBlock(const ConfigNode& node) {
         throw ConfigValidationError(ConfigValidationError::Reason::MissingBody, "location block");
     }
 }
-
-// Public
 
 bool ConfigValidator::isBlock(const ConfigNode& node) {
     return blocks.contains(node.name) || (node.body.has_value() && !ConfigSpecification::contains(node.name));

@@ -3,11 +3,11 @@
 #include <cstddef>
 #include <string_view>
 
+#include "RequestDispatcher.hpp"
 #include "ResolvedRoute.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 #include "http/HttpStatus.hpp"
-#include "http/RequestDispatcher.hpp"
 
 class RequestHandler {
 public:

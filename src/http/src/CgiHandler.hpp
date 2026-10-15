@@ -1,16 +1,13 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
 #include <optional>
 #include <string_view>
-#include <variant>
 
 #include "RequestHandler.hpp"
 #include "ResolvedRoute.hpp"
 #include "http/ConnectionInfo.hpp"
 #include "http/HttpRequest.hpp"
-#include "http/HttpResponse.hpp"
 
 class CgiHandler : public RequestHandler {
 public:

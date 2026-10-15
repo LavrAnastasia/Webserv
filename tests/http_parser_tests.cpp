@@ -116,7 +116,6 @@ namespace {
         const auto& request = parsed->request;
 
         EXPECT_EQ(request.method, HttpMethod::Get);
-        EXPECT_EQ(request.target, "/index.html?x=1");
         EXPECT_EQ(request.path, "/index.html");
         EXPECT_EQ(request.query, "x=1");
         EXPECT_EQ(request.version, "HTTP/1.1");

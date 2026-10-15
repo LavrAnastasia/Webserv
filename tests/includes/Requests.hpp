@@ -10,7 +10,6 @@ namespace Requests {
     inline HttpRequest make(HttpMethod method, const std::string& path, const std::string& body = "") {
         HttpRequest request{};
         request.method = method;
-        request.target = path;
         request.path = path;
         request.version = "HTTP/1.1";
         request.headers.set("Host", "localhost");

@@ -6,7 +6,6 @@
 #include <string>
 #include <sys/socket.h> // socket(), AF_INET, SOCK_STREAM
 #include <system_error>
-#include <unistd.h>
 
 namespace {
     in_addr resolveAddress(const std::string& host) {

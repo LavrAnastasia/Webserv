@@ -6,8 +6,8 @@
 #include <utility>
 #include <variant>
 
+#include "CgiResponseParser.hpp"
 #include "HttpSyntax.hpp"
-#include "http/CgiResponseParser.hpp"
 #include "http/HttpStatus.hpp"
 
 namespace {

@@ -1,15 +1,12 @@
 #pragma once
 
 #include <filesystem>
-#include <memory>
 #include <string_view>
-#include <variant>
 
 #include "RequestHandler.hpp"
 #include "ResolvedRoute.hpp"
 #include "fs/FileDescriptor.hpp"
 #include "http/HttpRequest.hpp"
-#include "http/HttpResponse.hpp"
 
 class UploadHandler : public RequestHandler {
 public:

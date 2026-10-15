@@ -1,12 +1,9 @@
 #pragma once
 
-#include <memory>
-#include <variant>
 
 #include "RequestHandler.hpp"
 #include "ResolvedRoute.hpp"
 #include "http/HttpRequest.hpp"
-#include "http/HttpResponse.hpp"
 
 class StaticHandler : public RequestHandler {
 public:

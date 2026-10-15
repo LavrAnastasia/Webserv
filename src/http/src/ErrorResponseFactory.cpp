@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "http/HttpMethod.hpp"
-#include "http/HttpStatus.hpp"
 
 #include "HeaderFields.hpp"
 #include "HttpHtmlUtils.hpp"

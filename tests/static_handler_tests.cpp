@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/http/src/RequestDispatcher.hpp"
 #include "../src/http/src/RequestHandler.hpp"
 #include "config/ServerConfig.hpp"
-#include "http/RequestDispatcher.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
@@ -151,7 +151,6 @@ namespace {
 
         auto request = Requests::get("/my docs");
         request.query = "sort=name&order=asc";
-        request.target = "/my%20docs?" + request.query;
 
         const auto result = dispatch(request, server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));

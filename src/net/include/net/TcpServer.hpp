@@ -4,7 +4,6 @@
 #include "net/SocketManager.hpp"
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
