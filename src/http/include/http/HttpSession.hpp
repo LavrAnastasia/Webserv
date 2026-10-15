@@ -48,7 +48,7 @@ public:
 private:
     enum class Phase { Reading, Continuing, Responding, Lingering };
 
-    std::optional<Action> accept(HeadersReady headers);
+    std::optional<Action> accept(HeadersData headers);
     Action reject(HttpResponse response);
     Action reject(HttpStatus status);
     Action drain();

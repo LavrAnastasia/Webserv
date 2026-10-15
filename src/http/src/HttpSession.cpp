@@ -58,7 +58,7 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
         if (handler_ && parser_.announcedBodySize() > handler_->limit()) {
             return reject(HttpStatus::PayloadTooLarge);
         }
-        if (HeadersReady* headers = std::get_if<HeadersReady>(&result)) {
+        if (HeadersData* headers = std::get_if<HeadersData>(&result)) {
             if (auto action = accept(std::move(*headers))) {
                 return std::move(*action);
             }
@@ -98,7 +98,7 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     return std::move(std::get<CgiRequest>(handled));
 }
 
-std::optional<HttpSession::Action> HttpSession::accept(HeadersReady headers) {
+std::optional<HttpSession::Action> HttpSession::accept(HeadersData headers) {
     const HttpRequest& request = headers.request;
     framing_.close = !request.isPersistent();
     framing_.headersOnly = request.method == HttpMethod::Head;

@@ -9,7 +9,7 @@
 #include "http/HttpStatus.hpp"
 
 struct NeedMoreData {};
-struct HeadersReady {
+struct HeadersData {
     HttpRequest request;
     std::optional<std::size_t> length;
 };
@@ -21,11 +21,11 @@ struct Failed {
     HttpStatus status;
 };
 
-using ParseResult = std::variant<NeedMoreData, HeadersReady, BodyData, Complete, Failed>;
+using ParseResult = std::variant<NeedMoreData, HeadersData, BodyData, Complete, Failed>;
 
 class HttpParser {
 private:
-    enum class Step { Continue, WaitForData, HeadersReady, BodyData };
+    enum class Step { Continue, WaitForData, HeadersData, BodyData };
 
     enum class ParserState {
         StartLine,
@@ -45,10 +45,10 @@ private:
     std::size_t _contentLength;
     std::size_t _currentChunkSize;
     std::size_t _received;
-    std::string _chunk;
+    std::string _bodyData;
 
     Step fail(HttpStatus status);
-    void collect(std::size_t size);
+    void cutBody(std::size_t size);
     Step handleStartLine();
     Step handleHeaders();
     Step handleBody();

@@ -39,7 +39,7 @@ namespace {
         reader.parser.receive(bytes);
         while (true) {
             auto event = reader.parser.parse();
-            if (auto* headers = std::get_if<HeadersReady>(&event)) {
+            if (auto* headers = std::get_if<HeadersData>(&event)) {
                 reader.request = std::move(headers->request);
             } else if (const auto* chunk = std::get_if<BodyData>(&event)) {
                 reader.request.body += chunk->bytes;
@@ -379,9 +379,9 @@ namespace {
         HttpParser parser;
         parser.receive(withLength(5) + "hello");
         const ParseResult headers = parser.parse();
-        ASSERT_TRUE(std::holds_alternative<HeadersReady>(headers));
-        EXPECT_TRUE(std::get<HeadersReady>(headers).request.body.empty());
-        EXPECT_EQ(std::get<HeadersReady>(headers).length, 5u);
+        ASSERT_TRUE(std::holds_alternative<HeadersData>(headers));
+        EXPECT_TRUE(std::get<HeadersData>(headers).request.body.empty());
+        EXPECT_EQ(std::get<HeadersData>(headers).length, 5u);
     }
 
     TEST(HttpParserTest, EmitsBodyWithoutStoringItInTheRequest) {
@@ -390,7 +390,7 @@ namespace {
             HttpParser parser;
             parser.receive(chunked ? CHUNKED : withLength(5));
             const auto headers = parser.parse();
-            ASSERT_TRUE(std::holds_alternative<HeadersReady>(headers));
+            ASSERT_TRUE(std::holds_alternative<HeadersData>(headers));
             parser.receive(chunked ? "5\r\nabc" : "abc");
             auto part = parser.parse();
             ASSERT_TRUE(std::holds_alternative<BodyData>(part));
@@ -401,19 +401,19 @@ namespace {
             ASSERT_TRUE(std::holds_alternative<BodyData>(part));
             EXPECT_EQ(std::get<BodyData>(part).bytes, "de");
             EXPECT_TRUE(std::holds_alternative<Complete>(parser.parse()));
-            EXPECT_TRUE(std::get<HeadersReady>(headers).request.body.empty());
+            EXPECT_TRUE(std::get<HeadersData>(headers).request.body.empty());
         }
     }
 
     TEST(HttpParserTest, AnnouncesBodySizeBeforeTheData) {
         HttpParser parser;
         parser.receive(withLength(5));
-        ASSERT_TRUE(std::holds_alternative<HeadersReady>(parser.parse()));
+        ASSERT_TRUE(std::holds_alternative<HeadersData>(parser.parse()));
         EXPECT_EQ(parser.announcedBodySize(), 5u);
 
         parser.reset();
         parser.receive(CHUNKED + "3\r\nabc\r\n2\r\n");
-        ASSERT_TRUE(std::holds_alternative<HeadersReady>(parser.parse()));
+        ASSERT_TRUE(std::holds_alternative<HeadersData>(parser.parse()));
         ASSERT_TRUE(std::holds_alternative<BodyData>(parser.parse()));
         EXPECT_TRUE(std::holds_alternative<NeedMoreData>(parser.parse()));
         EXPECT_EQ(parser.announcedBodySize(), 5u);

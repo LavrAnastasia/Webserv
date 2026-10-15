@@ -100,11 +100,11 @@ ParseResult HttpParser::parse() {
         }
 
         if (step == Step::BodyData) {
-            return BodyData{std::move(_chunk)};
+            return BodyData{std::move(_bodyData)};
         }
 
-        if (step == Step::HeadersReady) {
-            return HeadersReady{
+        if (step == Step::HeadersData) {
+            return HeadersData{
                 std::move(_request),
                 _state == ParserState::ChunkSize ? std::nullopt : std::optional<std::size_t>(_contentLength)
             };
@@ -179,7 +179,7 @@ HttpParser::Step HttpParser::handleHeaders() {
     if (transferEncoding) {
         if (Http::Ascii::tolower(*transferEncoding) == Http::Headers::TransferCoding::Chunked) {
             _state = ParserState::ChunkSize;
-            return Step::HeadersReady;
+            return Step::HeadersData;
         }
         return fail(HttpStatus::NotImplemented);
     }
@@ -195,12 +195,12 @@ HttpParser::Step HttpParser::handleHeaders() {
     } else {
         _state = ParserState::Complete;
     }
-    return Step::HeadersReady;
+    return Step::HeadersData;
 }
 
 HttpParser::Step HttpParser::handleBody() {
     const std::size_t size = std::min(_buffer.size(), _contentLength - _received);
-    collect(size);
+    cutBody(size);
 
     if (_received == _contentLength) {
         _state = ParserState::Complete;
@@ -266,7 +266,7 @@ HttpParser::Step HttpParser::handleChunkEnd() {
 
 HttpParser::Step HttpParser::handleChunkData() {
     const std::size_t size = std::min(_buffer.size(), _currentChunkSize);
-    collect(size);
+    cutBody(size);
     _currentChunkSize -= size;
 
     if (_currentChunkSize == 0) {
@@ -307,7 +307,7 @@ void HttpParser::reset() {
     _contentLength = 0;
     _currentChunkSize = 0;
     _received = 0;
-    _chunk.clear();
+    _bodyData.clear();
 }
 
 bool HttpParser::isIdle() const {
@@ -322,8 +322,8 @@ std::size_t HttpParser::announcedBodySize() const {
     return _contentLength;
 }
 
-void HttpParser::collect(std::size_t size) {
-    _chunk.assign(_buffer, 0, size);
+void HttpParser::cutBody(std::size_t size) {
+    _bodyData.assign(_buffer, 0, size);
     _buffer.erase(0, size);
     _received += size;
 }
