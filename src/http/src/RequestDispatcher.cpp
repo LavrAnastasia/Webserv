@@ -1,14 +1,29 @@
 #include "http/RequestDispatcher.hpp"
 
+#include <memory>
 #include <utility>
 
 #include "CgiHandler.hpp"
 #include "ErrorResponseFactory.hpp"
 #include "HeaderFields.hpp"
 #include "RedirectHandler.hpp"
+#include "RequestHandler.hpp"
 #include "Router.hpp"
 #include "StaticHandler.hpp"
 #include "UploadHandler.hpp"
+
+namespace {
+    class Discard : public RequestHandler {
+    public:
+        Discard(HttpRequest request, ResolvedRoute route, HttpResponse response)
+            : RequestHandler(std::move(request), std::move(route)), response_(std::move(response)) {}
+
+        HandlerResult handle() override { return std::move(response_); }
+
+    private:
+        HttpResponse response_;
+    };
+} // namespace
 
 DispatchResult RequestDispatcher::dispatch(
     HttpRequest request,
@@ -33,7 +48,10 @@ DispatchResult RequestDispatcher::dispatch(
     }
 
     if (route->redirect) {
-        return RedirectHandler::handle(*route->redirect, *route);
+        HttpResponse response = RedirectHandler::handle(*route->redirect, *route);
+        // uncomment this for tester
+        // if (!length) { return std::make_unique<Discard>(std::move(request), std::move(*route), std::move(response)); }
+        return response;
     }
 
     if (!route->allowedMethods.contains(request.method)) {
