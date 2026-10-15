@@ -9,7 +9,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/http/src/RequestPlan.hpp"
+#include "../src/http/src/RequestHandler.hpp"
 #include "config/ServerConfig.hpp"
 #include "includes/Dispatch.hpp"
 #include "includes/Files.hpp"
@@ -100,9 +100,9 @@ namespace {
 
         const auto& test = GetParam();
         if (test.expectedTarget == nullptr) {
-            auto plan = RequestDispatcher::select(Requests::get(test.path), server_);
-            ASSERT_TRUE(std::holds_alternative<HttpResponse>(plan->handler));
-            EXPECT_EQ(std::get<HttpResponse>(plan->handler).status, HttpStatus::NotFound);
+            auto dispatched = RequestDispatcher::dispatch(HeadersReady{Requests::get(test.path), 0}, server_, {});
+            ASSERT_TRUE(std::holds_alternative<HttpResponse>(dispatched));
+            EXPECT_EQ(std::get<HttpResponse>(dispatched).status, HttpStatus::NotFound);
         } else {
             expectRedirect(test.path, test.expectedTarget);
         }

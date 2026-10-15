@@ -12,7 +12,7 @@
 
 class Connection : public Socket {
 private:
-    static constexpr std::size_t kReceiveBufferSize = 4 * 1024;
+    static constexpr std::size_t kReceiveBufferSize = 4 * 1024; // 4 KB
 
     ConnectionInfo info_;
     std::array<char, kReceiveBufferSize> readBuffer_{};

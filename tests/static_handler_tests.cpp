@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/http/src/RequestPlan.hpp"
+#include "../src/http/src/RequestHandler.hpp"
 #include "config/ServerConfig.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "includes/Files.hpp"
@@ -17,8 +17,12 @@ namespace {
     namespace fs = std::filesystem;
 
     HandlerResult dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& info) {
-        auto plan = RequestDispatcher::select(std::move(request), server);
-        return RequestDispatcher::dispatch(std::move(*plan), info);
+        auto dispatched = RequestDispatcher::dispatch(HeadersReady{std::move(request), 0}, server, info);
+
+        if (auto* response = std::get_if<HttpResponse>(&dispatched)) {
+            return std::move(*response);
+        }
+        return std::get<std::unique_ptr<RequestHandler>>(dispatched)->handle();
     }
 
     class StaticHandlerTest : public ::testing::Test {

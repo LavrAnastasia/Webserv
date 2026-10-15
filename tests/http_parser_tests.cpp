@@ -386,7 +386,7 @@ namespace {
         ASSERT_TRUE(std::holds_alternative<HeadersReady>(headers));
         EXPECT_TRUE(std::get<HeadersReady>(headers).request.body.empty());
         EXPECT_EQ(std::get<HeadersReady>(headers).length, 5u);
-        EXPECT_FALSE(parser.limit(4));
+        parser.limit(4);
         expectStatus(parser.parse(), HttpStatus::PayloadTooLarge);
     }
 

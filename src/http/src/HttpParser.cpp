@@ -328,9 +328,8 @@ bool HttpParser::hasHeaders() const {
     return _state != ParserState::StartLine && _state != ParserState::Headers;
 }
 
-bool HttpParser::limit(std::size_t size) {
+void HttpParser::limit(std::size_t size) {
     _maxBodySize = size;
-    return _state != ParserState::BodyStart || fits(_contentLength);
 }
 
 void HttpParser::collect(std::size_t size) {

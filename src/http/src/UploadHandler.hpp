@@ -1,26 +1,26 @@
 #pragma once
 
+#include <filesystem>
+#include <memory>
 #include <string_view>
+#include <variant>
 
+#include "RequestHandler.hpp"
 #include "ResolvedRoute.hpp"
 #include "fs/FileDescriptor.hpp"
 #include "http/HttpRequest.hpp"
 #include "http/HttpResponse.hpp"
 
-class UploadHandler {
+class UploadHandler : public RequestHandler {
 public:
-    UploadHandler() = default;
-    ~UploadHandler();
-    UploadHandler(const UploadHandler&) = delete;
-    UploadHandler& operator=(const UploadHandler&) = delete;
+    UploadHandler(HttpRequest request, ResolvedRoute route, FileDescriptor file, std::filesystem::path path);
+    ~UploadHandler() override;
 
-    std::optional<HttpStatus> open(const HttpRequest& request, const ResolvedRoute& route);
-    bool receive(std::string_view bytes);
-    HttpResponse end();
+    static DispatchResult start(HttpRequest request, ResolvedRoute route);
+    bool receive(std::string_view body) override;
+    HandlerResult handle() override;
 
 private:
     FileDescriptor file_;
     std::filesystem::path path_;
-    std::string location_;
-    ErrorPages pages_;
 };

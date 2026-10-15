@@ -4,6 +4,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <utility>
+
 #include "ErrorResponseFactory.hpp"
 #include "ErrorStatus.hpp"
 #include "HeaderFields.hpp"
@@ -18,6 +20,10 @@ namespace {
     constexpr mode_t kFileMode = S_IRUSR | S_IWUSR;
 } // namespace
 
+UploadHandler::UploadHandler(HttpRequest request, ResolvedRoute route, FileDescriptor file, fs::path path)
+    : RequestHandler(std::move(request), std::move(route)), file_(std::move(file)), path_(std::move(path)) {
+}
+
 UploadHandler::~UploadHandler() {
     if (!path_.empty()) {
         std::error_code error;
@@ -25,57 +31,57 @@ UploadHandler::~UploadHandler() {
     }
 }
 
-std::optional<HttpStatus> UploadHandler::open(const HttpRequest& request, const ResolvedRoute& route) {
+DispatchResult UploadHandler::start(HttpRequest request, ResolvedRoute route) {
     try {
         const fs::path uploadPath = Fs::resolve(route.root, route.upload->uploadPath);
         if (!fs::is_directory(uploadPath)) {
-            return HttpStatus::InternalServerError;
+            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
         const fs::path uploadRoot = fs::canonical(uploadPath);
 
         const fs::path relative = request.path.substr(route.locationPath.size());
         if (relative.empty() || relative == std::string(1, Http::Syntax::PathPrefix)) {
-            return HttpStatus::Conflict;
+            return ErrorResponseFactory::create(HttpStatus::Conflict, route);
         }
         const fs::path target = fs::weakly_canonical(Fs::resolve(uploadRoot, relative));
         if (!Fs::isPrefixOf(uploadRoot, target)) {
-            return HttpStatus::Forbidden;
+            return ErrorResponseFactory::create(HttpStatus::Forbidden, route);
         }
         if (fs::exists(target)) {
-            return HttpStatus::Conflict;
+            return ErrorResponseFactory::create(HttpStatus::Conflict, route);
         }
         if (!fs::is_directory(target.parent_path())) {
-            return HttpStatus::InternalServerError;
+            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
 
-        file_ = FileDescriptor(::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode));
-        if (!file_.isOpen()) {
-            return HttpStatus::InternalServerError;
+        FileDescriptor file(::open(target.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, kFileMode));
+        if (!file.isOpen()) {
+            return ErrorResponseFactory::create(HttpStatus::InternalServerError, route);
         }
-        path_ = target;
-        location_ = Http::Url::encodePath(request.path);
-        pages_ = route.errorPages;
-        return std::nullopt;
+
+        return std::make_unique<UploadHandler>(std::move(request), std::move(route), std::move(file), target);
     } catch (const fs::filesystem_error& error) {
-        return Http::Status::from(error.code());
+        return ErrorResponseFactory::create(Http::Status::from(error.code()), route);
     }
 }
 
-bool UploadHandler::receive(std::string_view bytes) {
-    while (!bytes.empty()) {
-        const ssize_t written = ::write(file_.get(), bytes.data(), bytes.size());
+bool UploadHandler::receive(std::string_view body) {
+    while (!body.empty()) {
+        const ssize_t written = ::write(file_.get(), body.data(), body.size());
         if (written <= 0) {
             return false;
         }
-        bytes.remove_prefix(static_cast<std::size_t>(written));
+        body.remove_prefix(static_cast<std::size_t>(written));
     }
     return true;
 }
 
-HttpResponse UploadHandler::end() {
+HandlerResult UploadHandler::handle() {
     if (!file_.close()) {
-        return ErrorResponseFactory::create(HttpStatus::InternalServerError, pages_);
+        return reject(HttpStatus::InternalServerError);
     }
     path_.clear();
-    return HttpResponseFactory::create(HttpStatus::Created, HttpHeaders{{Http::Headers::Location, location_}});
+    return HttpResponseFactory::create(
+        HttpStatus::Created, HttpHeaders{{Http::Headers::Location, Http::Url::encodePath(request_.path)}}
+    );
 }

@@ -66,7 +66,7 @@ public:
     void receive(std::string_view bytes);
     ParseResult parse();
     void reset();
-    bool limit(std::size_t size);
+    void limit(std::size_t size);
     bool isIdle() const;
     bool hasHeaders() const;
 };

@@ -1,22 +1,20 @@
 #include "http/HttpSession.hpp"
 
-#include <algorithm>
 #include <limits>
 #include <utility>
 
 #include "CgiStream.hpp"
 #include "ErrorResponseFactory.hpp"
+#include "HeaderFields.hpp"
 #include "HttpResponseFactory.hpp"
-#include "RequestPlan.hpp"
+#include "RequestHandler.hpp"
 #include "Router.hpp"
-#include "UploadHandler.hpp"
 #include "http/HttpMethod.hpp"
 #include "http/RequestDispatcher.hpp"
 #include "log/Log.hpp"
 
 namespace {
-    constexpr std::size_t kBodyReserve = 128u * 1024u * 1024u;
-    constexpr std::size_t kChunkSize = 64 * 1024;
+    constexpr std::size_t kChunkSize = 64 * 1024; // 64 KB
     constexpr std::chrono::seconds kLingerTimeout{5};
     constexpr std::chrono::seconds kLingerDuration{30};
     constexpr std::chrono::seconds kHeaderTimeout{20};
@@ -60,16 +58,12 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
 
     while (true) {
         if (HeadersReady* headers = std::get_if<HeadersReady>(&result)) {
-            if (auto action = select(std::move(*headers))) {
+            if (auto action = accept(std::move(*headers))) {
                 return std::move(*action);
             }
         } else if (const BodyData* chunk = std::get_if<BodyData>(&result)) {
-            if (auto* upload = std::get_if<std::unique_ptr<UploadHandler>>(&plan_->body)) {
-                if (!(*upload)->receive(chunk->bytes)) {
-                    return reject(HttpStatus::InternalServerError);
-                }
-            } else if (auto* bytes = std::get_if<std::string>(&plan_->body)) {
-                bytes->append(chunk->bytes);
+            if (handler_ && !handler_->receive(chunk->bytes)) {
+                return reject(HttpStatus::InternalServerError);
             }
         } else {
             break;
@@ -88,8 +82,8 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     }
     receivingBody_ = false;
 
-    HandlerResult handled = RequestDispatcher::dispatch(std::move(*plan_), info_);
-    plan_.reset();
+    HandlerResult handled = handler_->handle();
+    handler_.reset();
 
     if (HttpResponse* response = std::get_if<HttpResponse>(&handled)) {
         return respond(std::move(*response));
@@ -99,28 +93,23 @@ HttpSession::Action HttpSession::receive(std::string_view bytes) {
     return std::move(std::get<CgiRequest>(handled));
 }
 
-std::optional<HttpSession::Action> HttpSession::select(HeadersReady headers) {
+std::optional<HttpSession::Action> HttpSession::accept(HeadersReady headers) {
     const HttpRequest& request = headers.request;
     framing_.close = !request.isPersistent();
     framing_.headersOnly = request.method == HttpMethod::Head;
     receivingBody_ = !headers.length || *headers.length != 0;
-    plan_ = RequestDispatcher::select(std::move(headers.request), server_);
+    const bool expectContinue = request.headers.has(Http::Headers::Expect);
 
-    if (!parser_.limit(plan_->route.clientMaxBodySize)) {
-        return reject(HttpStatus::PayloadTooLarge);
-    }
-    if (auto* response = std::get_if<HttpResponse>(&plan_->handler)) {
+    auto dispatched = RequestDispatcher::dispatch(std::move(headers), server_, info_);
+
+    if (auto* response = std::get_if<HttpResponse>(&dispatched)) {
         return reject(std::move(*response));
     }
-    if (auto* upload = std::get_if<std::unique_ptr<UploadHandler>>(&plan_->body)) {
-        if (const auto status = (*upload)->open(plan_->request, plan_->route)) {
-            return reject(*status);
-        }
-    } else if (auto* bytes = std::get_if<std::string>(&plan_->body); bytes && headers.length) {
-        bytes->reserve(std::min(*headers.length, kBodyReserve));
-    }
 
-    if (plan_->expectContinue && receivingBody_) {
+    handler_ = std::move(std::get<std::unique_ptr<RequestHandler>>(dispatched));
+    parser_.limit(handler_->limit());
+
+    if (expectContinue && receivingBody_) {
         phase_ = Phase::Continuing;
         return Write{HttpSerializer::serialize(HttpResponseFactory::create(HttpStatus::Continue), {}).headers};
     }
@@ -129,13 +118,12 @@ std::optional<HttpSession::Action> HttpSession::select(HeadersReady headers) {
 
 HttpSession::Action HttpSession::reject(HttpStatus status) {
     return reject(
-        plan_ ? ErrorResponseFactory::create(status, plan_->route)
-              : ErrorResponseFactory::create(status, Router::mapErrorPages(server_))
+        handler_ ? handler_->reject(status) : ErrorResponseFactory::create(status, Router::mapErrorPages(server_))
     );
 }
 
 HttpSession::Action HttpSession::reject(HttpResponse response) {
-    plan_.reset();
+    handler_.reset();
     phase_ = Phase::Responding;
     framing_.close = framing_.close || receivingBody_ || !parser_.hasHeaders();
     return respond(std::move(response));
@@ -217,7 +205,7 @@ std::optional<HttpSession::Action> HttpSession::expire() {
     }
 
     Log::info("client timed out while sending request body, client: " + info_.remoteAddr);
-    plan_.reset();
+    handler_.reset();
     return Close{};
 }
 

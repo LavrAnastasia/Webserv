@@ -6,15 +6,17 @@
 #include "config/ServerConfig.hpp"
 #include "http/CgiRequest.hpp"
 #include "http/ConnectionInfo.hpp"
-#include "http/HttpRequest.hpp"
+#include "http/HttpParser.hpp"
 #include "http/HttpResponse.hpp"
 
 using HandlerResult = std::variant<HttpResponse, CgiRequest>;
 
-struct RequestPlan;
+class RequestHandler;
+
+using DispatchResult = std::variant<HttpResponse, std::unique_ptr<RequestHandler>>;
 
 class RequestDispatcher {
 public:
-    static std::unique_ptr<RequestPlan> select(HttpRequest request, const ServerConfig& server);
-    static HandlerResult dispatch(RequestPlan plan, const ConnectionInfo& connectionInfo);
+    static DispatchResult
+    dispatch(HeadersReady headers, const ServerConfig& server, const ConnectionInfo& connectionInfo);
 };

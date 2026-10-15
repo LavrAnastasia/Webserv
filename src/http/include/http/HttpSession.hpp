@@ -17,7 +17,7 @@
 #include "http/ResponseBody.hpp"
 
 class CgiStream;
-struct RequestPlan;
+class RequestHandler;
 
 class HttpSession {
 public:
@@ -48,7 +48,7 @@ public:
 private:
     enum class Phase { Reading, Continuing, Responding, Lingering };
 
-    std::optional<Action> select(HeadersReady headers);
+    std::optional<Action> accept(HeadersReady headers);
     Action reject(HttpResponse response);
     Action reject(HttpStatus status);
     Action drain();
@@ -68,7 +68,7 @@ private:
     HttpSerializer::Framing framing_;
     std::optional<ResponseBody> body_;
     std::unique_ptr<CgiStream> cgi_;
-    std::unique_ptr<RequestPlan> plan_;
+    std::unique_ptr<RequestHandler> handler_;
     bool receivingBody_ = false;
     std::chrono::steady_clock::time_point lingerStarted_;
     bool receivedOutput_ = false;
