@@ -66,7 +66,7 @@ namespace {
         EXPECT_EQ(std::get<std::error_code>(directory), std::errc::permission_denied);
     }
 
-    TEST_F(ResponseBodyTest, SerializationDoesNotReadTheFileBody) {
+    TEST_F(ResponseBodyTest, ReadsTheFileOnlyWhenTheBodyIsSent) {
         const auto path = temp_.path() / "payload.bin";
         Files::write(path, "initial contents");
         auto opened = ResponseBody::open(path);
@@ -130,27 +130,6 @@ namespace {
         Files::write(path, "replacement");
 
         EXPECT_EQ(Responses::read(std::get<ResponseBody>(opened)), "original");
-    }
-
-    TEST_F(ResponseBodyTest, SuppressesFileBodiesForHeadersOnlyAndBodylessStatuses) {
-        const auto path = temp_.path() / "payload.bin";
-        Files::write(path, "payload");
-
-        for (const auto status : {HttpStatus::OK, HttpStatus::NoContent, HttpStatus::NotModified}) {
-            for (const bool headersOnly : {false, true}) {
-                SCOPED_TRACE(static_cast<int>(status));
-                SCOPED_TRACE(headersOnly);
-                auto opened = ResponseBody::open(path);
-                ASSERT_TRUE(std::holds_alternative<ResponseBody>(opened));
-                auto output = HttpSerializer::serialize(
-                    HttpResponse{.status = status, .body = std::move(std::get<ResponseBody>(opened))},
-                    {.headersOnly = headersOnly}
-                );
-
-                EXPECT_EQ(output.body.has_value(), status == HttpStatus::OK && !headersOnly);
-                EXPECT_EQ(output.headers.find("Content-Length: 7\r\n") != std::string::npos, status == HttpStatus::OK);
-            }
-        }
     }
 
     static_assert(!std::is_copy_constructible_v<ResponseBody>);

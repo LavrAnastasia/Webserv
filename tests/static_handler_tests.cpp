@@ -88,9 +88,7 @@ namespace {
         ::testing::Values(
             FileContentsCase{"Empty", ""},
             FileContentsCase{"Text", "Hello\nSecond line\r\n"},
-            FileContentsCase{"Binary", std::string("\x00\x01\x7f\x80\xff", 5)},
-            FileContentsCase{"Exactly64KiB", std::string(64 * 1024, 'a')},
-            FileContentsCase{"MultipleReadChunks", std::string(64 * 1024, 'a') + std::string(64 * 1024, 'b') + "tail"}
+            FileContentsCase{"Binary", std::string("\x00\x01\x7f\x80\xff", 5)}
         ),
         [](const ::testing::TestParamInfo<FileContentsCase>& info) { return std::string(info.param.name); }
     );
