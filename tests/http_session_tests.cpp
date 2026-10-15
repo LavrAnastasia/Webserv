@@ -330,10 +330,11 @@ namespace {
     TEST_F(HttpSessionTest, DeletesIncompleteUploadWhenBodyTimesOut) {
         prepareUpload();
         session_->receive("POST /upload/data.bin HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nabc");
+        ASSERT_TRUE(fs::exists(root_ / "incoming/data.bin"));
         fakeNow += 60s;
-        auto action = session_->expire();
+        const auto action = session_->expire();
         ASSERT_TRUE(action);
-        EXPECT_TRUE(deliver(std::move(*action)).starts_with("HTTP/1.1 408 "));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
         EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
     }
 
@@ -526,24 +527,17 @@ namespace {
         EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
     }
 
-    TEST_F(HttpSessionTest, AnswersTimeoutWhenTheBodyStopsArriving) {
+    TEST_F(HttpSessionTest, ClosesImmediatelyWhenTheBodyTimesOut) {
         session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nabc");
 
         fakeNow += 59s;
         EXPECT_FALSE(session_->expire().has_value());
 
         fakeNow += 1s;
-        auto action = session_->expire();
+        const auto action = session_->expire();
 
         ASSERT_TRUE(action.has_value());
-        const std::string response = deliver(std::move(*action));
-
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 408 "));
-        EXPECT_TRUE(closes(response));
-        EXPECT_TRUE(ended<HttpSession::Read>());
-        fakeNow += 5s;
-        ASSERT_TRUE(session_->expire().has_value());
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*session_->expire()));
+        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(*action));
     }
 
     TEST_F(HttpSessionTest, KeepsASlowButSteadyBody) {
@@ -585,6 +579,21 @@ namespace {
 
         EXPECT_LT(responses.find("HTTP/1.1 200 "), responses.find("HTTP/1.1 404 "));
         EXPECT_NE(responses.find("HTTP/1.1 404 "), std::string::npos);
+        EXPECT_TRUE(ended<HttpSession::Read>());
+    }
+
+    TEST_F(HttpSessionTest, AnswersARequestPipelinedAfterAMissingRoute) {
+        server_.locations.front().path = "/site";
+        Files::write(root_ / "site/file.txt", "next");
+
+        const std::string responses =
+            deliver(session_->receive(Requests::rawGet("/missing") + Requests::rawGet("/site/file.txt")));
+
+        EXPECT_TRUE(responses.starts_with("HTTP/1.1 404 "));
+        EXPECT_FALSE(closes(responses));
+        const auto second = responses.find("HTTP/1.1 200 ");
+        ASSERT_NE(second, std::string::npos);
+        EXPECT_EQ(body(responses.substr(second)), "next");
         EXPECT_TRUE(ended<HttpSession::Read>());
     }
 

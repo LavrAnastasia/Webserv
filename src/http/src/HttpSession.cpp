@@ -137,7 +137,7 @@ HttpSession::Action HttpSession::reject(HttpStatus status) {
 HttpSession::Action HttpSession::reject(HttpResponse response) {
     plan_.reset();
     phase_ = Phase::Responding;
-    framing_.close = framing_.close || receivingBody_ || Http::Status::isError(response.status);
+    framing_.close = framing_.close || receivingBody_ || !parser_.hasHeaders();
     return respond(std::move(response));
 }
 
@@ -217,7 +217,8 @@ std::optional<HttpSession::Action> HttpSession::expire() {
     }
 
     Log::info("client timed out while sending request body, client: " + info_.remoteAddr);
-    return reject(HttpStatus::RequestTimeout);
+    plan_.reset();
+    return Close{};
 }
 
 HttpSession::Action HttpSession::receiveOutput(std::string_view output) {
