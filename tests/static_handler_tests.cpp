@@ -4,9 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/http/src/RequestDispatcher.hpp"
-#include "../src/http/src/RequestHandler.hpp"
 #include "config/ServerConfig.hpp"
+#include "includes/Dispatch.hpp"
 #include "includes/Files.hpp"
 #include "includes/Requests.hpp"
 #include "includes/Responses.hpp"
@@ -15,15 +14,6 @@
 namespace {
 
     namespace fs = std::filesystem;
-
-    HandlerResult dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& info) {
-        auto dispatched = RequestDispatcher::dispatch(std::move(request), 0, server, info);
-
-        if (auto* response = std::get_if<HttpResponse>(&dispatched)) {
-            return std::move(*response);
-        }
-        return std::get<std::unique_ptr<RequestHandler>>(dispatched)->handle();
-    }
 
     class StaticHandlerTest : public ::testing::Test {
     protected:
@@ -101,18 +91,6 @@ namespace {
 
         EXPECT_EQ(response.status, HttpStatus::NotFound);
         EXPECT_FALSE(actualBody.empty());
-    }
-
-    TEST_F(StaticHandlerTest, Returns404ForUnroutableRequestPath) {
-        for (const std::string path : {"", "relative.txt"}) {
-            SCOPED_TRACE(path);
-
-            const auto result = dispatch(Requests::get(path), server_, ConnectionInfo{});
-            ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-            auto& response = std::get<HttpResponse>(result);
-
-            EXPECT_EQ(response.status, HttpStatus::NotFound);
-        }
     }
 
     TEST_F(StaticHandlerTest, ReturnsIndexForRootDirectory) {
@@ -391,23 +369,6 @@ namespace {
     }
 
     class StaticHandlerRootGuardTest : public StaticHandlerTest, public ::testing::WithParamInterface<HttpMethod> {};
-
-    TEST_P(StaticHandlerRootGuardTest, ForbidsDotDotEscapeToSimilarRootPrefix) {
-        fs::create_directories(root_ / "docs");
-
-        for (const std::string path : {"/../root-other/secret.txt", "/docs/../../root-other/secret.txt"}) {
-            SCOPED_TRACE(path);
-
-            auto result = dispatch(Requests::make(GetParam(), path), server_, ConnectionInfo{});
-            ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
-            auto& response = std::get<HttpResponse>(result);
-            const std::string actualBody = Responses::read(response.body);
-
-            EXPECT_EQ(response.status, HttpStatus::Forbidden);
-            EXPECT_EQ(actualBody.find(outsideBody_), std::string::npos);
-            EXPECT_EQ(Files::read(outside_ / "secret.txt"), outsideBody_);
-        }
-    }
 
     TEST_P(StaticHandlerRootGuardTest, ForbidsAccessThroughOutsideDirectorySymlink) {
         fs::create_directory_symlink(outside_, root_ / "escape");

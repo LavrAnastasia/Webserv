@@ -4,10 +4,10 @@
 #include <string_view>
 #include <utility>
 
-#include "CgiResponseParser.hpp"
 #include "HeaderFields.hpp"
 #include "HeadersParser.hpp"
 #include "HttpSyntax.hpp"
+#include "http/CgiResponseParser.hpp"
 #include "http/HttpHeaders.hpp"
 #include "http/HttpStatus.hpp"
 

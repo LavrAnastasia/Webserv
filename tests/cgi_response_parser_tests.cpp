@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/http/src/CgiResponseParser.hpp"
+#include "http/CgiResponseParser.hpp"
 
 namespace {
 
