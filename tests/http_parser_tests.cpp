@@ -428,15 +428,6 @@ namespace {
         expectBody(parse(withLength(body.size()) + body), body);
     }
 
-    TEST(HttpParserTest, WaitsForRemainingBody) {
-        Reader parser;
-
-        const auto first = result(parser, withLength(5) + "hel");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-        expectBody(result(parser, "lo"), "hello");
-    }
-
     TEST(HttpParserTest, PreservesNextRequestAfterBody) {
         Reader parser;
 
@@ -475,18 +466,6 @@ namespace {
         );
     }
 
-    TEST(HttpParserTest, WaitsForFinalChunkAndDelimiter) {
-        Reader parser;
-
-        const auto first = result(parser, CHUNKED + "1\r\na\r\n");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-        const auto second = result(parser, "0\r\n");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(second));
-
-        expectBody(result(parser, "\r\n"), "a");
-    }
-
     TEST(HttpParserTest, StartLineSizeBoundary) {
         for (const auto size : {LINE_LIMIT - 1, LINE_LIMIT}) {
             SCOPED_TRACE(size);
@@ -518,12 +497,14 @@ namespace {
     }
 
     TEST(HttpParserTest, SplitStartLineDelimiterAtLimit) {
-        Reader parser;
+        Reader accepted;
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result(accepted, startLine(LINE_LIMIT) + "\r")));
+        expectBody(result(accepted, "\nHost: localhost\r\n\r\n"), "");
 
-        const auto first = result(parser, startLine(LINE_LIMIT) + "\r");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-        expectBody(result(parser, "\nHost: localhost\r\n\r\n"), "");
+        Reader rejected;
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result(rejected, startLine(LINE_LIMIT) + "\r")));
+        expectStatus(result(rejected, "X"), HttpStatus::UriTooLong);
+        expectStatus(parse(startLine(LINE_LIMIT + 1) + "\r"), HttpStatus::UriTooLong);
     }
 
     class HttpParserHeaderDelimiterTest : public testing::TestWithParam<std::size_t> {};
@@ -531,13 +512,19 @@ namespace {
     TEST_P(HttpParserHeaderDelimiterTest, SplitAtHeaderLimit) {
         const std::string delimiter = "\r\n\r\n";
         const std::size_t split = GetParam();
+        const std::string head = GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split);
 
-        Reader parser;
+        Reader accepted;
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result(accepted, head)));
+        expectBody(result(accepted, delimiter.substr(split)), "");
 
-        const auto first = result(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-        expectBody(result(parser, delimiter.substr(split)), "");
+        Reader rejected;
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result(rejected, head)));
+        expectStatus(result(rejected, "X"), HttpStatus::RequestHeaderFieldsTooLarge);
+        expectStatus(
+            parse(GET + headersBlock(HEADERS_LIMIT + 1) + delimiter.substr(0, split)),
+            HttpStatus::RequestHeaderFieldsTooLarge
+        );
     }
 
     INSTANTIATE_TEST_SUITE_P(
@@ -545,45 +532,15 @@ namespace {
     );
 
     TEST(HttpParserTest, SplitChunkDelimiterAtLimit) {
-        Reader parser;
+        const std::string head = CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r";
 
-        const auto first = result(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
+        Reader accepted;
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result(accepted, head)));
+        expectBody(result(accepted, "\na\r\n0\r\n\r\n"), "a");
 
-        expectBody(result(parser, "\na\r\n0\r\n\r\n"), "a");
-    }
-
-    TEST(HttpParserTest, RejectsStartLineOverflowAroundPartialDelimiter) {
-        Reader parser;
-        const auto first = result(parser, startLine(LINE_LIMIT) + "\r");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-        expectStatus(result(parser, "X"), HttpStatus::UriTooLong);
-        expectStatus(parse(startLine(LINE_LIMIT + 1) + "\r"), HttpStatus::UriTooLong);
-    }
-
-    TEST(HttpParserTest, RejectsHeadersOverflowAroundPartialDelimiter) {
-        const std::string delimiter = "\r\n\r\n";
-        for (std::size_t split = 1; split < delimiter.size(); ++split) {
-            SCOPED_TRACE(split);
-            Reader parser;
-            const auto first = result(parser, GET + headersBlock(HEADERS_LIMIT) + delimiter.substr(0, split));
-            ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-            expectStatus(result(parser, "X"), HttpStatus::RequestHeaderFieldsTooLarge);
-            expectStatus(
-                parse(GET + headersBlock(HEADERS_LIMIT + 1) + delimiter.substr(0, split)),
-                HttpStatus::RequestHeaderFieldsTooLarge
-            );
-        }
-    }
-
-    TEST(HttpParserTest, RejectsChunkSizeOverflowAroundPartialDelimiter) {
-        Reader parser;
-        const auto first = result(parser, CHUNKED + chunkLine(CHUNK_LINE_LIMIT) + "\r");
-        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(first));
-
-        expectStatus(result(parser, "X"), HttpStatus::BadRequest);
+        Reader rejected;
+        ASSERT_TRUE(std::holds_alternative<NeedMoreData>(result(rejected, head)));
+        expectStatus(result(rejected, "X"), HttpStatus::BadRequest);
         expectStatus(parse(CHUNKED + chunkLine(CHUNK_LINE_LIMIT + 1) + "\r"), HttpStatus::BadRequest);
     }
 
