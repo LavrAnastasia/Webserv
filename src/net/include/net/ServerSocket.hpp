@@ -16,7 +16,7 @@ public:
 
     std::uint16_t getPort() const;
 
-    int acceptConnection(std::string& clientIp, uint16_t& clientPort);
+    int acceptConnection(std::string& clientIp);
 };
 
 /*

@@ -64,7 +64,7 @@ std::uint16_t ServerSocket::getPort() const {
     return port_;
 }
 
-int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) {
+int ServerSocket::acceptConnection(std::string& clientIp) {
     // data for accept() to fill out
     struct sockaddr_in clientAddress{};
     socklen_t clientLen = sizeof(clientAddress);
@@ -78,9 +78,6 @@ int ServerSocket::acceptConnection(std::string& clientIp, uint16_t& clientPort) 
 
     // convert binary IP address into readable string and pass it outside of function by reference
     clientIp = formatAddress(clientAddress.sin_addr);
-
-    // convert port from network byte order to normal and pass outside of function by reference
-    clientPort = ntohs(clientAddress.sin_port);
 
     // return new fd for each accepted connection
     return clientFd;

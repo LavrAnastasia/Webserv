@@ -1249,12 +1249,10 @@ namespace {
             TestClient client(ntohs(address.sin_port));
             waitReady(server.getFd(), POLLIN, Clock::now() + 5s);
             std::string ip;
-            std::uint16_t port = 0;
-            FileDescriptor accepted(server.acceptConnection(ip, port));
+            FileDescriptor accepted(server.acceptConnection(ip));
 
             ASSERT_TRUE(accepted.isOpen());
             EXPECT_EQ(ip, "127.0.0.1");
-            EXPECT_NE(port, 0);
         }
     }
 
