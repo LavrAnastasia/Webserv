@@ -240,7 +240,7 @@ namespace {
         Files::write(root_ / "docs" / ".hidden", "hidden");
         Files::write(root_ / "docs" / "readme.txt", "documentation");
 
-        auto result = RequestDispatcher::dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
+        auto result = dispatch(Requests::get("/docs/"), server_, ConnectionInfo{});
         ASSERT_TRUE(std::holds_alternative<HttpResponse>(result));
         auto& response = std::get<HttpResponse>(result);
         const std::string actualBody = Responses::read(response.body);
