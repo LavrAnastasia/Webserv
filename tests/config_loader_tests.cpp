@@ -262,6 +262,7 @@ namespace {
         {"InvalidAutoindex", makeConfig(SERVER_DIRECTIVES, "location / { methods GET; autoindex maybe; }\n")},
         {"NegativeBodyLimit", makeConfig(SERVER_DIRECTIVES + "client_max_body_size -1;\n")},
         {"InvalidBodyLimitSuffix", makeConfig(SERVER_DIRECTIVES + "client_max_body_size 1g;\n")},
+        {"InformationalReturnStatus", makeConfig(SERVER_DIRECTIVES, "location / { methods GET; return 100; }\n")},
     };
 
     INSTANTIATE_TEST_SUITE_P(

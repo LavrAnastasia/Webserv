@@ -37,9 +37,30 @@ enum class HttpStatus {
 };
 
 namespace Http::Status {
-    bool isRedirect(HttpStatus status);
-    bool isInformational(HttpStatus status);
-    bool isError(HttpStatus status);
+    constexpr bool isRedirect(HttpStatus status) {
+        switch (status) {
+            case HttpStatus::MovedPermanently:
+            case HttpStatus::Found:
+            case HttpStatus::SeeOther:
+            case HttpStatus::TemporaryRedirect:
+            case HttpStatus::PermanentRedirect:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    constexpr bool isInformational(HttpStatus status) {
+        const int code = static_cast<int>(status);
+
+        return code >= 100 && code <= 199;
+    }
+
+    constexpr bool isError(HttpStatus status) {
+        const int code = static_cast<int>(status);
+
+        return code >= 400 && code <= 599;
+    }
 
     std::optional<HttpStatus> fromCode(int code);
     std::string toString(HttpStatus status);
