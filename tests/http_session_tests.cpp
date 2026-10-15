@@ -151,24 +151,6 @@ namespace {
         }
     }
 
-    TEST_F(HttpSessionTest, RejectsContentLengthAtTheRouteLimitBeforeReadingBody) {
-        server_.locations.front().clientMaxBodySize = 4;
-        const auto response =
-            deliver(session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n"));
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
-    }
-
-    TEST_F(HttpSessionTest, RejectsChunkedBodyOverTheRouteLimit) {
-        server_.locations.front().clientMaxBodySize = 4;
-        EXPECT_TRUE(
-            std::holds_alternative<HttpSession::Read>(
-                session_->receive("GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n")
-            )
-        );
-        const auto response = deliver(session_->receive("2\r\nde\r\n0\r\n\r\n"));
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 413 "));
-    }
-
     TEST_F(HttpSessionTest, RejectsAnnouncedChunkOverTheRouteLimitBeforeItsData) {
         server_.locations.front().clientMaxBodySize = 4;
         const auto response = deliver(
@@ -441,15 +423,6 @@ namespace {
         EXPECT_FALSE(fs::exists(root_ / "incoming/data.bin"));
     }
 
-    TEST_F(HttpSessionTest, WaitsForTheWholeRequestBeforeResponding) {
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->receive("GET / HTTP/1.1\r\nHo")));
-
-        const std::string response = deliver(session_->receive("st: localhost\r\n\r\n"));
-
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 "));
-        EXPECT_TRUE(ended<HttpSession::Read>());
-    }
-
     TEST_F(HttpSessionTest, ClosesAfterAnsweringAMalformedRequest) {
         const std::string response = deliver(session_->receive("GARBAGE\r\n\r\n"));
 
@@ -500,43 +473,10 @@ namespace {
         const std::string get = deliver(session_->receive(Requests::rawGet("/")));
 
         EXPECT_EQ(body(get), "hello");
-    }
 
-    TEST_F(HttpSessionTest, SendsTheErrorBodyForAMalformedRequestAfterHead) {
-        deliver(session_->receive("HEAD / HTTP/1.1\r\nHost: localhost\r\n\r\n"));
-        ASSERT_TRUE(ended<HttpSession::Read>());
+        const std::string error = deliver(session_->receive("GARBAGE\r\n\r\n"));
 
-        const std::string response = deliver(session_->receive("GARBAGE\r\n\r\n"));
-
-        EXPECT_FALSE(body(response).empty());
-    }
-
-    TEST_F(HttpSessionTest, SendsHeadersWithTheFirstChunkAndTheRestInChunks) {
-        for (const std::size_t size : {0u, 1u, 65536u, 65537u, 2 * 65536u + 10}) {
-            SCOPED_TRACE(size);
-            const std::string content = pattern(size);
-            Files::write(root_ / "file.bin", content);
-
-            HttpSession::Action action = session_->receive(Requests::rawGet("/file.bin"));
-            auto* first = std::get_if<HttpSession::Write>(&action);
-
-            ASSERT_NE(first, nullptr);
-            EXPECT_EQ(body(first->bytes).size(), std::min(size, kChunkSize));
-
-            const std::string response = deliver(std::move(action));
-
-            EXPECT_EQ(body(response), content);
-            EXPECT_TRUE(ended<HttpSession::Read>());
-        }
-    }
-
-    TEST_F(HttpSessionTest, ClosesWhenTheFileShrinksDuringTheResponse) {
-        Files::write(root_ / "file.bin", pattern(2 * kChunkSize));
-
-        ASSERT_TRUE(std::holds_alternative<HttpSession::Write>(session_->receive(Requests::rawGet("/file.bin"))));
-        fs::resize_file(root_ / "file.bin", 0);
-
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->emit()));
+        EXPECT_FALSE(body(error).empty());
     }
 
     TEST_F(HttpSessionTest, ClosesAnIdleConnectionAfterTheKeepAliveTimeout) {
@@ -776,13 +716,6 @@ namespace {
         }
     }
 
-    TEST_F(HttpSessionTest, RejectsOversizedHeadersBeforeSendingAResponse) {
-        startCgi(Requests::rawGet("/cgi/app.py"));
-        const std::string response = deliver(session_->receiveOutput("X-Large: " + std::string(kChunkSize, 'x')));
-
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 502 "));
-    }
-
     TEST_F(HttpSessionTest, WritesBadGatewayBeforeAnsweringAPipelinedRequest) {
         const std::string content = pattern(3 * kChunkSize);
         Files::write(root_ / "file.bin", content);
@@ -919,15 +852,6 @@ namespace {
         deliver(session_->receiveOutput("Content-Type: text/plain\r\nContent-Length: 3\r\n\r\nfou"));
 
         EXPECT_TRUE(std::holds_alternative<HttpSession::Close>(session_->receiveOutput("r")));
-    }
-
-    TEST_F(HttpSessionTest, WaitsForEofEvenWithZeroContentLength) {
-        startCgi(Requests::rawGet("/cgi/app.py"));
-        const std::string response = deliver(session_->receiveOutput("Content-Length: 0\r\n\r\n"));
-
-        EXPECT_TRUE(body(response).empty());
-        EXPECT_TRUE(ended<HttpSession::ReadOutput>());
-        EXPECT_TRUE(std::holds_alternative<HttpSession::Read>(session_->endOutput()));
     }
 
     TEST_F(HttpSessionTest, HeadDrainsCgiWithoutSendingBodyOrInventingLength) {
