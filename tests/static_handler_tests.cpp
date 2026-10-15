@@ -17,7 +17,7 @@ namespace {
     namespace fs = std::filesystem;
 
     HandlerResult dispatch(HttpRequest request, const ServerConfig& server, const ConnectionInfo& info) {
-        auto dispatched = RequestDispatcher::dispatch(HeadersReady{std::move(request), 0}, server, info);
+        auto dispatched = RequestDispatcher::dispatch(std::move(request), 0, server, info);
 
         if (auto* response = std::get_if<HttpResponse>(&dispatched)) {
             return std::move(*response);

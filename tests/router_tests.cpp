@@ -100,7 +100,7 @@ namespace {
 
         const auto& test = GetParam();
         if (test.expectedTarget == nullptr) {
-            auto dispatched = RequestDispatcher::dispatch(HeadersReady{Requests::get(test.path), 0}, server_, {});
+            auto dispatched = RequestDispatcher::dispatch(Requests::get(test.path), 0, server_, {});
             ASSERT_TRUE(std::holds_alternative<HttpResponse>(dispatched));
             EXPECT_EQ(std::get<HttpResponse>(dispatched).status, HttpStatus::NotFound);
         } else {

@@ -100,7 +100,7 @@ std::optional<HttpSession::Action> HttpSession::accept(HeadersReady headers) {
     receivingBody_ = !headers.length || *headers.length != 0;
     const bool expectContinue = request.headers.has(Http::Headers::Expect);
 
-    auto dispatched = RequestDispatcher::dispatch(std::move(headers), server_, info_);
+    auto dispatched = RequestDispatcher::dispatch(std::move(headers.request), headers.length, server_, info_);
 
     if (auto* response = std::get_if<HttpResponse>(&dispatched)) {
         return reject(std::move(*response));

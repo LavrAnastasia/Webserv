@@ -10,12 +10,15 @@
 #include "StaticHandler.hpp"
 #include "UploadHandler.hpp"
 
-DispatchResult
-RequestDispatcher::dispatch(HeadersReady headers, const ServerConfig& server, const ConnectionInfo& connectionInfo) {
-    HttpRequest& request = headers.request;
+DispatchResult RequestDispatcher::dispatch(
+    HttpRequest request,
+    std::optional<std::size_t> length,
+    const ServerConfig& server,
+    const ConnectionInfo& connectionInfo
+) {
     std::optional<ResolvedRoute> route = Router::resolve(request, server);
 
-    if (route && headers.length && *headers.length > route->clientMaxBodySize) {
+    if (route && length && *length > route->clientMaxBodySize) {
         return ErrorResponseFactory::create(HttpStatus::PayloadTooLarge, *route);
     }
 
@@ -38,7 +41,7 @@ RequestDispatcher::dispatch(HeadersReady headers, const ServerConfig& server, co
     }
 
     if (route->cgi) {
-        return CgiHandler::start(std::move(request), std::move(*route), connectionInfo, headers.length);
+        return CgiHandler::start(std::move(request), std::move(*route), connectionInfo, length);
     }
 
     if (route->upload && request.method == HttpMethod::Post) {
