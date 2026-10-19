@@ -45,6 +45,7 @@ Build/
 build-*/
 
 webserv
+YoupiBanane/
 
 # CMake generated files
 CMakeFiles/
