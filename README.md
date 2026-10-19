@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by [login1], [login2], [login3].*
+*This project has been created as part of the 42 curriculum by jjahkola, alavrukh, audobnai.*
 
 # webserv
 
@@ -68,10 +68,7 @@ With the committed server code, some checks fail: `cgi_tester` expects a nonempt
 - [CGI/1.1 — RFC 3875](https://www.rfc-editor.org/rfc/rfc3875.html): CGI execution and environment variables, including `PATH_INFO`.
 - [nginx core module](https://nginx.org/en/docs/http/ngx_http_core_module.html) and [index module](https://nginx.org/en/docs/http/ngx_http_index_module.html): reference behavior for configuration and file serving.
 - [Apache custom error responses](https://httpd.apache.org/docs/current/custom-error.html): error handling reference.
-- [Published subject text, version 23.1](https://github.com/facoleur/42-webserv/wiki/webserv_subject-23-1): an archived transcription used to cross-check scope. The subject and evaluation sheet supplied by the school remain the applicable versions.
 
 ### AI use
 
-AI was used to draft, translate, and reorganize this documentation, inspect the existing source and configuration files, identify descriptions that needed correction, and prepare the tester setup script. It also helped check documentation links, configuration examples, and script behavior. The team supplied corrections and the rationale for the documented compatibility decisions.
-
-This account describes the AI use in preparing these documentation and setup changes; it does not make claims about AI use during earlier server development.
+We used AI to review code, explain system calls and HTTP, suggest tests, and help write the docs. All decisions and all merged code were made and checked by the team.
